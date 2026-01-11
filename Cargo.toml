@@ -1,6 +1,65 @@
 [package]
-name = "proc"
+name = "proc-cli"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
+authors = ["Yazeed Al Oyoun <me@yazeed.com>"]
+description = "A semantic CLI tool for process management"
+repository = "https://github.com/yazeed/proc"
+homepage = "https://github.com/yazeed/proc"
+documentation = "https://github.com/yazeed/proc"
+license = "MIT"
+keywords = ["process", "cli", "management", "system"]
+categories = ["command-line-utilities"]
+readme = "README.md"
+
+[[bin]]
+name = "proc"
+path = "src/main.rs"
 
 [dependencies]
+# CLI Framework
+clap = { version = "4.5", features = ["derive", "cargo", "unicode", "env"] }
+
+# Output & Formatting
+colored = "2.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Async Runtime
+tokio = { version = "1.41", features = ["full"] }
+
+# Cross-platform process/system info
+sysinfo = "0.32"
+
+# User Interaction
+dialoguer = "0.11"
+indicatif = "0.17"
+
+# Regex (for pattern matching)
+regex = "1.11"
+
+# Error handling
+thiserror = "2.0"
+anyhow = "1.0"
+
+# Unix-specific (for signals)
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.29", features = ["process", "signal"] }
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = "3.14"
+assert_cmd = "2.0"
+predicates = "3.1"
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true
+codegen-units = 1
+
+[profile.dev]
+opt-level = 0
+
+[profile.test]
+opt-level = 1
