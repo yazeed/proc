@@ -25,7 +25,9 @@ class Proc < Formula
   end
 
   def install
-    bin.install "proc"
+    # Binary is named proc-{platform}-{arch}, rename to proc
+    binary = Dir["proc-*"].first
+    bin.install binary => "proc"
   end
 
   test do
