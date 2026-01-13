@@ -125,15 +125,13 @@ proc unstick --force   # terminate if recovery fails
 
 ### Filters
 
-Available on `ps` and `tree`:
-
-| Option | Description |
-|--------|-------------|
-| `--in <path>` | Filter by working directory |
-| `--path <path>` | Filter by executable path |
-| `--min-cpu <n>` | Processes using >n% CPU |
-| `--min-mem <n>` | Processes using >n MB memory |
-| `--status <s>` | running, sleeping, stopped, zombie |
+| Option | `ps` | `tree` | Description |
+|--------|:----:|:------:|-------------|
+| `--in <path>` | ✓ | | Filter by working directory |
+| `--path <path>` | ✓ | | Filter by executable path |
+| `--min-cpu <n>` | ✓ | ✓ | Processes using >n% CPU |
+| `--min-mem <n>` | ✓ | ✓ | Processes using >n MB memory |
+| `--status <s>` | ✓ | ✓ | running, sleeping, stopped, zombie |
 
 ## Examples
 
