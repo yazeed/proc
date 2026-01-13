@@ -88,9 +88,9 @@ impl PortsCommand {
         let process_map: HashMap<u32, Process> = if self.verbose {
             let mut map = HashMap::new();
             for port in &ports {
-                if !map.contains_key(&port.pid) {
+                if let std::collections::hash_map::Entry::Vacant(e) = map.entry(port.pid) {
                     if let Ok(Some(proc)) = Process::find_by_pid(port.pid) {
-                        map.insert(port.pid, proc);
+                        e.insert(proc);
                     }
                 }
             }

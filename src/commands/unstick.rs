@@ -337,10 +337,8 @@ impl UnstickCommand {
         }
 
         // Step 2: SIGINT (interrupt)
-        if kill(pid, Signal::SIGINT).is_err() {
-            if !proc.is_running() {
-                return Outcome::Terminated;
-            }
+        if kill(pid, Signal::SIGINT).is_err() && !proc.is_running() {
+            return Outcome::Terminated;
         }
         std::thread::sleep(Duration::from_secs(3));
 
@@ -357,10 +355,8 @@ impl UnstickCommand {
         }
 
         // Step 3: SIGTERM (polite termination) - only with --force
-        if proc.terminate().is_err() {
-            if !proc.is_running() {
-                return Outcome::Terminated;
-            }
+        if proc.terminate().is_err() && !proc.is_running() {
+            return Outcome::Terminated;
         }
         std::thread::sleep(Duration::from_secs(5));
 
@@ -407,6 +403,7 @@ impl UnstickCommand {
     }
 
     /// Check if process has recovered (no longer stuck)
+    #[cfg(unix)]
     fn check_recovered(&self, proc: &Process) -> bool {
         if let Ok(Some(current)) = Process::find_by_pid(proc.pid) {
             current.cpu_percent < 10.0
