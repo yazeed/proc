@@ -1,6 +1,6 @@
 # Homebrew formula for proc
-# To install from a tap: brew install yazeed/tap/proc
-# This file should be placed in a separate homebrew-tap repository
+# To install from a tap: brew install yazeed/proc/proc
+# This file should be placed in the yazeed/homebrew-proc repository
 
 class Proc < Formula
   desc "Semantic process management CLI"

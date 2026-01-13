@@ -40,7 +40,7 @@ curl -fsSL https://raw.githubusercontent.com/yazeed/proc/main/install.sh | bash
 Or via package managers:
 
 ```bash
-brew install yazeed/tap/proc    # Homebrew
+brew install yazeed/proc/proc   # Homebrew
 cargo install proc-cli          # Cargo
 ```
 
