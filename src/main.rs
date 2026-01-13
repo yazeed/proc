@@ -20,7 +20,7 @@ use std::process;
   proc on 1234            What ports is PID 1234 using?
   proc ps                 List all processes
   proc ps node            Filter by name
-  proc ps --cwd .         Processes in current directory
+  proc ps --in            Processes in current directory
   proc info :3000         Info for process on port 3000
   proc tree node          Process tree for node
   proc kill :3000         Kill process on port 3000

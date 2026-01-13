@@ -79,7 +79,7 @@ proc on node           # What ports are node processes using?
 proc ports             # List all listening ports
 proc ps                # List all processes
 proc ps node           # Filter by name
-proc ps --cwd .        # Processes in current directory
+proc ps --in .        # Processes in current directory
 proc ps --min-cpu 10   # Processes using >10% CPU
 proc info :3000        # Info for process on port 3000
 proc info 1234         # Info for PID 1234
@@ -130,7 +130,7 @@ Available on `ps` and `tree`:
 
 | Option | Description |
 |--------|-------------|
-| `--cwd <path>` | Filter by working directory |
+| `--in <path>` | Filter by working directory |
 | `--path <path>` | Filter by executable path |
 | `--min-cpu <n>` | Only processes using >n% CPU |
 | `--min-mem <n>` | Only processes using >n MB memory |
@@ -158,7 +158,7 @@ $ proc on 12345
 ### Process discovery
 
 ```bash
-$ proc ps --cwd /my/project
+$ proc ps --in /my/project
 ✓ Found 3 processes
 
 PID      NAME        CPU%   MEM (MB)   STATUS

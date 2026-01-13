@@ -13,8 +13,8 @@
 //! ## Example
 //!
 //! ```bash
-//! # Find processes
-//! proc find node
+//! # List processes
+//! proc ps node
 //!
 //! # What's on a port?
 //! proc on :3000
