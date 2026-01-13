@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-01-13
+
+### Fixed
+
+- Fixed outdated error message suggesting removed `proc find --all` command
+- Fixed `--cwd` references in help text and documentation (renamed to `--in`)
+- Fixed JSON output action field from "find" to "ps"
+
 ## [1.0.0] - 2026-01-12
 
 Initial public release.
@@ -36,7 +44,7 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 ### Features
 
 - **Unified targets**: Most commands accept `:port`, `PID`, or process `name`
-- **Path filtering**: `--cwd` and `--path` filters for `proc ps`
+- **Path filtering**: `--in` and `--path` filters for `proc ps`
 - **Resource filtering**: `--min-cpu`, `--min-mem`, `--status` filters for `ps` and `tree`
 - **Bidirectional lookup**: `proc on` works both ways (port→process and process→ports)
 - **Cross-platform**: macOS (Apple Silicon, Intel), Linux (x86_64, ARM64)
@@ -60,5 +68,6 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 
 ---
 
-[Unreleased]: https://github.com/yazeed/proc/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/yazeed/proc/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/yazeed/proc/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/yazeed/proc/releases/tag/v1.0.0
