@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-01-13
+
+### Changed
+
+- Streamlined README with cleaner structure and code-first approach
+- Added Targets section explaining unified `:port`, `PID`, `name` syntax
+- Removed "Why proc?" comparison section
+
+### Fixed
+
+- Fixed README filter table incorrectly stating `--in` and `--path` work with `tree` (ps-only)
+
 ## [1.0.1] - 2026-01-13
 
 ### Fixed
@@ -68,6 +80,7 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 
 ---
 
-[Unreleased]: https://github.com/yazeed/proc/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/yazeed/proc/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/yazeed/proc/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/yazeed/proc/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/yazeed/proc/releases/tag/v1.0.0
