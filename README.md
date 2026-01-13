@@ -63,6 +63,10 @@ chmod +x proc && sudo mv proc /usr/local/bin/
 # Linux (ARM64)
 curl -fsSL https://github.com/yazeed/proc/releases/latest/download/proc-linux-aarch64 -o proc
 chmod +x proc && sudo mv proc /usr/local/bin/
+
+# Windows (PowerShell)
+Invoke-WebRequest -Uri https://github.com/yazeed/proc/releases/latest/download/proc-windows-x86_64.exe -OutFile proc.exe
+Move-Item proc.exe C:\Windows\System32\proc.exe
 ```
 </details>
 
@@ -203,6 +207,7 @@ $ proc ps node --json | jq '.processes[].pid'
 | macOS (Intel) | ✅ |
 | Linux (x86_64) | ✅ |
 | Linux (ARM64) | ✅ |
+| Windows (x86_64) | ✅ |
 
 ## Building from Source
 

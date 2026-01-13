@@ -47,7 +47,7 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 - **Path filtering**: `--in` and `--path` filters for `proc ps`
 - **Resource filtering**: `--min-cpu`, `--min-mem`, `--status` filters for `ps` and `tree`
 - **Bidirectional lookup**: `proc on` works both ways (port→process and process→ports)
-- **Cross-platform**: macOS (Apple Silicon, Intel), Linux (x86_64, ARM64)
+- **Cross-platform**: macOS (Apple Silicon, Intel), Linux (x86_64, ARM64), Windows (x86_64)
 - **Output formats**: Colored terminal output, JSON (`--json`) for scripting
 - **Safety**: Confirmation prompts before destructive actions
 
