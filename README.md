@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Crates.io](https://img.shields.io/crates/v/proc-cli.svg)](https://crates.io/crates/proc-cli)
 
-A semantic process manager. Commands that read like sentences.
+A semantic process manager. One syntax for ports, PIDs, and names.
 
 ```bash
 proc on :3000       # what's on port 3000?
