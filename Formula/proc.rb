@@ -5,7 +5,7 @@
 class Proc < Formula
   desc "Semantic process management CLI"
   homepage "https://github.com/yazeed/proc"
-  version "0.1.0"
+  version "1.0.0"
   license "MIT"
 
   on_macos do

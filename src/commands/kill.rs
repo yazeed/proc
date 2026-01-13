@@ -6,8 +6,7 @@
 //!   proc kill 1234          # Kill specific PID
 //!   proc kill node --yes    # Skip confirmation
 
-use crate::core::port::{parse_port, PortInfo};
-use crate::core::Process;
+use crate::core::{resolve_target, Process};
 use crate::error::{ProcError, Result};
 use crate::ui::{OutputFormat, Printer};
 use clap::Args;
@@ -50,7 +49,7 @@ impl KillCommand {
         let printer = Printer::new(format, self.verbose);
 
         // Determine what to kill based on target format
-        let processes = self.resolve_target()?;
+        let processes = self.resolve_target_processes()?;
 
         if processes.is_empty() {
             return Err(ProcError::ProcessNotFound(self.target.clone()));
@@ -117,45 +116,8 @@ impl KillCommand {
     }
 
     /// Resolve the target to a list of processes
-    fn resolve_target(&self) -> Result<Vec<Process>> {
-        let target = self.target.trim();
-
-        // Check if it's a port (starts with : or is a number in port range)
-        if target.starts_with(':') {
-            let port = parse_port(target)?;
-            return self.find_by_port(port);
-        }
-
-        // Check if it's a PID (pure number)
-        if let Ok(pid) = target.parse::<u32>() {
-            // Could be PID or port - if < 65536, check if it's a port first
-            if pid <= 65535 {
-                // Try as port first
-                if let Ok(processes) = self.find_by_port(pid as u16) {
-                    if !processes.is_empty() {
-                        return Ok(processes);
-                    }
-                }
-            }
-            // Try as PID
-            return match Process::find_by_pid(pid)? {
-                Some(proc) => Ok(vec![proc]),
-                None => Err(ProcError::ProcessNotFound(target.to_string())),
-            };
-        }
-
-        // Otherwise, treat as process name
-        Process::find_by_name(target)
-    }
-
-    fn find_by_port(&self, port: u16) -> Result<Vec<Process>> {
-        match PortInfo::find_by_port(port)? {
-            Some(port_info) => match Process::find_by_pid(port_info.pid)? {
-                Some(proc) => Ok(vec![proc]),
-                None => Err(ProcError::ProcessGone(port_info.pid)),
-            },
-            None => Err(ProcError::PortNotFound(port)),
-        }
+    fn resolve_target_processes(&self) -> Result<Vec<Process>> {
+        resolve_target(&self.target)
     }
 
     fn print_confirmation_prompt(&self, processes: &[Process]) {

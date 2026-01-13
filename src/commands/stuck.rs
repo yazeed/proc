@@ -86,8 +86,9 @@ impl StuckCommand {
             let mut failed = Vec::new();
 
             for proc in processes {
-                match proc.kill() {
-                    Ok(()) => killed.push(proc),
+                // Use kill_and_wait to ensure stuck processes are actually terminated
+                match proc.kill_and_wait() {
+                    Ok(_) => killed.push(proc),
                     Err(e) => failed.push((proc, e.to_string())),
                 }
             }

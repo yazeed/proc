@@ -19,6 +19,9 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             artifact: proc-linux-x86_64
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            artifact: proc-linux-aarch64
           - os: macos-latest
             target: x86_64-apple-darwin
             artifact: proc-darwin-x86_64

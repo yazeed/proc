@@ -40,6 +40,12 @@ pub struct Process {
     pub pid: u32,
     /// Process name (executable name)
     pub name: String,
+    /// Path to the executable
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exe_path: Option<String>,
+    /// Current working directory
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<String>,
     /// Full command line (if available)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
@@ -155,36 +161,53 @@ impl Process {
         Ok(processes)
     }
 
-    /// Send a signal to this process (Unix only)
-    #[cfg(unix)]
+    /// Force kill the process (SIGKILL on Unix, taskkill /F on Windows)
     pub fn kill(&self) -> Result<()> {
-        use nix::sys::signal::{kill, Signal};
-        use nix::unistd::Pid;
+        let mut sys = System::new();
+        sys.refresh_processes(
+            sysinfo::ProcessesToUpdate::Some(&[Pid::from_u32(self.pid)]),
+            true,
+        );
 
-        kill(Pid::from_raw(self.pid as i32), Signal::SIGKILL)
-            .map_err(|e| ProcError::SignalError(e.to_string()))
+        if let Some(proc) = sys.process(Pid::from_u32(self.pid)) {
+            if proc.kill() {
+                Ok(())
+            } else {
+                Err(ProcError::SignalError(format!(
+                    "Failed to kill process {}",
+                    self.pid
+                )))
+            }
+        } else {
+            Err(ProcError::ProcessNotFound(self.pid.to_string()))
+        }
     }
 
-    /// Send a signal to this process (Windows)
-    #[cfg(windows)]
-    pub fn kill(&self) -> Result<()> {
-        use std::process::Command;
+    /// Force kill and wait for process to terminate
+    /// Returns the exit status if available
+    pub fn kill_and_wait(&self) -> Result<Option<std::process::ExitStatus>> {
+        let mut sys = System::new();
+        sys.refresh_processes(
+            sysinfo::ProcessesToUpdate::Some(&[Pid::from_u32(self.pid)]),
+            true,
+        );
 
-        Command::new("taskkill")
-            .args(["/F", "/PID", &self.pid.to_string()])
-            .output()
-            .map_err(|e| ProcError::SystemError(e.to_string()))?;
-
-        Ok(())
+        if let Some(proc) = sys.process(Pid::from_u32(self.pid)) {
+            proc.kill_and_wait().map_err(|e| {
+                ProcError::SignalError(format!("Failed to kill process {}: {:?}", self.pid, e))
+            })
+        } else {
+            Err(ProcError::ProcessNotFound(self.pid.to_string()))
+        }
     }
 
-    /// Send SIGTERM for graceful termination (Unix only)
+    /// Send SIGTERM for graceful termination (Unix) or taskkill (Windows)
     #[cfg(unix)]
     pub fn terminate(&self) -> Result<()> {
         use nix::sys::signal::{kill, Signal};
-        use nix::unistd::Pid;
+        use nix::unistd::Pid as NixPid;
 
-        kill(Pid::from_raw(self.pid as i32), Signal::SIGTERM)
+        kill(NixPid::from_raw(self.pid as i32), Signal::SIGTERM)
             .map_err(|e| ProcError::SignalError(e.to_string()))
     }
 
@@ -201,11 +224,32 @@ impl Process {
         Ok(())
     }
 
-    /// Check if the process is still running
-    pub fn is_running(&self) -> bool {
+    /// Check if the process still exists
+    pub fn exists(&self) -> bool {
         let mut sys = System::new();
-        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
-        sys.processes().contains_key(&Pid::from_u32(self.pid))
+        sys.refresh_processes(
+            sysinfo::ProcessesToUpdate::Some(&[Pid::from_u32(self.pid)]),
+            true,
+        );
+        sys.process(Pid::from_u32(self.pid)).is_some()
+    }
+
+    /// Check if the process is still running (alias for exists for compatibility)
+    pub fn is_running(&self) -> bool {
+        self.exists()
+    }
+
+    /// Wait for the process to terminate
+    /// Returns the exit status if available
+    pub fn wait(&self) -> Option<std::process::ExitStatus> {
+        let mut sys = System::new();
+        sys.refresh_processes(
+            sysinfo::ProcessesToUpdate::Some(&[Pid::from_u32(self.pid)]),
+            true,
+        );
+
+        sys.process(Pid::from_u32(self.pid))
+            .and_then(|proc| proc.wait())
     }
 
     /// Convert from sysinfo Process
@@ -223,9 +267,14 @@ impl Process {
             )
         };
 
+        let exe_path = proc.exe().map(|p| p.to_string_lossy().to_string());
+        let cwd = proc.cwd().map(|p| p.to_string_lossy().to_string());
+
         Process {
             pid: pid.as_u32(),
             name: proc.name().to_string_lossy().to_string(),
+            exe_path,
+            cwd,
             command,
             cpu_percent: proc.cpu_usage(),
             memory_mb: proc.memory() as f64 / 1024.0 / 1024.0,

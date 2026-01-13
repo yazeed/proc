@@ -61,10 +61,10 @@ impl Printer {
         }
     }
 
-    /// Print a list of processes
-    pub fn print_processes(&self, processes: &[Process]) {
+    /// Print a list of processes with optional context (e.g., "in /path/to/dir")
+    pub fn print_processes_with_context(&self, processes: &[Process], context: Option<&str>) {
         match self.format {
-            OutputFormat::Human => self.print_processes_human(processes),
+            OutputFormat::Human => self.print_processes_human(processes, context),
             OutputFormat::Json => self.print_json(&ProcessListOutput {
                 action: "find",
                 success: true,
@@ -74,67 +74,105 @@ impl Printer {
         }
     }
 
-    fn print_processes_human(&self, processes: &[Process]) {
+    /// Print a list of processes
+    pub fn print_processes(&self, processes: &[Process]) {
+        self.print_processes_with_context(processes, None)
+    }
+
+    fn print_processes_human(&self, processes: &[Process], context: Option<&str>) {
         if processes.is_empty() {
-            self.warning("No processes found");
+            let msg = match context {
+                Some(ctx) => format!("No processes found {}", ctx),
+                None => "No processes found".to_string(),
+            };
+            self.warning(&msg);
             return;
         }
 
+        let context_str = context.map(|c| format!(" {}", c)).unwrap_or_default();
         println!(
-            "{} Found {} process{}",
+            "{} Found {} process{}{}",
             "✓".green().bold(),
             processes.len().to_string().cyan().bold(),
-            if processes.len() == 1 { "" } else { "es" }
+            if processes.len() == 1 { "" } else { "es" },
+            context_str.bright_black()
         );
         println!();
 
-        // Header
-        println!(
-            "{:<8} {:<25} {:>8} {:>10} {:>10}",
-            "PID".bright_blue().bold(),
-            "NAME".bright_blue().bold(),
-            "CPU%".bright_blue().bold(),
-            "MEM (MB)".bright_blue().bold(),
-            "STATUS".bright_blue().bold()
-        );
-        println!("{}", "─".repeat(65).bright_black());
+        if self.verbose {
+            // Verbose: full details, nothing truncated
+            for proc in processes {
+                let status_str = format!("{:?}", proc.status);
+                let status_colored = colorize_status(&proc.status, &status_str);
 
-        for proc in processes {
-            let name = truncate_string(&proc.name, 24);
-            let status_str = format!("{:?}", proc.status);
-            let status_colored = match proc.status {
-                crate::core::ProcessStatus::Running => status_str.green(),
-                crate::core::ProcessStatus::Sleeping => status_str.blue(),
-                crate::core::ProcessStatus::Stopped => status_str.yellow(),
-                crate::core::ProcessStatus::Zombie => status_str.red(),
-                _ => status_str.white(),
-            };
+                println!(
+                    "{} {} {}  {:.1}% CPU  {:.1} MB  {}",
+                    proc.pid.to_string().cyan().bold(),
+                    proc.name.white().bold(),
+                    format!("[{}]", status_colored).bright_black(),
+                    proc.cpu_percent,
+                    proc.memory_mb,
+                    proc.user.as_deref().unwrap_or("-").bright_black()
+                );
 
-            println!(
-                "{:<8} {:<25} {:>8.1} {:>10.1} {:>10}",
-                proc.pid.to_string().cyan(),
-                name.white(),
-                proc.cpu_percent,
-                proc.memory_mb,
-                status_colored
-            );
-
-            if self.verbose {
                 if let Some(ref cmd) = proc.command {
-                    let cmd_display = truncate_string(cmd, 60);
-                    println!(
-                        "         {} {}",
-                        "cmd:".bright_black(),
-                        cmd_display.bright_black()
-                    );
+                    println!("    {} {}", "cmd:".bright_black(), cmd);
+                }
+                if let Some(ref path) = proc.exe_path {
+                    println!("    {} {}", "exe:".bright_black(), path.bright_black());
+                }
+                if let Some(ref cwd) = proc.cwd {
+                    println!("    {} {}", "cwd:".bright_black(), cwd.bright_black());
                 }
                 if let Some(ppid) = proc.parent_pid {
                     println!(
-                        "         {} {}",
+                        "    {} {}",
                         "parent:".bright_black(),
                         ppid.to_string().bright_black()
                     );
                 }
+                println!();
+            }
+        } else {
+            // Normal: compact table - PATH (directory) before NAME
+            println!(
+                "{:<8} {:<35} {:<24} {:>6} {:>8} {:>10}",
+                "PID".bright_blue().bold(),
+                "PATH".bright_blue().bold(),
+                "NAME".bright_blue().bold(),
+                "CPU%".bright_blue().bold(),
+                "MEM".bright_blue().bold(),
+                "STATUS".bright_blue().bold(),
+            );
+            println!("{}", "─".repeat(95).bright_black());
+
+            for proc in processes {
+                let name = truncate_string(&proc.name, 23);
+                let status_str = format!("{:?}", proc.status);
+                let status_colored = colorize_status(&proc.status, &status_str);
+
+                // Show directory only (not the executable name - that's redundant with NAME)
+                let dir_display = proc
+                    .exe_path
+                    .as_ref()
+                    .map(|p| {
+                        // Get parent directory
+                        std::path::Path::new(p)
+                            .parent()
+                            .map(|parent| truncate_path(&parent.to_string_lossy(), 34))
+                            .unwrap_or_else(|| "-".to_string())
+                    })
+                    .unwrap_or_else(|| "-".to_string());
+
+                println!(
+                    "{:<8} {:<35} {:<24} {:>6.1} {:>6.1}MB {:>10}",
+                    proc.pid.to_string().cyan(),
+                    dir_display.bright_black(),
+                    name.white(),
+                    proc.cpu_percent,
+                    proc.memory_mb,
+                    status_colored,
+                );
             }
         }
         println!();
@@ -300,6 +338,32 @@ fn truncate_string(s: &str, max_len: usize) -> String {
         s.to_string()
     } else {
         format!("{}...", &s[..max_len.saturating_sub(3)])
+    }
+}
+
+/// Truncate a path intelligently - show the end (most relevant part)
+fn truncate_path(path: &str, max_len: usize) -> String {
+    if path.len() <= max_len {
+        path.to_string()
+    } else {
+        // Show ...ending of path
+        let start = path.len().saturating_sub(max_len.saturating_sub(3));
+        format!("...{}", &path[start..])
+    }
+}
+
+/// Colorize process status
+fn colorize_status(
+    status: &crate::core::ProcessStatus,
+    status_str: &str,
+) -> colored::ColoredString {
+    use colored::*;
+    match status {
+        crate::core::ProcessStatus::Running => status_str.green(),
+        crate::core::ProcessStatus::Sleeping => status_str.blue(),
+        crate::core::ProcessStatus::Stopped => status_str.yellow(),
+        crate::core::ProcessStatus::Zombie => status_str.red(),
+        _ => status_str.white(),
     }
 }
 

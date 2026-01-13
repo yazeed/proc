@@ -7,63 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- Initial release preparation
+## [1.0.0] - 2026-01-12
 
-## [0.1.0] - 2026-01-08
+Initial public release.
 
-### Added
-- **proc find** - Find processes by name with pattern matching
-  - Case-insensitive search
-  - Matches process name and command line
-  - Sorting by CPU, memory, PID, or name
-  - Limit results with `--limit`
+### Commands
 
-- **proc on** - Show what process is using a port
-  - Accepts port formats: `:3000` or `3000`
-  - Shows process name, PID, and address
+All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 
-- **proc ports** - List all listening ports
-  - Filter by process name with `--filter`
-  - Sort by port, PID, or name
+**Discovery** (nouns — observe state)
+- `proc on <target>` — Bidirectional port/process lookup
+  - `:port` → What process is using this port?
+  - `PID` → What ports is this process using?
+  - `name` → What ports are these processes using?
+- `proc ports` — List all listening ports
+- `proc ps [name]` — List processes (filter by name, path, or resources)
+- `proc info <target>` — Detailed process information
+- `proc tree [target]` — Process hierarchy view
+- `proc stuck` — Find hung processes
 
-- **proc kill** - Kill processes by name, PID, or port
-  - Smart target detection (name vs PID vs port)
-  - Confirmation prompts for safety
-  - `--dry-run` mode to preview actions
-  - `--yes` flag to skip confirmation
-  - `--graceful` for SIGTERM instead of SIGKILL
+**Lifecycle** (verbs — change state)
+- `proc kill <target>` — Force kill (SIGKILL)
+- `proc stop <target>` — Graceful stop (SIGTERM, then SIGKILL after timeout)
+- `proc unstick [target]` — Attempt to recover stuck processes
+  - Tries SIGCONT → SIGINT recovery sequence
+  - Use `--force` to terminate if recovery fails
 
-- **proc stuck** - Find potentially stuck/hung processes
-  - Configurable timeout threshold
-  - Option to kill found processes with `--kill`
+### Features
 
-- **Cross-platform support**
-  - macOS (Apple Silicon and Intel)
-  - Linux (x86_64 and ARM64)
-  - Windows via WSL
+- **Unified targets**: Most commands accept `:port`, `PID`, or process `name`
+- **Path filtering**: `--cwd` and `--path` filters for `proc ps`
+- **Resource filtering**: `--min-cpu`, `--min-mem`, `--status` filters for `ps` and `tree`
+- **Bidirectional lookup**: `proc on` works both ways (port→process and process→ports)
+- **Cross-platform**: macOS (Apple Silicon, Intel), Linux (x86_64, ARM64)
+- **Output formats**: Colored terminal output, JSON (`--json`) for scripting
+- **Safety**: Confirmation prompts before destructive actions
 
-- **Output formats**
-  - Beautiful colored terminal output
-  - JSON output for scripting (`--json`)
-  - Verbose mode (`--verbose`)
+### Principles
 
-- **Safety features**
-  - Confirmation prompts before destructive actions
-  - Dry-run mode
-  - Clear error messages with suggestions
+- **Semantic**: Commands mean what they say
+- **Explicit**: User intent must be clear
+- **Complete**: Cover the full workflow, nothing more
+- **Fast**: Sub-100ms for all operations
+- **Obvious**: If you have to read the docs, we failed
 
-### Technical
-- Built with Rust for performance and reliability
-- Uses `sysinfo` crate for cross-platform process info
-- Uses `clap` for CLI argument parsing
-- Single binary with no runtime dependencies
+### Values
+
+- **Unified targets**: `:port`, `PID`, and `name` work the same way everywhere
+- **Natural grammar**: Nouns to observe, verbs to act
+- **Practical simplicity**: Every feature solves a real, repeated problem
+- **Easy to remember**: Consistent patterns—know one command, know them all
 
 ---
 
-## Version History
-
-- **0.1.0** - Initial MVP release with 5 core commands
-
-[Unreleased]: https://github.com/yazeed/proc/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/yazeed/proc/releases/tag/v0.1.0
+[Unreleased]: https://github.com/yazeed/proc/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/yazeed/proc/releases/tag/v1.0.0

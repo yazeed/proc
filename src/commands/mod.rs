@@ -5,14 +5,22 @@
 //! - Execute the operation
 //! - Format and display results
 
-pub mod find;
+pub mod info;
 pub mod kill;
 pub mod on;
 pub mod ports;
+pub mod ps;
+pub mod stop;
 pub mod stuck;
+pub mod tree;
+pub mod unstick;
 
-pub use find::FindCommand;
+pub use info::InfoCommand;
 pub use kill::KillCommand;
 pub use on::OnCommand;
 pub use ports::PortsCommand;
+pub use ps::PsCommand;
+pub use stop::StopCommand;
 pub use stuck::StuckCommand;
+pub use tree::TreeCommand;
+pub use unstick::UnstickCommand;

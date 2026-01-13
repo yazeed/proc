@@ -60,6 +60,12 @@ impl From<regex::Error> for ProcError {
     }
 }
 
+impl From<dialoguer::Error> for ProcError {
+    fn from(err: dialoguer::Error) -> Self {
+        ProcError::SystemError(format!("Dialog error: {}", err))
+    }
+}
+
 /// Result type alias for proc operations
 pub type Result<T> = std::result::Result<T, ProcError>;
 
