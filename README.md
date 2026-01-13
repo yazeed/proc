@@ -4,40 +4,16 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Crates.io](https://img.shields.io/crates/v/proc-cli.svg)](https://crates.io/crates/proc-cli)
 
-**proc** is a command-line tool for developers who are tired of arcane incantations for simple process tasks.
-
-## Why proc?
-
-Every developer knows this pain:
+A semantic process manager. Commands that read like sentences.
 
 ```bash
-# What's on port 3000?
-lsof -i :3000 | grep LISTEN | awk '{print $2}'
-
-# Kill it
-lsof -i :3000 | grep LISTEN | awk '{print $2}' | xargs kill -9
-
-# Find all node processes
-ps aux | grep node | grep -v grep
+proc on :3000       # what's on port 3000?
+proc kill :3000     # kill it
+proc ps node        # list node processes
+proc stop node      # stop them gracefully
 ```
-
-With proc:
-
-```bash
-proc on :3000      # What's on port 3000?
-proc kill :3000    # Kill it
-proc ps node       # List node processes
-```
-
-Commands that mean what they say.
 
 ## Install
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/yazeed/proc/main/install.sh | bash
-```
-
-Or via package managers:
 
 ```bash
 brew install yazeed/proc/proc   # Homebrew
@@ -45,8 +21,14 @@ cargo install proc-cli          # Cargo
 ```
 
 <details>
-<summary>Manual download</summary>
+<summary>Other methods</summary>
 
+**Script:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/yazeed/proc/main/install.sh | bash
+```
+
+**Manual:**
 ```bash
 # macOS (Apple Silicon)
 curl -fsSL https://github.com/yazeed/proc/releases/latest/download/proc-darwin-aarch64 -o proc
@@ -70,45 +52,58 @@ Move-Item proc.exe C:\Windows\System32\proc.exe
 ```
 </details>
 
-## Commands
+## Usage
 
-All commands accept **targets**: `:port`, `PID`, or `name`.
+### Targets
+
+Every command accepts the same target syntax:
+
+| Target | Example | Meaning |
+|--------|---------|---------|
+| `:port` | `:3000` | Process using port 3000 |
+| `PID` | `12345` | Process with ID 12345 |
+| `name` | `node` | All processes named "node" |
 
 ### Discovery
 
 ```bash
-proc on :3000          # What's using port 3000?
-proc on 1234           # What ports is PID 1234 using?
-proc on node           # What ports are node processes using?
-proc ports             # List all listening ports
-proc ps                # List all processes
-proc ps node           # Filter by name
-proc ps --in .        # Processes in current directory
-proc ps --min-cpu 10   # Processes using >10% CPU
-proc info :3000        # Info for process on port 3000
-proc info 1234         # Info for PID 1234
-proc tree              # Full process hierarchy
-proc tree :3000        # Tree for process on port 3000
-proc tree --min-cpu 5  # Tree filtered by CPU usage
-proc stuck             # Find processes that appear hung
+proc on :3000          # what's using port 3000?
+proc on 12345          # what ports is PID 12345 using?
+proc on node           # what ports are node processes using?
+
+proc ports             # all listening ports
+proc ps                # all processes
+proc ps node           # filter by name
+proc ps --in .         # processes started in current directory
+proc ps --path /usr    # processes from /usr/*
+proc ps --min-cpu 10   # processes using >10% CPU
+
+proc info :3000        # detailed info for process on port 3000
+proc tree              # process hierarchy
+proc tree --min-cpu 5  # tree filtered by CPU
+
+proc stuck             # find hung processes
 ```
 
 ### Lifecycle
 
 ```bash
-proc kill :3000        # Kill process on port 3000
-proc kill node         # Kill all node processes (SIGKILL)
-proc stop :3000        # Stop gracefully (SIGTERM, then SIGKILL)
-proc stop node         # Stop all node processes gracefully
-proc unstick           # Attempt to recover stuck processes
-proc unstick --force   # Terminate if recovery fails
+proc kill :3000        # SIGKILL process on port 3000
+proc kill node         # SIGKILL all node processes
+proc stop :3000        # SIGTERM, then SIGKILL after timeout
+proc stop node         # graceful stop for all node processes
+
+proc unstick           # attempt to recover stuck processes
+proc unstick --force   # terminate if recovery fails
 ```
 
-## Command Reference
+## Reference
+
+### Commands
 
 | Command | Alias | Description |
 |---------|-------|-------------|
-| `on` | `:` | Port/process lookup (bidirectional) |
+| `on` | `:` | Bidirectional port/process lookup |
 | `ports` | `p` | List listening ports |
 | `ps` | `l` | List processes |
 | `info` | `i` | Detailed process info |
@@ -116,19 +111,19 @@ proc unstick --force   # Terminate if recovery fails
 | `kill` | `k` | Force kill (SIGKILL) |
 | `stop` | `s` | Graceful stop (SIGTERM) |
 | `stuck` | `x` | Find hung processes |
-| `unstick` | `u` | Attempt to recover stuck processes |
+| `unstick` | `u` | Recover stuck processes |
 
-## Common Options
+### Options
 
 | Option | Short | Description |
 |--------|-------|-------------|
-| `--json` | `-j` | Output as JSON for scripting |
-| `--verbose` | `-v` | Show paths, cwd, and full commands |
-| `--yes` | `-y` | Skip confirmation prompts |
-| `--dry-run` | | Preview actions without executing |
-| `--force` | `-f` | Force action (e.g., terminate if recovery fails) |
+| `--json` | `-j` | JSON output |
+| `--verbose` | `-v` | Show paths, cwd, full commands |
+| `--yes` | `-y` | Skip confirmation |
+| `--dry-run` | | Preview without executing |
+| `--force` | `-f` | Force action |
 
-## Filter Options
+### Filters
 
 Available on `ps` and `tree`:
 
@@ -136,13 +131,11 @@ Available on `ps` and `tree`:
 |--------|-------------|
 | `--in <path>` | Filter by working directory |
 | `--path <path>` | Filter by executable path |
-| `--min-cpu <n>` | Only processes using >n% CPU |
-| `--min-mem <n>` | Only processes using >n MB memory |
-| `--status <s>` | Filter by status: running, sleeping, stopped, zombie |
+| `--min-cpu <n>` | Processes using >n% CPU |
+| `--min-mem <n>` | Processes using >n MB memory |
+| `--status <s>` | running, sleeping, stopped, zombie |
 
 ## Examples
-
-### Port lookup
 
 ```bash
 $ proc on :3000
@@ -153,15 +146,6 @@ $ proc on :3000
   Resources: 2.3% CPU, 156.4 MB
   Uptime: 2h 34m
 
-$ proc on 12345
-✓ node (PID 12345) is listening on:
-  → :3000 (TCP on 0.0.0.0)
-  → :3001 (TCP on 127.0.0.1)
-```
-
-### Process discovery
-
-```bash
 $ proc ps --in /my/project
 ✓ Found 3 processes
 
@@ -174,26 +158,11 @@ $ proc tree --min-cpu 5
 ✓ 2 processes matching filters:
 ├── ● node [12345] 12.3% 256.4MB
 └── ● python [12400] 8.1% 128.2MB
-```
 
-### Lifecycle management
-
-```bash
 $ proc kill :3000
 Kill node [PID 12345]? [y/N]: y
 ✓ Killed 1 process
 
-$ proc unstick
-! Found 1 stuck process:
-  → node [PID 12345] - 98.2% CPU, running for 2h 15m
-Unstick 1 process? [y/N]: y
-  → node [PID 12345]... recovered
-✓ 1 process recovered
-```
-
-### Scripting with JSON
-
-```bash
 $ proc ps node --json | jq '.processes[].pid'
 12345
 12346
@@ -209,7 +178,7 @@ $ proc ps node --json | jq '.processes[].pid'
 | Linux (ARM64) | ✅ |
 | Windows (x86_64) | ✅ |
 
-## Building from Source
+## Building
 
 ```bash
 git clone https://github.com/yazeed/proc
@@ -218,18 +187,10 @@ cargo build --release
 ./target/release/proc --help
 ```
 
-## Roadmap
-
-See [ROADMAP.md](ROADMAP.md) for planned features.
-
 ## Contributing
 
-Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-MIT - see [LICENSE](LICENSE).
-
----
-
-**proc**: Process management for humans.
+MIT
