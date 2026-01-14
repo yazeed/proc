@@ -4,7 +4,9 @@
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.1.x   | :white_check_mark: |
+| 1.1.x   | :white_check_mark: |
+| 1.0.x   | :white_check_mark: |
+| < 1.0   | :x:                |
 
 ## Reporting a Vulnerability
 
@@ -90,7 +92,7 @@ We carefully vet all dependencies:
 
 | Date | Type | Findings | Resolution |
 |------|------|----------|------------|
-| 2026-01-08 | Initial Release | N/A | N/A |
+| 2026-01-12 | v1.0.0 Release | N/A | N/A |
 
 ## Contact
 
