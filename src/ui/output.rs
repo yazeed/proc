@@ -66,7 +66,7 @@ impl Printer {
         match self.format {
             OutputFormat::Human => self.print_processes_human(processes, context),
             OutputFormat::Json => self.print_json(&ProcessListOutput {
-                action: "ps",
+                action: "list",
                 success: true,
                 count: processes.len(),
                 processes,

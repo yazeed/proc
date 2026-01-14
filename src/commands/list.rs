@@ -1,11 +1,11 @@
-//! `proc ps` - List processes
+//! `proc list` - List processes
 //!
 //! Examples:
-//!   proc ps                  # List all processes
-//!   proc ps node             # Filter by name
-//!   proc ps --in             # Processes in current directory
-//!   proc ps --in /project    # Processes in /project
-//!   proc ps --min-cpu 10     # Processes using >10% CPU
+//!   proc list                  # List all processes
+//!   proc list node             # Filter by name
+//!   proc list --in             # Processes in current directory
+//!   proc list --in /project    # Processes in /project
+//!   proc list --min-cpu 10     # Processes using >10% CPU
 
 use crate::core::{Process, ProcessStatus};
 use crate::error::Result;
@@ -15,7 +15,7 @@ use std::path::PathBuf;
 
 /// List processes
 #[derive(Args, Debug)]
-pub struct PsCommand {
+pub struct ListCommand {
     /// Process name or pattern to filter by
     pub name: Option<String>,
 
@@ -56,7 +56,7 @@ pub struct PsCommand {
     pub sort: String,
 }
 
-impl PsCommand {
+impl ListCommand {
     pub fn execute(&self) -> Result<()> {
         let format = if self.json {
             OutputFormat::Json

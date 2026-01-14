@@ -7,7 +7,7 @@ use thiserror::Error;
 /// Main error type for proc operations
 #[derive(Error, Debug)]
 pub enum ProcError {
-    #[error("No process found matching '{0}'\n  Try: proc ps to list all processes")]
+    #[error("No process found matching '{0}'\n  Try: proc list to list all processes")]
     ProcessNotFound(String),
 
     #[error("No process listening on port {0}\n  Try: proc ports")]

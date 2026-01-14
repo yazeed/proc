@@ -6,12 +6,12 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Crates.io](https://img.shields.io/crates/v/proc-cli.svg)](https://crates.io/crates/proc-cli)
 
-Semantic process manager. Target by port, PID, name, or path.
+Semantic CLI tool for process management. Target by port, process id (PID), name or path.
 
 ```bash
 proc on :3000       # what's on port 3000?
 proc kill :3000     # kill it
-proc ps node        # list node processes
+proc list node      # list node processes
 proc stop node      # stop them gracefully
 ```
 
@@ -74,11 +74,11 @@ proc on 12345          # what ports is PID 12345 using?
 proc on node           # what ports are node processes using?
 
 proc ports             # all listening ports
-proc ps                # all processes
-proc ps node           # filter by name
-proc ps --in .         # processes started in current directory
-proc ps --path /usr    # processes from /usr/*
-proc ps --min-cpu 10   # processes using >10% CPU
+proc list              # all processes
+proc list node         # filter by name
+proc list --in .       # processes started in current directory
+proc list --path /usr  # processes from /usr/*
+proc list --min-cpu 10 # processes using >10% CPU
 
 proc info :3000        # detailed info for process on port 3000
 proc tree              # process hierarchy
@@ -107,7 +107,7 @@ proc unstick --force   # terminate if recovery fails
 |---------|-------|-------------|
 | `on` | `:` | Bidirectional port/process lookup |
 | `ports` | `p` | List listening ports |
-| `ps` | `l` | List processes |
+| `list` | `l`, `ps` | List processes |
 | `info` | `i` | Detailed process info |
 | `tree` | `t` | Process hierarchy |
 | `kill` | `k` | Force kill (SIGKILL) |
@@ -127,7 +127,7 @@ proc unstick --force   # terminate if recovery fails
 
 ### Filters
 
-| Option | `ps` | `tree` | Description |
+| Option | `list` | `tree` | Description |
 |--------|:----:|:------:|-------------|
 | `--in <path>` | ✓ | | Filter by working directory |
 | `--path <path>` | ✓ | | Filter by executable path |
@@ -146,7 +146,7 @@ $ proc on :3000
   Resources: 2.3% CPU, 156.4 MB
   Uptime: 2h 34m
 
-$ proc ps --in /my/project
+$ proc list --in /my/project
 ✓ Found 3 processes
 
 PID      NAME        CPU%   MEM (MB)   STATUS
@@ -163,7 +163,7 @@ $ proc kill :3000
 Kill node [PID 12345]? [y/N]: y
 ✓ Killed 1 process
 
-$ proc ps node --json | jq '.processes[].pid'
+$ proc list node --json | jq '.processes[].pid'
 12345
 12346
 ```

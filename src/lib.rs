@@ -14,7 +14,7 @@
 //!
 //! ```bash
 //! # List processes
-//! proc ps node
+//! proc list node
 //!
 //! # What's on a port?
 //! proc on :3000

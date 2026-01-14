@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-01-14
+
+### Changed
+
+- **Breaking:** Renamed `ps` command to `list` for better semantics
+  - `ps` remains as an alias for backwards compatibility
+- Updated tagline: "Semantic CLI tool for process management. Target by port, process id (PID), name or path."
+
 ## [1.0.2] - 2026-01-13
 
 ### Changed
@@ -80,7 +88,8 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 
 ---
 
-[Unreleased]: https://github.com/yazeed/proc/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/yazeed/proc/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/yazeed/proc/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/yazeed/proc/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/yazeed/proc/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/yazeed/proc/releases/tag/v1.0.0

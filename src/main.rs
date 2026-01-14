@@ -4,7 +4,7 @@
 
 use clap::{Parser, Subcommand};
 use proc_cli::commands::{
-    InfoCommand, KillCommand, OnCommand, PortsCommand, PsCommand, StopCommand, StuckCommand,
+    InfoCommand, KillCommand, ListCommand, OnCommand, PortsCommand, StopCommand, StuckCommand,
     TreeCommand, UnstickCommand,
 };
 use proc_cli::error::ExitCode;
@@ -18,9 +18,9 @@ use std::process;
 #[command(after_help = "Examples:
   proc on :3000           What's on port 3000?
   proc on 1234            What ports is PID 1234 using?
-  proc ps                 List all processes
-  proc ps node            Filter by name
-  proc ps --in            Processes in current directory
+  proc list               List all processes
+  proc list node          Filter by name
+  proc list --in          Processes in current directory
   proc info :3000         Info for process on port 3000
   proc tree node          Process tree for node
   proc kill :3000         Kill process on port 3000
@@ -39,8 +39,8 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// List processes
-    #[command(visible_alias = "l")]
-    Ps(PsCommand),
+    #[command(visible_aliases = ["l", "ps"])]
+    List(ListCommand),
 
     /// Show detailed process information
     #[command(visible_alias = "i")]
@@ -79,7 +79,7 @@ fn main() {
     let cli = Cli::parse();
 
     let result = match cli.command {
-        Commands::Ps(cmd) => cmd.execute(),
+        Commands::List(cmd) => cmd.execute(),
         Commands::Info(cmd) => cmd.execute(),
         Commands::On(cmd) => cmd.execute(),
         Commands::Ports(cmd) => cmd.execute(),
