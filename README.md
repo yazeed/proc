@@ -1,5 +1,7 @@
 # proc
 
+<img width="894" height="400" alt="proc-logo" src="https://github.com/user-attachments/assets/b4b44b5c-d94d-4cc2-9fda-d572c3544131" /><br/>
+
 [![CI](https://github.com/yazeed/proc/workflows/CI/badge.svg)](https://github.com/yazeed/proc/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Crates.io](https://img.shields.io/crates/v/proc-cli.svg)](https://crates.io/crates/proc-cli)
