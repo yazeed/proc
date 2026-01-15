@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-01-15
+
+### Added
+
+- **ARGS column** in `proc list` output showing command arguments
+  - Displays script names for Python/Node processes (e.g., `daily_spread_trader.py`)
+  - Simplifies paths to filenames for readability
+  - Enables finding processes by script name: `proc list my_script.py`
+
+### Changed
+
+- Reorganized `proc list` columns: PID, PATH, NAME, ARGS, CPU%, MEM, STATUS
+- Improved process identification for interpreted languages (Python, Node, Ruby, etc.)
+
 ## [1.1.0] - 2026-01-14
 
 ### Changed
@@ -88,7 +102,8 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 
 ---
 
-[Unreleased]: https://github.com/yazeed/proc/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/yazeed/proc/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/yazeed/proc/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/yazeed/proc/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/yazeed/proc/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/yazeed/proc/compare/v1.0.0...v1.0.1

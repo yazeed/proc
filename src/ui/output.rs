@@ -134,41 +134,72 @@ impl Printer {
                 println!();
             }
         } else {
-            // Normal: compact table - PATH (directory) before NAME
+            // Normal: compact table with all key columns
             println!(
-                "{:<8} {:<35} {:<24} {:>6} {:>8} {:>10}",
+                "{:<7} {:<20} {:<12} {:<35} {:>5} {:>8} {:>8}",
                 "PID".bright_blue().bold(),
                 "PATH".bright_blue().bold(),
                 "NAME".bright_blue().bold(),
+                "ARGS".bright_blue().bold(),
                 "CPU%".bright_blue().bold(),
                 "MEM".bright_blue().bold(),
                 "STATUS".bright_blue().bold(),
             );
-            println!("{}", "─".repeat(95).bright_black());
+            println!("{}", "─".repeat(100).bright_black());
 
             for proc in processes {
-                let name = truncate_string(&proc.name, 23);
+                let name = truncate_string(&proc.name, 11);
                 let status_str = format!("{:?}", proc.status);
                 let status_colored = colorize_status(&proc.status, &status_str);
 
-                // Show directory only (not the executable name - that's redundant with NAME)
-                let dir_display = proc
+                // Show directory of executable
+                let path_display = proc
                     .exe_path
                     .as_ref()
                     .map(|p| {
-                        // Get parent directory
                         std::path::Path::new(p)
                             .parent()
-                            .map(|parent| truncate_path(&parent.to_string_lossy(), 34))
+                            .map(|parent| truncate_path(&parent.to_string_lossy(), 19))
                             .unwrap_or_else(|| "-".to_string())
                     })
                     .unwrap_or_else(|| "-".to_string());
 
+                // Show command args (skip executable, simplify paths to filenames)
+                let cmd_display = proc
+                    .command
+                    .as_ref()
+                    .map(|c| {
+                        // Skip the first element (executable) to show just the args
+                        let parts: Vec<&str> = c.split_whitespace().collect();
+                        if parts.len() > 1 {
+                            // Simplify paths to just filenames where possible
+                            let args: Vec<String> = parts[1..]
+                                .iter()
+                                .map(|arg| {
+                                    if arg.contains('/') && !arg.starts_with('-') {
+                                        // It's a path - extract filename
+                                        std::path::Path::new(arg)
+                                            .file_name()
+                                            .map(|f| f.to_string_lossy().to_string())
+                                            .unwrap_or_else(|| arg.to_string())
+                                    } else {
+                                        arg.to_string()
+                                    }
+                                })
+                                .collect();
+                            truncate_string(&args.join(" "), 34)
+                        } else {
+                            truncate_string(c, 34)
+                        }
+                    })
+                    .unwrap_or_else(|| "-".to_string());
+
                 println!(
-                    "{:<8} {:<35} {:<24} {:>6.1} {:>6.1}MB {:>10}",
+                    "{:<7} {:<20} {:<12} {:<35} {:>5.1} {:>6.1}MB {:>8}",
                     proc.pid.to_string().cyan(),
-                    dir_display.bright_black(),
+                    path_display.bright_black(),
                     name.white(),
+                    cmd_display.bright_black(),
                     proc.cpu_percent,
                     proc.memory_mb,
                     status_colored,
