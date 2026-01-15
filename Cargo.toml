@@ -51,6 +51,7 @@ libc = "0.2"
 tempfile = "3.14"
 assert_cmd = "2.0"
 predicates = "3.1"
+cargo-husky = { version = "1", features = ["precommit-hook", "run-cargo-fmt"], default-features = false }
 
 [profile.release]
 opt-level = 3
