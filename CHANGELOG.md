@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-01-15
+
+### Changed
+
+- Enhanced `--version` output to include repository URL and license
+
 ## [1.2.0] - 2026-01-15
 
 ### Added
@@ -102,7 +108,8 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 
 ---
 
-[Unreleased]: https://github.com/yazeed/proc/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/yazeed/proc/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/yazeed/proc/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/yazeed/proc/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/yazeed/proc/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/yazeed/proc/compare/v1.0.1...v1.0.2

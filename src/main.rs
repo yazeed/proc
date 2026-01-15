@@ -10,10 +10,16 @@ use proc_cli::commands::{
 use proc_cli::error::ExitCode;
 use std::process;
 
+const VERSION_INFO: &str = concat!(
+    env!("CARGO_PKG_VERSION"),
+    "\nhttps://github.com/yazeed/proc",
+    "\nLicense: MIT"
+);
+
 /// Semantic process management CLI
 #[derive(Parser)]
 #[command(name = "proc")]
-#[command(author, version, about, long_about = None)]
+#[command(author, version = VERSION_INFO, about, long_about = None)]
 #[command(propagate_version = true)]
 #[command(after_help = "Examples:
   proc on :3000           What's on port 3000?
