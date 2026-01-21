@@ -44,7 +44,7 @@ jobs:
         run: cargo build --release --target ${{ matrix.target }}
 
       - name: Rename binary (Unix)
-        if: runner.os \!= 'Windows'
+        if: runner.os != 'Windows'
         run: |
           cp target/${{ matrix.target }}/release/proc ${{ matrix.artifact }}
           chmod +x ${{ matrix.artifact }}
@@ -55,7 +55,7 @@ jobs:
         run: Copy-Item "target/${{ matrix.target }}/release/proc.exe" -Destination "${{ matrix.artifact }}"
 
       - name: Create tarball (Unix)
-        if: runner.os \!= 'Windows'
+        if: runner.os != 'Windows'
         run: tar -czvf ${{ matrix.artifact }}.tar.gz ${{ matrix.artifact }}
 
       - name: Create zip (Windows)
@@ -122,7 +122,7 @@ jobs:
       - name: Publish to crates.io
         run: |
           # Get local version from Cargo.toml
-          VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*//')
+          VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
           echo "Local version: $VERSION"
 
           # Check if this version already exists on crates.io via API
