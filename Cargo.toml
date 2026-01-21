@@ -8,7 +8,7 @@ repository = "https://github.com/yazeed/proc"
 homepage = "https://github.com/yazeed/proc"
 documentation = "https://github.com/yazeed/proc"
 license = "MIT"
-keywords = ["process", "management", "port", "manager", "pid", "path", "cli", "system"]
+keywords = ["process", "management", "port", "pid", "cli"]
 categories = ["command-line-utilities"]
 readme = "README.md"
 
