@@ -52,6 +52,7 @@ pub struct TreeCommand {
 }
 
 impl TreeCommand {
+    /// Executes the tree command, displaying the process hierarchy.
     pub fn execute(&self) -> Result<()> {
         let format = if self.json {
             OutputFormat::Json

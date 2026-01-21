@@ -9,8 +9,10 @@ use serde::Serialize;
 /// Output format selection
 #[derive(Debug, Clone, Copy, Default)]
 pub enum OutputFormat {
+    /// Colored, human-readable terminal output
     #[default]
     Human,
+    /// Machine-readable JSON output for scripting
     Json,
 }
 
@@ -21,6 +23,7 @@ pub struct Printer {
 }
 
 impl Printer {
+    /// Creates a new printer with the specified format and verbosity.
     pub fn new(format: OutputFormat, verbose: bool) -> Self {
         Self { format, verbose }
     }

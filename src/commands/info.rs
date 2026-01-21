@@ -29,6 +29,7 @@ pub struct InfoCommand {
 }
 
 impl InfoCommand {
+    /// Executes the info command, displaying detailed process information.
     pub fn execute(&self) -> Result<()> {
         let format = if self.json {
             OutputFormat::Json

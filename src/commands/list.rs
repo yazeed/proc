@@ -57,6 +57,7 @@ pub struct ListCommand {
 }
 
 impl ListCommand {
+    /// Executes the list command, displaying processes matching the filters.
     pub fn execute(&self) -> Result<()> {
         let format = if self.json {
             OutputFormat::Json

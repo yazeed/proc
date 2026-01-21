@@ -67,6 +67,7 @@ enum Outcome {
 }
 
 impl UnstickCommand {
+    /// Executes the unstick command, attempting to recover hung processes.
     pub fn execute(&self) -> Result<()> {
         let format = if self.json {
             OutputFormat::Json

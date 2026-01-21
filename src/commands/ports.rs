@@ -44,6 +44,7 @@ pub struct PortsCommand {
 }
 
 impl PortsCommand {
+    /// Executes the ports command, listing all listening network ports.
     pub fn execute(&self) -> Result<()> {
         let mut ports = PortInfo::get_all_listening()?;
 

@@ -29,6 +29,7 @@ pub struct OnCommand {
 }
 
 impl OnCommand {
+    /// Executes the on command, performing bidirectional port/process lookup.
     pub fn execute(&self) -> Result<()> {
         match parse_target(&self.target) {
             TargetType::Port(port) => self.show_process_on_port(port),

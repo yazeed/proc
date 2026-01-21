@@ -12,8 +12,11 @@ use crate::error::{ProcError, Result};
 /// Resolved target type
 #[derive(Debug, Clone)]
 pub enum TargetType {
+    /// Target a process by the port it listens on (e.g., `:3000`)
     Port(u16),
+    /// Target a process by its process ID (e.g., `1234`)
     Pid(u32),
+    /// Target processes by name pattern (e.g., `node`)
     Name(String),
 }
 

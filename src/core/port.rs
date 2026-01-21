@@ -12,7 +12,9 @@ use std::process::Command;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Protocol {
+    /// Transmission Control Protocol - reliable, ordered delivery
     Tcp,
+    /// User Datagram Protocol - fast, connectionless delivery
     Udp,
 }
 

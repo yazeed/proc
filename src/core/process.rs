@@ -12,11 +12,17 @@ use sysinfo::{Pid, ProcessStatus as SysProcessStatus, System};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ProcessStatus {
+    /// Process is actively executing on CPU
     Running,
+    /// Process is waiting for an event or resource
     Sleeping,
+    /// Process has been stopped (e.g., by SIGSTOP)
     Stopped,
+    /// Process has terminated but not yet been reaped by parent
     Zombie,
+    /// Process is being terminated
     Dead,
+    /// Process status could not be determined
     Unknown,
 }
 

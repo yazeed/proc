@@ -40,6 +40,7 @@ pub struct KillCommand {
 }
 
 impl KillCommand {
+    /// Executes the kill command, forcefully terminating matched processes.
     pub fn execute(&self) -> Result<()> {
         let format = if self.json {
             OutputFormat::Json

@@ -1,3 +1,4 @@
+#![warn(missing_docs)]
 //! # proc - Semantic Process Management CLI
 //!
 //! `proc` is a semantic command-line tool that makes process management

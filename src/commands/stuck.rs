@@ -37,6 +37,7 @@ pub struct StuckCommand {
 }
 
 impl StuckCommand {
+    /// Executes the stuck command, finding processes in uninterruptible states.
     pub fn execute(&self) -> Result<()> {
         let format = if self.json {
             OutputFormat::Json

@@ -33,6 +33,7 @@ pub struct StopCommand {
 }
 
 impl StopCommand {
+    /// Executes the stop command, gracefully terminating matched processes.
     pub fn execute(&self) -> Result<()> {
         let format = if self.json {
             OutputFormat::Json
