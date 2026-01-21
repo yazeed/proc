@@ -6,7 +6,7 @@
   "architecture": {
     "64bit": {
       "url": "https://github.com/yazeed/proc/releases/download/v1.2.3/proc-windows-x86_64.exe.zip",
-      "hash": "8d4e2b1c064b5a5c154ab73945174cbafdc074b627383832e505c4b61f9c0992"
+      "hash": "903844f7983d0254924677520967edc77007435cfcdefeb3392491a7f1833116"
     }
   },
   "bin": [["proc-windows-x86_64.exe", "proc"]],

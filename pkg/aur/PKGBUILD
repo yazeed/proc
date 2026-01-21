@@ -1,4 +1,4 @@
-# Maintainer: Yazeed <hello@yazeed.me>
+# Maintainer: Yazeed Al Oyoun <me@yazeed.com>
 pkgname=proc
 pkgver=1.2.3
 pkgrel=1
@@ -9,7 +9,7 @@ license=('MIT')
 depends=('gcc-libs')
 makedepends=('rust' 'cargo')
 source=("$pkgname-$pkgver.tar.gz::https://github.com/yazeed/proc/archive/v$pkgver.tar.gz")
-sha256sums=('95314f45cef2e97b234c20b7fec5146c387d8fdec62cbc57a16501a87d25923e')
+sha256sums=('c2d466352ef48d77f3722fc446b2f26b51403097f548f768117ecd6c83d75659')
 
 build() {
   cd "$pkgname-$pkgver"
