@@ -7,6 +7,7 @@
 [![Crates.io](https://img.shields.io/crates/v/proc-cli.svg)](https://crates.io/crates/proc-cli)
 [![Downloads](https://img.shields.io/crates/d/proc-cli.svg)](https://crates.io/crates/proc-cli)
 [![Docker](https://img.shields.io/docker/v/yazeed/proc?label=docker)](https://hub.docker.com/r/yazeed/proc)
+[![Changelog](https://img.shields.io/badge/changelog-CHANGELOG.md-blue)](CHANGELOG.md)
 [![Open Collective](https://img.shields.io/opencollective/all/proc-cli?label=backers)](https://opencollective.com/proc-cli)
 
 Semantic CLI tool for process management. Target by port, process id (PID), name or path.
@@ -20,40 +21,53 @@ proc stop node      # stop them gracefully
 
 ## Install
 
-```bash
-brew install yazeed/proc/proc   # Homebrew
-cargo install proc-cli          # Cargo
-```
+### Package Managers
 
-<details>
-<summary>Other methods</summary>
+| Platform | Method | Command |
+|----------|--------|---------|
+| macOS | Homebrew | `brew install yazeed/proc/proc` |
+| macOS/Linux | cargo | `cargo install proc-cli` |
+| macOS/Linux | cargo-binstall | `cargo binstall proc-cli` |
+| Windows | Scoop | `scoop install proc` ¹ |
+| Arch Linux | AUR | `yay -S proc` ² |
+| NixOS | Nix Flakes | `nix profile install github:yazeed/proc` |
+| Any | npm | `npm install -g proc-cli` ³ |
+| Any | Docker | `docker run --rm -it --pid=host yazeed/proc` |
 
-**Script:**
+<sub>¹ Requires bucket: `scoop bucket add yazeed https://github.com/yazeed/scoop-bucket`</sub><br/>
+<sub>² Package pending AUR submission</sub><br/>
+<sub>³ Package pending npm publish</sub>
+
+### Shell Script
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/yazeed/proc/main/install.sh | bash
 ```
 
-**Manual:**
+<details>
+<summary>Manual download</summary>
+
 ```bash
 # macOS (Apple Silicon)
-curl -fsSL https://github.com/yazeed/proc/releases/latest/download/proc-darwin-aarch64 -o proc
-chmod +x proc && sudo mv proc /usr/local/bin/
+curl -fsSL https://github.com/yazeed/proc/releases/latest/download/proc-darwin-aarch64.tar.gz | tar xz
+sudo mv proc-darwin-aarch64 /usr/local/bin/proc
 
 # macOS (Intel)
-curl -fsSL https://github.com/yazeed/proc/releases/latest/download/proc-darwin-x86_64 -o proc
-chmod +x proc && sudo mv proc /usr/local/bin/
+curl -fsSL https://github.com/yazeed/proc/releases/latest/download/proc-darwin-x86_64.tar.gz | tar xz
+sudo mv proc-darwin-x86_64 /usr/local/bin/proc
 
 # Linux (x86_64)
-curl -fsSL https://github.com/yazeed/proc/releases/latest/download/proc-linux-x86_64 -o proc
-chmod +x proc && sudo mv proc /usr/local/bin/
+curl -fsSL https://github.com/yazeed/proc/releases/latest/download/proc-linux-x86_64.tar.gz | tar xz
+sudo mv proc-linux-x86_64 /usr/local/bin/proc
 
 # Linux (ARM64)
-curl -fsSL https://github.com/yazeed/proc/releases/latest/download/proc-linux-aarch64 -o proc
-chmod +x proc && sudo mv proc /usr/local/bin/
+curl -fsSL https://github.com/yazeed/proc/releases/latest/download/proc-linux-aarch64.tar.gz | tar xz
+sudo mv proc-linux-aarch64 /usr/local/bin/proc
 
 # Windows (PowerShell)
-Invoke-WebRequest -Uri https://github.com/yazeed/proc/releases/latest/download/proc-windows-x86_64.exe -OutFile proc.exe
-Move-Item proc.exe C:\Windows\System32\proc.exe
+Invoke-WebRequest -Uri https://github.com/yazeed/proc/releases/latest/download/proc-windows-x86_64.exe.zip -OutFile proc.zip
+Expand-Archive proc.zip -DestinationPath .
+Move-Item proc-windows-x86_64.exe C:\Windows\System32\proc.exe
 ```
 </details>
 
@@ -173,13 +187,14 @@ $ proc list node --json | jq '.processes[].pid'
 
 ## Platform Support
 
-| Platform | Status |
-|----------|--------|
-| macOS (Apple Silicon) | ✅ |
-| macOS (Intel) | ✅ |
-| Linux (x86_64) | ✅ |
-| Linux (ARM64) | ✅ |
-| Windows (x86_64) | ✅ |
+| Platform | Architecture | Status |
+|----------|--------------|--------|
+| macOS | Apple Silicon (ARM64) | ✅ |
+| macOS | Intel (x86_64) | ✅ |
+| Linux | x86_64 | ✅ |
+| Linux | ARM64 | ✅ |
+| Windows | x86_64 | ✅ |
+| Docker | linux/amd64, linux/arm64 | ✅ |
 
 ## Building
 
