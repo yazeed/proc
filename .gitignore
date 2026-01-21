@@ -21,3 +21,10 @@ Thumbs.db
 # Planning & GTM
 /plan
 /gtm
+# npm package - downloaded binaries
+/pkg/npm/proc
+/pkg/npm/proc.exe
+/pkg/npm/tmp.*
+/pkg/npm/node_modules
+# Nix flake lock file
+flake.lock

@@ -1,0 +1,44 @@
+{
+  "name": "proc-cli",
+  "version": "1.2.3",
+  "description": "Semantic process management CLI",
+  "keywords": [
+    "process",
+    "management",
+    "port",
+    "pid",
+    "cli"
+  ],
+  "author": "Yazeed <hello@yazeed.me>",
+  "license": "MIT",
+  "homepage": "https://github.com/yazeed/proc",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yazeed/proc.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yazeed/proc/issues"
+  },
+  "bin": {
+    "proc": "./run.js"
+  },
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "engines": {
+    "node": ">=14"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "files": [
+    "install.js",
+    "run.js"
+  ]
+}

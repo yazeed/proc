@@ -1,0 +1,23 @@
+# Maintainer: Yazeed <hello@yazeed.me>
+pkgname=proc
+pkgver=1.2.3
+pkgrel=1
+pkgdesc="Semantic process management CLI"
+arch=('x86_64' 'aarch64')
+url="https://github.com/yazeed/proc"
+license=('MIT')
+depends=('gcc-libs')
+makedepends=('rust' 'cargo')
+source=("$pkgname-$pkgver.tar.gz::https://github.com/yazeed/proc/archive/v$pkgver.tar.gz")
+sha256sums=('95314f45cef2e97b234c20b7fec5146c387d8fdec62cbc57a16501a87d25923e')
+
+build() {
+  cd "$pkgname-$pkgver"
+  cargo build --release --locked
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+  install -Dm755 "target/release/proc" "$pkgdir/usr/bin/proc"
+  install -Dm644 "LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

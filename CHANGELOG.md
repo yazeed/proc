@@ -7,7 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-01-21
+
+### Added
+
+- **Tier 3 distribution channels**:
+  - **Scoop** (Windows): `pkg/scoop/proc.json` manifest with auto-update
+  - **AUR** (Arch Linux): `pkg/aur/PKGBUILD` for `yay -S proc`
+  - **npm** wrapper: `pkg/npm/` for `npm install -g proc-cli`
+  - **Nix flake**: `flake.nix` for `nix profile install github:yazeed/proc`
+
 ## [1.2.2] - 2026-01-21
+
 
 ### Added
 
@@ -119,7 +130,8 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 
 ---
 
-[Unreleased]: https://github.com/yazeed/proc/compare/v1.2.2...HEAD
+[Unreleased]: https://github.com/yazeed/proc/compare/v1.2.3...HEAD
+[1.2.3]: https://github.com/yazeed/proc/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/yazeed/proc/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/yazeed/proc/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/yazeed/proc/compare/v1.1.0...v1.2.0
