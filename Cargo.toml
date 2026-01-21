@@ -53,6 +53,32 @@ assert_cmd = "2.0"
 predicates = "3.1"
 cargo-husky = { version = "1", features = ["precommit-hook", "run-cargo-fmt"], default-features = false }
 
+# cargo-binstall support (download pre-built binaries instead of compiling)
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/proc-{ target }{ archive-suffix }"
+pkg-fmt = "tgz"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
+pkg-url = "{ repo }/releases/download/v{ version }/proc-windows-x86_64.exe.zip"
+bin-dir = "proc-windows-x86_64.exe"
+
+[package.metadata.binstall.overrides.x86_64-apple-darwin]
+pkg-url = "{ repo }/releases/download/v{ version }/proc-darwin-x86_64.tar.gz"
+bin-dir = "proc-darwin-x86_64"
+
+[package.metadata.binstall.overrides.aarch64-apple-darwin]
+pkg-url = "{ repo }/releases/download/v{ version }/proc-darwin-aarch64.tar.gz"
+bin-dir = "proc-darwin-aarch64"
+
+[package.metadata.binstall.overrides.x86_64-unknown-linux-gnu]
+pkg-url = "{ repo }/releases/download/v{ version }/proc-linux-x86_64.tar.gz"
+bin-dir = "proc-linux-x86_64"
+
+[package.metadata.binstall.overrides.aarch64-unknown-linux-gnu]
+pkg-url = "{ repo }/releases/download/v{ version }/proc-linux-aarch64.tar.gz"
+bin-dir = "proc-linux-aarch64"
+
 [profile.release]
 opt-level = 3
 lto = true

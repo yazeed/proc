@@ -39,7 +39,7 @@ The following fields are required/recommended for crates.io:
 ```toml
 [package]
 name = "proc-cli"           # Required, unique on crates.io
-version = "0.1.0"           # Required, semver
+version = "1.0.0"           # Required, semver
 edition = "2021"            # Required
 authors = ["..."]           # Recommended
 description = "..."         # Required, <100 chars
@@ -58,8 +58,8 @@ readme = "README.md"        # Recommended
 
 1. Tag the release:
    ```bash
-   git tag -a v0.1.0 -m "Release v0.1.0"
-   git push origin v0.1.0
+   git tag -a v1.0.0 -m "Release v1.0.0"
+   git push origin v1.0.0
    ```
 
 2. The `release.yml` workflow will automatically:
@@ -72,8 +72,8 @@ readme = "README.md"        # Recommended
 If needed, create a release manually:
 
 ```bash
-gh release create v0.1.0 \
-  --title "v0.1.0" \
+gh release create v1.0.0 \
+  --title "v1.0.0" \
   --notes "See CHANGELOG.md for details" \
   target/release/proc
 ```
@@ -89,11 +89,11 @@ gh release create v0.1.0 \
 
 ```bash
 # Build
-docker build -t yazeed/proc:0.1.0 .
-docker tag yazeed/proc:0.1.0 yazeed/proc:latest
+docker build -t yazeed/proc:1.0.0 .
+docker tag yazeed/proc:1.0.0 yazeed/proc:latest
 
 # Push
-docker push yazeed/proc:0.1.0
+docker push yazeed/proc:1.0.0
 docker push yazeed/proc:latest
 ```
 
@@ -235,10 +235,6 @@ Follow [Semantic Versioning](https://semver.org/):
 - **MAJOR** (X.0.0): Breaking changes, incompatible API changes
 - **MINOR** (0.X.0): New features, backwards compatible
 - **PATCH** (0.0.X): Bug fixes, backwards compatible
-
-For pre-1.0 releases:
-- 0.1.0 → 0.2.0: New features
-- 0.1.0 → 0.1.1: Bug fixes
 
 ### Quick Checklist
 
