@@ -44,7 +44,7 @@ jobs:
         run: cargo build --release --target ${{ matrix.target }}
 
       - name: Rename binary (Unix)
-        if: runner.os != 'Windows'
+        if: runner.os \!= 'Windows'
         run: |
           cp target/${{ matrix.target }}/release/proc ${{ matrix.artifact }}
           chmod +x ${{ matrix.artifact }}
@@ -55,7 +55,7 @@ jobs:
         run: Copy-Item "target/${{ matrix.target }}/release/proc.exe" -Destination "${{ matrix.artifact }}"
 
       - name: Create tarball (Unix)
-        if: runner.os != 'Windows'
+        if: runner.os \!= 'Windows'
         run: tar -czvf ${{ matrix.artifact }}.tar.gz ${{ matrix.artifact }}
 
       - name: Create zip (Windows)
@@ -111,6 +111,8 @@ jobs:
     name: Publish to crates.io
     needs: create-release
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # Required for trusted publishing
     steps:
       - uses: actions/checkout@v4
 
@@ -118,11 +120,9 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Publish to crates.io
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
           # Get local version from Cargo.toml
-          VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*//')
           echo "Local version: $VERSION"
 
           # Check if this version already exists on crates.io via API
@@ -132,6 +132,6 @@ jobs:
           if [ "$VERSION" = "$PUBLISHED" ]; then
             echo "Version $VERSION already published to crates.io, skipping"
           else
-            # CARGO_REGISTRY_TOKEN env var is read automatically by cargo
+            # Uses OIDC trusted publishing - no token needed
             cargo publish
           fi
