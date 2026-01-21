@@ -128,16 +128,18 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.crates-io-auth.outputs.token }}
         run: |
-          # Get local version from Cargo.toml
           VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
           echo "Local version: $VERSION"
-
-          # Check if this version already exists on crates.io via API
-          PUBLISHED=$(curl -s "https://crates.io/api/v1/crates/proc-cli" | jq -r ".crate.max_version // empty")
-          echo "Published version: $PUBLISHED"
-
-          if [ "$VERSION" = "$PUBLISHED" ]; then
-            echo "Version $VERSION already published to crates.io, skipping"
+          
+          # Try to publish, handle "already exists" gracefully
+          if cargo publish 2>&1 | tee /tmp/publish.log; then
+            echo "Successfully published $VERSION to crates.io"
           else
-            cargo publish
+            if grep -q "already exists" /tmp/publish.log; then
+              echo "Version $VERSION already published to crates.io, skipping"
+            else
+              echo "Failed to publish"
+              cat /tmp/publish.log
+              exit 1
+            fi
           fi
