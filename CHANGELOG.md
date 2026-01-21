@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-01-21
+
+### Added
+
+- **cargo-binstall support**: `cargo binstall proc-cli` now downloads pre-built binaries
+  - 10x faster than `cargo install` (no compilation required)
+  - Configured for all platforms: macOS, Linux, Windows (Intel and ARM)
+- **Docker Hub automation**: Images automatically published on release
+  - Multi-arch support: linux/amd64, linux/arm64
+  - Available at `docker run yazeed/proc`
+
 ## [1.2.1] - 2026-01-15
 
 ### Changed
@@ -108,7 +119,8 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 
 ---
 
-[Unreleased]: https://github.com/yazeed/proc/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/yazeed/proc/compare/v1.2.2...HEAD
+[1.2.2]: https://github.com/yazeed/proc/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/yazeed/proc/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/yazeed/proc/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/yazeed/proc/compare/v1.0.2...v1.1.0
