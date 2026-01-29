@@ -1,6 +1,6 @@
 [package]
 name = "proc-cli"
-version = "1.3.2"
+version = "1.3.3"
 edition = "2021"
 authors = ["Yazeed Al Oyoun <me@yazeed.com>"]
 description = "A semantic CLI tool for process management"

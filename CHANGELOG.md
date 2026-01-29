@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-01-29
+
+### Changed
+
+- Docs: Complete README rewrite for clarity and completeness
+- Docs: Streamlined package READMEs (npm, Scoop, Homebrew) to link to main docs
+
 ## [1.3.2] - 2026-01-29
 
 ### Added
