@@ -151,3 +151,38 @@ jobs:
               exit 1
             fi
           fi
+
+  publish-npm:
+    name: Publish to npm
+    needs: create-release
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # Required for OIDC trusted publishing
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Publish to npm
+        working-directory: pkg/npm
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "Publishing version: $VERSION"
+          
+          # npm will auto-detect OIDC and use trusted publishing
+          if npm publish --provenance --access public 2>&1 | tee /tmp/npm-publish.log; then
+            echo "Successfully published $VERSION to npm"
+          else
+            if grep -q "already exists" /tmp/npm-publish.log || grep -q "previously published" /tmp/npm-publish.log; then
+              echo "Version $VERSION already published to npm, skipping"
+            else
+              echo "Failed to publish"
+              cat /tmp/npm-publish.log
+              exit 1
+            fi
+          fi
