@@ -19,16 +19,16 @@ The goal is not to accumulate features, but to cover the process and port manage
 - **Practical simplicity**: Every feature solves a real, repeated problem
 - **Easy to remember**: Consistent patterns—know one command, know them all
 
-## Current Release (v1.3.0)
+## Current Release (v1.3.3)
 
-The core commands are complete, with the new Proc Query Language:
+The core commands are complete, with the Proc Query Language and full CI/CD automation:
 
 | Area | Commands | Status |
 |------|----------|--------|
 | Discovery | `on`, `by`, `in`, `ports`, `list`, `info`, `tree`, `stuck` | ✅ |
 | Lifecycle | `kill`, `stop`, `unstick` (all support multi-target) | ✅ |
 
-### v1.3.0 Highlights
+### v1.3.x Highlights
 
 - **Proc Query Language**: Composable process discovery
   - `proc by node --in .` — Filter by name with directory
@@ -36,6 +36,8 @@ The core commands are complete, with the new Proc Query Language:
   - `proc on node --in .` — Bidirectional lookup with filters
 - **Multi-target support**: `proc kill :3000,:8080,node`
 - **PID deduplication**: Overlapping targets resolved safely
+- **Automated publishing**: All package managers update on release
+  - crates.io, npm, Homebrew, Scoop, Docker — all via CI
 
 ## Planned
 
