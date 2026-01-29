@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-01-29
+
+### Added
+
+- **Scoop bucket**: `scoop bucket add proc https://github.com/yazeed/scoop-proc`
+- CI: Automated Scoop bucket updates on release
+
+### Fixed
+
+- CI: npm publishing now uses automation token (NPM_TOKEN secret)
+
 ## [1.3.1] - 2026-01-29
 
 ### Changed

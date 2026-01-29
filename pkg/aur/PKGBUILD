@@ -2,7 +2,7 @@
 pkgname=proc
 pkgver=1.3.0
 pkgrel=1
-pkgdesc="Semantic process management CLI"
+pkgdesc="Semantic CLI tool for process management. Target by port, PID, name or path."
 arch=('x86_64' 'aarch64')
 url="https://github.com/yazeed/proc"
 license=('MIT')

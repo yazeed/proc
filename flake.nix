@@ -1,5 +1,5 @@
 {
-  description = "Semantic process management CLI";
+  description = "Semantic CLI tool for process management. Target by port, PID, name or path.";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -18,7 +18,7 @@
           cargoLock.lockFile = ./Cargo.lock;
           
           meta = with pkgs.lib; {
-            description = "Semantic process management CLI";
+            description = "Semantic CLI tool for process management. Target by port, PID, name or path.";
             homepage = "https://github.com/yazeed/proc";
             license = licenses.mit;
             maintainers = [];

@@ -1,5 +1,5 @@
 class Proc < Formula
-  desc "Semantic process management CLI"
+  desc "Semantic CLI tool for process management"
   homepage "https://github.com/yazeed/proc"
   version "1.2.2"
   license "MIT"

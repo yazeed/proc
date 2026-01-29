@@ -16,7 +16,7 @@ const VERSION_INFO: &str = concat!(
     "\nLicense: MIT"
 );
 
-/// Semantic process management CLI
+/// Semantic CLI tool for process management. Target by port, PID, name or path.
 #[derive(Parser)]
 #[command(name = "proc")]
 #[command(author, version = VERSION_INFO, about, long_about = None)]

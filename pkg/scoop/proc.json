@@ -1,6 +1,6 @@
 {
-  "version": "1.3.0",
-  "description": "Semantic process management CLI",
+  "version": "1.3.2",
+  "description": "Semantic CLI tool for process management. Target by port, PID, name or path.",
   "homepage": "https://github.com/yazeed/proc",
   "license": "MIT",
   "architecture": {
