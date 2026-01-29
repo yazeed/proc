@@ -169,6 +169,8 @@ jobs:
 
       - name: Publish to npm
         working-directory: pkg/npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           VERSION=$(node -p "require('./package.json').version")
           echo "Publishing version: $VERSION"
