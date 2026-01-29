@@ -36,7 +36,7 @@ proc info :3000,1234            # info for port + PID
 | Any | npm/bun | `npm install -g proc-cli` |
 | Any | Docker | `docker run --rm -it --pid=host yazeed/proc` |
 
-<sub>¹ Requires bucket: `scoop bucket add proc https://github.com/yazeed/scoop-proc`</sub><br/>
+<sub>¹ Requires bucket: `scoop bucket add proc https://github.com/yazeed/scoop-bucket-proc`</sub><br/>
 <sub>² AUR package pending submission</sub><br/>
 
 ### Shell Script

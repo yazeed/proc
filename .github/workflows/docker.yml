@@ -54,5 +54,5 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
           repository: ${{ env.IMAGE_NAME }}
-          short-description: "Semantic CLI tool for process management"
+          short-description: "Semantic CLI tool for process management. Target by port, PID, name or path."
           readme-filepath: ./README.md
