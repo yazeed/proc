@@ -20,7 +20,7 @@
     "url": "https://github.com/yazeed/proc/issues"
   },
   "bin": {
-    "proc": "./run.js"
+    "proc": "run.js"
   },
   "scripts": {
     "postinstall": "node install.js"
