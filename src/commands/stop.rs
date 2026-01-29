@@ -1,11 +1,13 @@
 //! Stop command - Graceful process termination (SIGTERM)
 //!
 //! Usage:
-//!   proc stop 1234          # Stop PID 1234
-//!   proc stop :3000         # Stop process on port 3000
-//!   proc stop node          # Stop all node processes
+//!   proc stop 1234              # Stop PID 1234
+//!   proc stop :3000             # Stop process on port 3000
+//!   proc stop node              # Stop all node processes
+//!   proc stop :3000,:8080       # Stop multiple targets
+//!   proc stop :3000,1234,node   # Mixed targets (port + PID + name)
 
-use crate::core::{resolve_target, Process};
+use crate::core::{parse_targets, resolve_targets, Process};
 use crate::error::{ProcError, Result};
 use crate::ui::{OutputFormat, Printer};
 use clap::Args;
@@ -15,7 +17,7 @@ use serde::Serialize;
 /// Stop process(es) gracefully with SIGTERM
 #[derive(Args, Debug)]
 pub struct StopCommand {
-    /// Target: process name, PID, or :port
+    /// Target(s): process name, PID, or :port (comma-separated for multiple)
     #[arg(required = true)]
     target: String,
 
@@ -42,8 +44,14 @@ impl StopCommand {
         };
         let printer = Printer::new(format, false);
 
-        // Parse target
-        let processes = self.find_target_processes()?;
+        // Parse comma-separated targets and resolve to processes
+        let targets = parse_targets(&self.target);
+        let (processes, not_found) = resolve_targets(&targets);
+
+        // Warn about targets that weren't found
+        for target in &not_found {
+            printer.warning(&format!("Target not found: {}", target));
+        }
 
         if processes.is_empty() {
             return Err(ProcError::ProcessNotFound(self.target.clone()));
@@ -113,10 +121,6 @@ impl StopCommand {
         }
 
         Ok(())
-    }
-
-    fn find_target_processes(&self) -> Result<Vec<Process>> {
-        resolve_target(&self.target)
     }
 
     fn wait_for_exit(&self, proc: &Process) -> bool {

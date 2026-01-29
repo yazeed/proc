@@ -1,6 +1,6 @@
 [package]
 name = "proc-cli"
-version = "1.2.3"
+version = "1.3.0"
 edition = "2021"
 authors = ["Yazeed Al Oyoun <me@yazeed.com>"]
 description = "A semantic CLI tool for process management"
@@ -21,7 +21,7 @@ path = "src/main.rs"
 clap = { version = "4.5", features = ["derive", "cargo", "unicode", "env"] }
 
 # Output & Formatting
-colored = "2.1"
+colored = "3.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
@@ -29,11 +29,11 @@ serde_json = "1.0"
 tokio = { version = "1.41", features = ["full"] }
 
 # Cross-platform process/system info
-sysinfo = "0.36"
+sysinfo = "0.38"
 
 # User Interaction
 dialoguer = "0.12"
-indicatif = "0.17"
+indicatif = "0.18"
 
 # Regex (for pattern matching)
 regex = "1.11"
@@ -44,7 +44,7 @@ anyhow = "1.0"
 
 # Unix-specific (for signals)
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.30", features = ["process", "signal"] }
+nix = { version = "0.31", features = ["process", "signal"] }
 libc = "0.2"
 
 [dev-dependencies]

@@ -13,10 +13,10 @@
 Semantic CLI tool for process management. Target by port, process id (PID), name or path.
 
 ```bash
-proc on :3000       # what's on port 3000?
-proc kill :3000     # kill it
-proc list node      # list node processes
-proc stop node      # stop them gracefully
+proc on :3000           # what's on port 3000?
+proc kill :3000,:8080   # kill multiple targets
+proc by node --in .     # node processes in current directory
+proc in . --by python   # python processes in cwd
 ```
 
 ## Install
@@ -75,45 +75,61 @@ Move-Item proc-windows-x86_64.exe C:\Windows\System32\proc.exe
 
 ### Targets
 
-Every command accepts the same target syntax:
+Commands accept the same target syntax, with multi-target support:
 
 | Target | Example | Meaning |
 |--------|---------|---------|
 | `:port` | `:3000` | Process using port 3000 |
 | `PID` | `12345` | Process with ID 12345 |
 | `name` | `node` | All processes named "node" |
+| Multi | `:3000,:8080,node` | Comma-separated targets |
 
 ### Discovery
 
 ```bash
-proc on :3000          # what's using port 3000?
-proc on 12345          # what ports is PID 12345 using?
-proc on node           # what ports are node processes using?
+# Port/process lookup (multi-target)
+proc on :3000              # what's using port 3000?
+proc on :3000,:8080        # what's on multiple ports?
+proc on node               # what ports are node processes using?
 
-proc ports             # all listening ports
-proc list              # all processes
-proc list node         # filter by name
-proc list --in .       # processes started in current directory
-proc list --path /usr  # processes from /usr/*
-proc list --min-cpu 10 # processes using >10% CPU
+# Filter by name
+proc by node               # processes named 'node'
+proc by node --in .        # node processes in current directory
+proc by node --min-cpu 5   # node processes using >5% CPU
 
-proc info :3000        # detailed info for process on port 3000
-proc tree              # process hierarchy
-proc tree --min-cpu 5  # tree filtered by CPU
+# Filter by directory
+proc in .                  # processes in current directory
+proc in ~/projects         # processes in ~/projects
+proc in . --by node        # node processes in cwd
 
-proc stuck             # find hung processes
+# List all
+proc list                  # all processes
+proc list --min-cpu 10     # processes using >10% CPU
+
+# Info (multi-target)
+proc info :3000            # detailed info for process on port
+proc info :3000,:8080,node # info for multiple targets
+
+proc ports                 # all listening ports
+proc tree --min-cpu 5      # process tree filtered by CPU
+proc stuck                 # find hung processes
 ```
 
 ### Lifecycle
 
 ```bash
-proc kill :3000        # SIGKILL process on port 3000
-proc kill node         # SIGKILL all node processes
-proc stop :3000        # SIGTERM, then SIGKILL after timeout
-proc stop node         # graceful stop for all node processes
+# Kill (multi-target)
+proc kill :3000            # SIGKILL process on port 3000
+proc kill :3000,:8080,node # kill multiple targets at once
+proc kill :3000 -y         # skip confirmation
 
-proc unstick           # attempt to recover stuck processes
-proc unstick --force   # terminate if recovery fails
+# Stop (multi-target, graceful)
+proc stop :3000            # SIGTERM, then SIGKILL after timeout
+proc stop :3000,:8080      # stop multiple targets gracefully
+proc stop node -y          # skip confirmation
+
+proc unstick               # attempt to recover stuck processes
+proc unstick --force       # terminate if recovery fails
 ```
 
 ## Reference
@@ -123,12 +139,14 @@ proc unstick --force   # terminate if recovery fails
 | Command | Alias | Description |
 |---------|-------|-------------|
 | `on` | `:` | Bidirectional port/process lookup |
-| `ports` | `p` | List listening ports |
-| `list` | `l`, `ps` | List processes |
+| `by` | `b` | Filter processes by name |
+| `in` | | Filter processes by directory |
+| `list` | `l`, `ps` | List all processes |
 | `info` | `i` | Detailed process info |
-| `tree` | `t` | Process hierarchy |
+| `ports` | `p` | List listening ports |
 | `kill` | `k` | Force kill (SIGKILL) |
 | `stop` | `s` | Graceful stop (SIGTERM) |
+| `tree` | `t` | Process hierarchy |
 | `stuck` | `x` | Find hung processes |
 | `unstick` | `u` | Recover stuck processes |
 
@@ -144,13 +162,14 @@ proc unstick --force   # terminate if recovery fails
 
 ### Filters
 
-| Option | `list` | `tree` | Description |
-|--------|:----:|:------:|-------------|
-| `--in <path>` | ✓ | | Filter by working directory |
-| `--path <path>` | ✓ | | Filter by executable path |
-| `--min-cpu <n>` | ✓ | ✓ | Processes using >n% CPU |
-| `--min-mem <n>` | ✓ | ✓ | Processes using >n MB memory |
-| `--status <s>` | ✓ | ✓ | running, sleeping, stopped, zombie |
+| Option | `by` | `in` | `on` | `list` | `tree` | Description |
+|--------|:----:|:----:|:----:|:------:|:------:|-------------|
+| `--in <path>` | ✓ | | ✓ | ✓ | | Filter by working directory |
+| `--by <name>` | | ✓ | | | | Filter by process name |
+| `--path <path>` | ✓ | ✓ | | ✓ | | Filter by executable path |
+| `--min-cpu <n>` | ✓ | ✓ | | ✓ | ✓ | Processes using >n% CPU |
+| `--min-mem <n>` | ✓ | ✓ | | ✓ | ✓ | Processes using >n MB memory |
+| `--status <s>` | ✓ | ✓ | | ✓ | ✓ | running, sleeping, stopped, zombie |
 
 ## Examples
 

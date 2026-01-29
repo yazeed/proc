@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-01-28
+
+### Added
+
+- **Proc Query Language**: Composable process discovery primitives
+  - **`proc by <name>`** — Filter processes by name with all filters
+    - Example: `proc by node --in . --min-cpu 5`
+  - **`proc in <path>`** — Filter processes by working directory
+    - Example: `proc in ~/projects --by python`
+    - Supports `.`, relative paths, absolute paths, and `~` expansion
+
+- **Multi-target support** for kill, stop, info, and on commands
+  - Comma-separated targets: `proc kill :3000,:8080,node`
+  - Mixed target types: ports (`:3000`), PIDs (`1234`), names (`node`)
+  - PID deduplication prevents double-kills on overlapping targets
+  - Single confirmation prompt shows all targets before action
+  - Not-found targets show warnings but don't block found targets
+
+- **Combinable filters** across commands
+  - `proc on node --in .` — Node processes on ports, filtered by directory
+  - `proc by node --in .` — Node processes in current directory
+  - `proc in . --by node` — Same result, different entry point
+
+- **Comprehensive help examples** covering all command variants and scenarios
+
+### Changed
+
+- Updated dependencies: colored 3.1, sysinfo 0.38, indicatif 0.18, nix 0.31
+
+- `proc on` now supports `--in` filter for directory-based filtering
+- `proc info` now supports comma-separated targets
+- Help text reorganized into semantic sections (Discovery, Info, Kill, Stop, etc.)
+
 ## [1.2.3] - 2026-01-21
 
 ### Added
@@ -33,6 +66,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Updated dependencies: colored 3.1, sysinfo 0.38, indicatif 0.18, nix 0.31
+
 - Enhanced `--version` output to include repository URL and license
 
 ## [1.2.0] - 2026-01-15
@@ -46,12 +81,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Updated dependencies: colored 3.1, sysinfo 0.38, indicatif 0.18, nix 0.31
+
 - Reorganized `proc list` columns: PID, PATH, NAME, ARGS, CPU%, MEM, STATUS
 - Improved process identification for interpreted languages (Python, Node, Ruby, etc.)
 
 ## [1.1.0] - 2026-01-14
 
 ### Changed
+
+- Updated dependencies: colored 3.1, sysinfo 0.38, indicatif 0.18, nix 0.31
 
 - **Breaking:** Renamed `ps` command to `list` for better semantics
   - `ps` remains as an alias for backwards compatibility
@@ -60,6 +99,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.2] - 2026-01-13
 
 ### Changed
+
+- Updated dependencies: colored 3.1, sysinfo 0.38, indicatif 0.18, nix 0.31
 
 - Streamlined README with cleaner structure and code-first approach
 - Added Targets section explaining unified `:port`, `PID`, `name` syntax
@@ -130,7 +171,8 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 
 ---
 
-[Unreleased]: https://github.com/yazeed/proc/compare/v1.2.3...HEAD
+[Unreleased]: https://github.com/yazeed/proc/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/yazeed/proc/compare/v1.2.3...v1.3.0
 [1.2.3]: https://github.com/yazeed/proc/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/yazeed/proc/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/yazeed/proc/compare/v1.2.0...v1.2.1

@@ -1,6 +1,6 @@
 # Maintainer: Yazeed Al Oyoun <me@yazeed.com>
 pkgname=proc
-pkgver=1.2.3
+pkgver=1.3.0
 pkgrel=1
 pkgdesc="Semantic process management CLI"
 arch=('x86_64' 'aarch64')

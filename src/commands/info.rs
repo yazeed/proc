@@ -1,11 +1,13 @@
 //! Info command - Get detailed process information
 //!
 //! Usage:
-//!   proc info 1234       # Info for PID
-//!   proc info :3000      # Info for process on port 3000
-//!   proc info node       # Info for processes named node
+//!   proc info 1234              # Info for PID
+//!   proc info :3000             # Info for process on port 3000
+//!   proc info node              # Info for processes named node
+//!   proc info :3000,:8080       # Info for multiple targets
+//!   proc info :3000,1234,node   # Mixed targets (port + PID + name)
 
-use crate::core::{resolve_target, Process, ProcessStatus};
+use crate::core::{parse_targets, resolve_target, Process, ProcessStatus};
 use crate::error::Result;
 use crate::ui::{OutputFormat, Printer};
 use clap::Args;
@@ -15,7 +17,7 @@ use serde::Serialize;
 /// Show detailed process information
 #[derive(Args, Debug)]
 pub struct InfoCommand {
-    /// Target(s): PID, :port, or name
+    /// Target(s): PID, :port, or name (comma-separated for multiple)
     #[arg(required = true)]
     targets: Vec<String>,
 
@@ -38,16 +40,25 @@ impl InfoCommand {
         };
         let printer = Printer::new(format, self.verbose);
 
+        // Flatten targets - support both space-separated and comma-separated
+        let all_targets: Vec<String> = self.targets.iter().flat_map(|t| parse_targets(t)).collect();
+
         let mut found = Vec::new();
         let mut not_found = Vec::new();
+        let mut seen_pids = std::collections::HashSet::new();
 
-        for target in &self.targets {
+        for target in &all_targets {
             match resolve_target(target) {
                 Ok(processes) => {
                     if processes.is_empty() {
                         not_found.push(target.clone());
                     } else {
-                        found.extend(processes);
+                        for proc in processes {
+                            // Deduplicate by PID
+                            if seen_pids.insert(proc.pid) {
+                                found.push(proc);
+                            }
+                        }
                     }
                 }
                 Err(_) => not_found.push(target.clone()),

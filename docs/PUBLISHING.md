@@ -250,3 +250,166 @@ Follow [Semantic Versioning](https://semver.org/):
 - [ ] CI builds completed successfully
 - [ ] Published to crates.io
 - [ ] Homebrew tap SHA256 hashes updated
+
+## Scoop (Windows)
+
+Scoop uses a bucket (repository of manifests) to distribute packages.
+
+### Setup (One-time)
+
+1. Create a scoop bucket repo (e.g., `github.com/yazeed/scoop-bucket`)
+2. Add `proc.json` manifest to the bucket
+3. Users add your bucket: `scoop bucket add yazeed https://github.com/yazeed/scoop-bucket`
+
+### Publishing a New Version
+
+1. **Update the manifest** (`pkg/scoop/proc.json`):
+   ```bash
+   # Update version
+   sed -i 's/"version": ".*"/"version": "X.Y.Z"/' pkg/scoop/proc.json
+   
+   # Download new release and compute hash
+   curl -fsSL https://github.com/yazeed/proc/releases/download/vX.Y.Z/proc-windows-x86_64.exe.zip -o /tmp/proc.zip
+   shasum -a 256 /tmp/proc.zip
+   
+   # Update hash in manifest
+   # Update the URL version in the manifest
+   ```
+
+2. **Copy to bucket repo** and push:
+   ```bash
+   cp pkg/scoop/proc.json /path/to/scoop-bucket/proc.json
+   cd /path/to/scoop-bucket
+   git add proc.json && git commit -m "proc X.Y.Z" && git push
+   ```
+
+3. **Auto-update**: The manifest has `"checkver": "github"` and `"autoupdate"` configured, so Scoop can auto-update the URL (but hash must be updated manually or via CI).
+
+### User Installation
+
+```powershell
+scoop bucket add yazeed https://github.com/yazeed/scoop-bucket
+scoop install proc
+```
+
+## AUR (Arch Linux)
+
+The AUR (Arch User Repository) hosts community-maintained packages.
+
+### Setup (One-time)
+
+1. Create an AUR account at https://aur.archlinux.org
+2. Set up SSH keys for AUR: https://wiki.archlinux.org/title/AUR_submission_guidelines
+3. Clone your package base:
+   ```bash
+   git clone ssh://aur@aur.archlinux.org/proc.git
+   ```
+
+### Publishing a New Version
+
+1. **Update PKGBUILD** (`pkg/aur/PKGBUILD`):
+   ```bash
+   # Update pkgver
+   sed -i 's/pkgver=.*/pkgver=X.Y.Z/' pkg/aur/PKGBUILD
+   
+   # Download source and compute SHA256
+   curl -fsSL https://github.com/yazeed/proc/archive/vX.Y.Z.tar.gz -o /tmp/proc.tar.gz
+   shasum -a 256 /tmp/proc.tar.gz
+   
+   # Update sha256sums in PKGBUILD
+   ```
+
+2. **Generate .SRCINFO**:
+   ```bash
+   cd pkg/aur
+   makepkg --printsrcinfo > .SRCINFO
+   ```
+
+3. **Push to AUR**:
+   ```bash
+   cd /path/to/aur-proc-clone
+   cp /path/to/proc/pkg/aur/PKGBUILD .
+   cp /path/to/proc/pkg/aur/.SRCINFO .
+   git add PKGBUILD .SRCINFO
+   git commit -m "Update to X.Y.Z"
+   git push
+   ```
+
+### User Installation
+
+```bash
+yay -S proc
+# or
+paru -S proc
+```
+
+## npm (Node.js wrapper)
+
+The npm package is a wrapper that downloads the native binary on install.
+
+### Setup (One-time)
+
+1. Create npm account: https://www.npmjs.com/signup
+2. Login: `npm login`
+3. Note: Package name is `proc-cli` (not `proc` which is taken)
+
+### Publishing a New Version
+
+1. **Update package.json** (`pkg/npm/package.json`):
+   ```bash
+   cd pkg/npm
+   npm version X.Y.Z --no-git-tag-version
+   ```
+
+2. **Test locally**:
+   ```bash
+   cd pkg/npm
+   npm pack  # Creates proc-cli-X.Y.Z.tgz
+   npm install -g proc-cli-X.Y.Z.tgz
+   proc --version
+   ```
+
+3. **Publish**:
+   ```bash
+   cd pkg/npm
+   npm publish
+   ```
+
+### User Installation
+
+```bash
+npm install -g proc-cli
+```
+
+## Nix Flakes
+
+Nix flakes auto-publish from the GitHub repo. No manual steps needed.
+
+### How It Works
+
+The `flake.nix` at the repo root defines the package. Users install directly from GitHub:
+
+```bash
+nix profile install github:yazeed/proc
+```
+
+### Updating
+
+When you push a new tag, users can update with:
+```bash
+nix profile upgrade proc
+```
+
+Or pin to a specific version:
+```bash
+nix profile install github:yazeed/proc/v1.3.0
+```
+
+## Tier 3 Package Release Checklist
+
+After a new release, update these packages:
+
+- [ ] **Scoop**: Update `pkg/scoop/proc.json` version and hash, push to bucket
+- [ ] **AUR**: Update `pkg/aur/PKGBUILD` version and hash, generate .SRCINFO, push to AUR
+- [ ] **npm**: Update `pkg/npm/package.json` version, run `npm publish`
+- [ ] **Nix**: No action needed (auto-updates from GitHub)

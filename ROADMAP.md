@@ -19,18 +19,27 @@ The goal is not to accumulate features, but to cover the process and port manage
 - **Practical simplicity**: Every feature solves a real, repeated problem
 - **Easy to remember**: Consistent patterns—know one command, know them all
 
-## Current Release (v1.0.0)
+## Current Release (v1.3.0)
 
-The core commands are complete:
+The core commands are complete, with the new Proc Query Language:
 
 | Area | Commands | Status |
 |------|----------|--------|
-| Discovery | `on`, `ports`, `ps`, `info`, `tree`, `stuck` | ✅ |
-| Lifecycle | `kill`, `stop`, `unstick` | ✅ |
+| Discovery | `on`, `by`, `in`, `ports`, `list`, `info`, `tree`, `stuck` | ✅ |
+| Lifecycle | `kill`, `stop`, `unstick` (all support multi-target) | ✅ |
+
+### v1.3.0 Highlights
+
+- **Proc Query Language**: Composable process discovery
+  - `proc by node --in .` — Filter by name with directory
+  - `proc in . --by node` — Filter by directory with name
+  - `proc on node --in .` — Bidirectional lookup with filters
+- **Multi-target support**: `proc kill :3000,:8080,node`
+- **PID deduplication**: Overlapping targets resolved safely
 
 ## Planned
 
-### v1.1 — Polish
+### v1.4 — Polish
 
 Shell completions and documentation to make proc feel native.
 
@@ -38,7 +47,7 @@ Shell completions and documentation to make proc feel native.
 - [ ] Man pages
 - [ ] `--dry-run` for all destructive commands
 
-### v1.2 — Watch
+### v1.5 — Watch
 
 Real-time monitoring for when you need to observe.
 

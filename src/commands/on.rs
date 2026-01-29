@@ -1,23 +1,30 @@
 //! `proc on` - Port/process lookup
 //!
 //! Usage:
-//!   proc on :3000      # What process is on port 3000?
-//!   proc on 1234       # What ports is PID 1234 listening on?
-//!   proc on node       # What ports are node processes listening on?
+//!   proc on :3000              # What process is on port 3000?
+//!   proc on :3000,:8080        # What's on multiple ports?
+//!   proc on 1234               # What ports is PID 1234 listening on?
+//!   proc on node               # What ports are node processes listening on?
+//!   proc on node --in .        # Node processes in cwd and their ports
 
 use crate::core::{
-    find_ports_for_pid, parse_target, resolve_target, PortInfo, Process, TargetType,
+    find_ports_for_pid, parse_target, parse_targets, resolve_target, PortInfo, Process, TargetType,
 };
 use crate::error::{ProcError, Result};
 use clap::Args;
 use colored::*;
 use serde::Serialize;
+use std::path::PathBuf;
 
 /// Show what's on a port, or what ports a process is on
 #[derive(Args, Debug)]
 pub struct OnCommand {
-    /// Target: :port, PID, or process name
+    /// Target(s): :port, PID, or process name (comma-separated for multiple)
     pub target: String,
+
+    /// Filter by directory (for name targets)
+    #[arg(long = "in", short = 'i')]
+    pub in_dir: Option<String>,
 
     /// Output as JSON
     #[arg(long, short = 'j')]
@@ -31,10 +38,81 @@ pub struct OnCommand {
 impl OnCommand {
     /// Executes the on command, performing bidirectional port/process lookup.
     pub fn execute(&self) -> Result<()> {
-        match parse_target(&self.target) {
-            TargetType::Port(port) => self.show_process_on_port(port),
-            TargetType::Pid(pid) => self.show_ports_for_pid(pid),
-            TargetType::Name(name) => self.show_ports_for_name(&name),
+        let targets = parse_targets(&self.target);
+
+        // For single target, use original behavior
+        if targets.len() == 1 {
+            return match parse_target(&targets[0]) {
+                TargetType::Port(port) => self.show_process_on_port(port),
+                TargetType::Pid(pid) => self.show_ports_for_pid(pid),
+                TargetType::Name(name) => self.show_ports_for_name(&name),
+            };
+        }
+
+        // Multi-target handling
+        let mut not_found = Vec::new();
+
+        for target in &targets {
+            match parse_target(target) {
+                TargetType::Port(port) => {
+                    if let Err(e) = self.show_process_on_port(port) {
+                        if !self.json {
+                            println!("{} Port {}: {}", "⚠".yellow(), port, e);
+                        }
+                        not_found.push(target.clone());
+                    }
+                }
+                TargetType::Pid(pid) => {
+                    if let Err(e) = self.show_ports_for_pid(pid) {
+                        if !self.json {
+                            println!("{} PID {}: {}", "⚠".yellow(), pid, e);
+                        }
+                        not_found.push(target.clone());
+                    }
+                }
+                TargetType::Name(ref name) => {
+                    if let Err(e) = self.show_ports_for_name(name) {
+                        if !self.json {
+                            println!("{} '{}': {}", "⚠".yellow(), name, e);
+                        }
+                        not_found.push(target.clone());
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Resolve --in filter path
+    fn resolve_in_dir(&self) -> Option<PathBuf> {
+        self.in_dir.as_ref().map(|p| {
+            if p == "." {
+                std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+            } else {
+                let path = PathBuf::from(p);
+                if path.is_relative() {
+                    std::env::current_dir()
+                        .unwrap_or_else(|_| PathBuf::from("."))
+                        .join(path)
+                } else {
+                    path
+                }
+            }
+        })
+    }
+
+    /// Check if process matches --in filter
+    fn matches_in_filter(&self, proc: &Process) -> bool {
+        if let Some(ref dir_path) = self.resolve_in_dir() {
+            if let Some(ref proc_cwd) = proc.cwd {
+                let proc_path = PathBuf::from(proc_cwd);
+                proc_path.starts_with(dir_path)
+            } else {
+                false
+            }
+        } else {
+            true
         }
     }
 
@@ -46,6 +124,16 @@ impl OnCommand {
         };
 
         let process = Process::find_by_pid(port_info.pid)?;
+
+        // Apply --in filter if present
+        if let Some(ref proc) = process {
+            if !self.matches_in_filter(proc) {
+                return Err(ProcError::ProcessNotFound(format!(
+                    "port {} (process not in specified directory)",
+                    port
+                )));
+            }
+        }
 
         if self.json {
             let output = PortLookupOutput {
@@ -71,6 +159,14 @@ impl OnCommand {
         let process = Process::find_by_pid(pid)?
             .ok_or_else(|| ProcError::ProcessNotFound(pid.to_string()))?;
 
+        // Apply --in filter if present
+        if !self.matches_in_filter(&process) {
+            return Err(ProcError::ProcessNotFound(format!(
+                "PID {} (not in specified directory)",
+                pid
+            )));
+        }
+
         let ports = find_ports_for_pid(pid)?;
 
         if self.json {
@@ -94,10 +190,21 @@ impl OnCommand {
 
     /// Show what ports processes with a given name are listening on
     fn show_ports_for_name(&self, name: &str) -> Result<()> {
-        let processes = resolve_target(name)?;
+        let mut processes = resolve_target(name)?;
 
         if processes.is_empty() {
             return Err(ProcError::ProcessNotFound(name.to_string()));
+        }
+
+        // Apply --in filter if present
+        if self.in_dir.is_some() {
+            processes.retain(|p| self.matches_in_filter(p));
+            if processes.is_empty() {
+                return Err(ProcError::ProcessNotFound(format!(
+                    "'{}' (no matches in specified directory)",
+                    name
+                )));
+            }
         }
 
         let mut all_results: Vec<(Process, Vec<PortInfo>)> = Vec::new();

@@ -1,12 +1,14 @@
 //! `proc kill` - Kill processes
 //!
 //! Examples:
-//!   proc kill node          # Kill all Node.js processes
-//!   proc kill :3000         # Kill what's on port 3000
-//!   proc kill 1234          # Kill specific PID
-//!   proc kill node --yes    # Skip confirmation
+//!   proc kill node              # Kill all Node.js processes
+//!   proc kill :3000             # Kill what's on port 3000
+//!   proc kill 1234              # Kill specific PID
+//!   proc kill :3000,:8080       # Kill multiple targets
+//!   proc kill :3000,1234,node   # Mixed targets (port + PID + name)
+//!   proc kill node --yes        # Skip confirmation
 
-use crate::core::{resolve_target, Process};
+use crate::core::{parse_targets, resolve_targets, Process};
 use crate::error::{ProcError, Result};
 use crate::ui::{OutputFormat, Printer};
 use clap::Args;
@@ -15,7 +17,7 @@ use dialoguer::Confirm;
 /// Kill process(es)
 #[derive(Args, Debug)]
 pub struct KillCommand {
-    /// Target: process name, PID, or :port
+    /// Target(s): process name, PID, or :port (comma-separated for multiple)
     pub target: String,
 
     /// Skip confirmation prompt
@@ -49,8 +51,14 @@ impl KillCommand {
         };
         let printer = Printer::new(format, self.verbose);
 
-        // Determine what to kill based on target format
-        let processes = self.resolve_target_processes()?;
+        // Parse comma-separated targets and resolve to processes
+        let targets = parse_targets(&self.target);
+        let (processes, not_found) = resolve_targets(&targets);
+
+        // Warn about targets that weren't found
+        for target in &not_found {
+            printer.warning(&format!("Target not found: {}", target));
+        }
 
         if processes.is_empty() {
             return Err(ProcError::ProcessNotFound(self.target.clone()));
@@ -114,11 +122,6 @@ impl KillCommand {
                 failed.len()
             )))
         }
-    }
-
-    /// Resolve the target to a list of processes
-    fn resolve_target_processes(&self) -> Result<Vec<Process>> {
-        resolve_target(&self.target)
     }
 
     fn print_confirmation_prompt(&self, processes: &[Process]) {
