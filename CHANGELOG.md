@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-01-29
+
+### Changed
+
+- CI: npm trusted publishing via OIDC (no long-lived tokens)
+- CI: Automated Homebrew tap updates on release
+- CI: Fixed ARM64 Linux cross-compilation
+- CI: Updated Dockerfile to `rust:latest` for edition2024 support
+- Docs: Improved README hero examples showcasing multi-target support
+- Docs: Added npm badge to README
+
+### Fixed
+
+- npm package now includes README for better discoverability
+
 ## [1.3.0] - 2026-01-28
 
 ### Added

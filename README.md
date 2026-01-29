@@ -6,6 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Crates.io](https://img.shields.io/crates/v/proc-cli.svg)](https://crates.io/crates/proc-cli)
 [![Docker](https://img.shields.io/docker/v/yazeed/proc?label=docker)](https://hub.docker.com/r/yazeed/proc)
+[![npm](https://img.shields.io/npm/v/proc-cli)](https://www.npmjs.com/package/proc-cli)
 [![Changelog](https://img.shields.io/crates/v/proc-cli?label=changelog&color=blue)](CHANGELOG.md)
 [![Downloads](https://img.shields.io/crates/d/proc-cli.svg)](https://crates.io/crates/proc-cli)
 [![Open Collective](https://img.shields.io/opencollective/all/proc-cli?label=backers)](https://opencollective.com/proc-cli)
@@ -13,10 +14,11 @@
 Semantic CLI tool for process management. Target by port, process id (PID), name or path.
 
 ```bash
-proc on :3000           # what's on port 3000?
-proc kill :3000,:8080   # kill multiple targets
-proc by node --in .     # node processes in current directory
-proc in . --by python   # python processes in cwd
+proc on :3000                   # what's on port 3000?
+proc on :3000,:8080,node        # multi-target: ports + name
+proc by node --in . --min-cpu 5 # node in cwd using >5% CPU
+proc kill :3000,:8080,node -y   # kill mixed targets at once
+proc info :3000,1234            # info for port + PID
 ```
 
 ## Install
@@ -31,12 +33,11 @@ proc in . --by python   # python processes in cwd
 | Windows | Scoop | `scoop install proc` ¹ |
 | Arch Linux | AUR | `yay -S proc` ² |
 | NixOS | Nix Flakes | `nix profile install github:yazeed/proc` |
-| Any | npm | `npm install -g proc-cli` ³ |
+| Any | npm/bun | `npm install -g proc-cli` |
 | Any | Docker | `docker run --rm -it --pid=host yazeed/proc` |
 
 <sub>¹ Requires bucket: `scoop bucket add yazeed https://github.com/yazeed/scoop-bucket`</sub><br/>
 <sub>² Package pending AUR submission</sub><br/>
-<sub>³ Package pending npm publish</sub>
 
 ### Shell Script
 
@@ -88,49 +89,9 @@ Commands accept the same target syntax, with multi-target support:
 
 ```bash
 # Port/process lookup (multi-target)
-proc on :3000              # what's using port 3000?
-proc on :3000,:8080        # what's on multiple ports?
-proc on node               # what ports are node processes using?
-
-# Filter by name
-proc by node               # processes named 'node'
-proc by node --in .        # node processes in current directory
-proc by node --min-cpu 5   # node processes using >5% CPU
-
-# Filter by directory
-proc in .                  # processes in current directory
-proc in ~/projects         # processes in ~/projects
-proc in . --by node        # node processes in cwd
-
-# List all
-proc list                  # all processes
-proc list --min-cpu 10     # processes using >10% CPU
-
-# Info (multi-target)
-proc info :3000            # detailed info for process on port
-proc info :3000,:8080,node # info for multiple targets
-
-proc ports                 # all listening ports
-proc tree --min-cpu 5      # process tree filtered by CPU
-proc stuck                 # find hung processes
-```
 
 ### Lifecycle
 
-```bash
-# Kill (multi-target)
-proc kill :3000            # SIGKILL process on port 3000
-proc kill :3000,:8080,node # kill multiple targets at once
-proc kill :3000 -y         # skip confirmation
-
-# Stop (multi-target, graceful)
-proc stop :3000            # SIGTERM, then SIGKILL after timeout
-proc stop :3000,:8080      # stop multiple targets gracefully
-proc stop node -y          # skip confirmation
-
-proc unstick               # attempt to recover stuck processes
-proc unstick --force       # terminate if recovery fails
-```
 
 ## Reference
 
@@ -173,36 +134,6 @@ proc unstick --force       # terminate if recovery fails
 
 ## Examples
 
-```bash
-$ proc on :3000
-✓ Port 3000 is used by:
-  Process: node (PID 12345)
-  Path: /usr/local/bin/node
-  Listening: TCP on 0.0.0.0
-  Resources: 2.3% CPU, 156.4 MB
-  Uptime: 2h 34m
-
-$ proc list --in /my/project
-✓ Found 3 processes
-
-PID      NAME        CPU%   MEM (MB)   STATUS
-──────────────────────────────────────────────
-12345    node        2.3    156.4      Running
-12346    npm         0.1    45.2       Sleeping
-
-$ proc tree --min-cpu 5
-✓ 2 processes matching filters:
-├── ● node [12345] 12.3% 256.4MB
-└── ● python [12400] 8.1% 128.2MB
-
-$ proc kill :3000
-Kill node [PID 12345]? [y/N]: y
-✓ Killed 1 process
-
-$ proc list node --json | jq '.processes[].pid'
-12345
-12346
-```
 
 ## Platform Support
 
@@ -215,14 +146,8 @@ $ proc list node --json | jq '.processes[].pid'
 | Windows | x86_64 | ✅ |
 | Docker | linux/amd64, linux/arm64 | ✅ |
 
-## Building
+## Building from Source
 
-```bash
-git clone https://github.com/yazeed/proc
-cd proc
-cargo build --release
-./target/release/proc --help
-```
 
 ## Contributing
 

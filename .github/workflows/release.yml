@@ -120,7 +120,7 @@ jobs:
     needs: create-release
     runs-on: ubuntu-latest
     permissions:
-      id-token: write  # Required for OIDC token request
+      id-token: write
       contents: read
     steps:
       - uses: actions/checkout@v4
@@ -138,8 +138,7 @@ jobs:
         run: |
           VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
           echo "Local version: $VERSION"
-          
-          # Try to publish, handle "already exists" gracefully
+
           if cargo publish 2>&1 | tee /tmp/publish.log; then
             echo "Successfully published $VERSION to crates.io"
           else
@@ -157,7 +156,7 @@ jobs:
     needs: create-release
     runs-on: ubuntu-latest
     permissions:
-      id-token: write  # Required for OIDC trusted publishing
+      id-token: write
       contents: read
     steps:
       - uses: actions/checkout@v4
@@ -173,8 +172,7 @@ jobs:
         run: |
           VERSION=$(node -p "require('./package.json').version")
           echo "Publishing version: $VERSION"
-          
-          # npm will auto-detect OIDC and use trusted publishing
+
           if npm publish --provenance --access public 2>&1 | tee /tmp/npm-publish.log; then
             echo "Successfully published $VERSION to npm"
           else
@@ -186,3 +184,80 @@ jobs:
               exit 1
             fi
           fi
+
+  update-homebrew:
+    name: Update Homebrew Tap
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout homebrew-proc tap
+        uses: actions/checkout@v4
+        with:
+          repository: yazeed/homebrew-proc
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+      - name: Download checksums
+        run: |
+          gh release download ${{ github.ref_name }} --repo yazeed/proc --pattern "checksums.txt" --output checksums.txt
+          cat checksums.txt
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Update formula
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+
+          DARWIN_ARM64=$(grep "proc-darwin-aarch64.tar.gz" checksums.txt | cut -d' ' -f1)
+          DARWIN_X86=$(grep "proc-darwin-x86_64.tar.gz" checksums.txt | cut -d' ' -f1)
+          LINUX_ARM64=$(grep "proc-linux-aarch64.tar.gz" checksums.txt | cut -d' ' -f1)
+          LINUX_X86=$(grep "proc-linux-x86_64.tar.gz" checksums.txt | cut -d' ' -f1)
+
+          cat > Formula/proc.rb << EOF
+          class Proc < Formula
+            desc "Semantic process management CLI"
+            homepage "https://github.com/yazeed/proc"
+            version "${VERSION}"
+            license "MIT"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/yazeed/proc/releases/download/v#{version}/proc-darwin-aarch64.tar.gz"
+                sha256 "${DARWIN_ARM64}"
+              else
+                url "https://github.com/yazeed/proc/releases/download/v#{version}/proc-darwin-x86_64.tar.gz"
+                sha256 "${DARWIN_X86}"
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.arm?
+                url "https://github.com/yazeed/proc/releases/download/v#{version}/proc-linux-aarch64.tar.gz"
+                sha256 "${LINUX_ARM64}"
+              else
+                url "https://github.com/yazeed/proc/releases/download/v#{version}/proc-linux-x86_64.tar.gz"
+                sha256 "${LINUX_X86}"
+              end
+            end
+
+            def install
+              binary = Dir["proc-*"].first
+              bin.install binary => "proc"
+            end
+
+            test do
+              assert_match "proc", shell_output("#{bin}/proc --version")
+            end
+          end
+          EOF
+
+          # Remove leading spaces from heredoc
+          sed -i 's/^          //' Formula/proc.rb
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/proc.rb
+          git diff --staged --quiet || git commit -m "proc ${{ github.ref_name }}"
+          git push
