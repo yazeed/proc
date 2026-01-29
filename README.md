@@ -23,30 +23,25 @@ proc info :3000,1234            # info for port + PID
 
 ## Install
 
-### Package Managers
+| Platform | Command |
+|----------|---------|
+| macOS | `brew install yazeed/proc/proc` |
+| Windows | `scoop bucket add proc https://github.com/yazeed/scoop-bucket-proc && scoop install proc` |
+| Rust | `cargo install proc-cli` |
+| npm/bun | `npm install -g proc-cli` |
+| Nix | `nix profile install github:yazeed/proc` |
+| Docker | `docker run --rm -it --pid=host yazeed/proc` |
+| Shell | `curl -fsSL https://raw.githubusercontent.com/yazeed/proc/main/install.sh \| bash` |
+
+<details>
+<summary>More options</summary>
 
 | Platform | Method | Command |
 |----------|--------|---------|
-| macOS | Homebrew | `brew install yazeed/proc/proc` |
-| macOS/Linux | cargo | `cargo install proc-cli` |
 | macOS/Linux | cargo-binstall | `cargo binstall proc-cli` |
-| Windows | Scoop | `scoop install proc` ¹ |
-| Arch Linux | AUR | `yay -S proc` ² |
-| NixOS | Nix Flakes | `nix profile install github:yazeed/proc` |
-| Any | npm/bun | `npm install -g proc-cli` |
-| Any | Docker | `docker run --rm -it --pid=host yazeed/proc` |
+| Arch Linux | AUR | `yay -S proc` (pending) |
 
-<sub>¹ Requires bucket: `scoop bucket add proc https://github.com/yazeed/scoop-bucket-proc`</sub><br/>
-<sub>² AUR package pending submission</sub><br/>
-
-### Shell Script
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/yazeed/proc/main/install.sh | bash
-```
-
-<details>
-<summary>Manual download</summary>
+**Manual download:**
 
 ```bash
 # macOS (Apple Silicon)
@@ -70,46 +65,77 @@ Invoke-WebRequest -Uri https://github.com/yazeed/proc/releases/latest/download/p
 Expand-Archive proc.zip -DestinationPath .
 Move-Item proc-windows-x86_64.exe C:\Windows\System32\proc.exe
 ```
+
 </details>
 
-## Usage
+## Quick Start
 
-### Targets
+**What's using port 3000?**
+```bash
+proc on :3000
+```
 
-Commands accept the same target syntax, with multi-target support:
+**Kill it:**
+```bash
+proc kill :3000
+```
 
-| Target | Example | Meaning |
-|--------|---------|---------|
-| `:port` | `:3000` | Process using port 3000 |
-| `PID` | `12345` | Process with ID 12345 |
-| `name` | `node` | All processes named "node" |
+**Find all node processes in current directory using >5% CPU:**
+```bash
+proc by node --in . --min-cpu 5
+```
+
+**Kill multiple targets at once:**
+```bash
+proc kill :3000,:8080,node -y
+```
+
+## Target Syntax
+
+All commands accept the same target syntax:
+
+| Target | Example | Description |
+|--------|---------|-------------|
+| Port | `:3000` | Process listening on port 3000 |
+| PID | `1234` | Process with ID 1234 |
+| Name | `node` | All processes named "node" |
 | Multi | `:3000,:8080,node` | Comma-separated targets |
+
+## Commands
 
 ### Discovery
 
-```bash
-# Port/process lookup (multi-target)
+| Command | Alias | Description |
+|---------|-------|-------------|
+| `on <target>` | `:` | Bidirectional port/process lookup |
+| `by <name>` | `b` | Filter processes by name |
+| `in <path>` | | Filter processes by working directory |
+| `list` | `l`, `ps` | List all processes |
+| `info <target>` | `i` | Detailed process information |
+| `ports` | `p` | List all listening ports |
+| `tree` | `t` | Process hierarchy |
 
 ### Lifecycle
 
-
-## Reference
-
-### Commands
-
 | Command | Alias | Description |
 |---------|-------|-------------|
-| `on` | `:` | Bidirectional port/process lookup |
-| `by` | `b` | Filter processes by name |
-| `in` | | Filter processes by directory |
-| `list` | `l`, `ps` | List all processes |
-| `info` | `i` | Detailed process info |
-| `ports` | `p` | List listening ports |
-| `kill` | `k` | Force kill (SIGKILL) |
-| `stop` | `s` | Graceful stop (SIGTERM) |
-| `tree` | `t` | Process hierarchy |
+| `kill <target>` | `k` | Force kill (SIGKILL) |
+| `stop <target>` | `s` | Graceful stop (SIGTERM) |
 | `stuck` | `x` | Find hung processes |
 | `unstick` | `u` | Recover stuck processes |
+
+### Filters
+
+Filters can be combined with discovery commands:
+
+| Filter | Description |
+|--------|-------------|
+| `--in <path>` | Filter by working directory |
+| `--by <name>` | Filter by process name |
+| `--path <path>` | Filter by executable path |
+| `--min-cpu <n>` | Processes using >n% CPU |
+| `--min-mem <n>` | Processes using >n MB memory |
+| `--status <s>` | Filter by status: running, sleeping, stopped, zombie |
 
 ### Options
 
@@ -121,19 +147,31 @@ Commands accept the same target syntax, with multi-target support:
 | `--dry-run` | | Preview without executing |
 | `--force` | `-f` | Force action |
 
-### Filters
-
-| Option | `by` | `in` | `on` | `list` | `tree` | Description |
-|--------|:----:|:----:|:----:|:------:|:------:|-------------|
-| `--in <path>` | ✓ | | ✓ | ✓ | | Filter by working directory |
-| `--by <name>` | | ✓ | | | | Filter by process name |
-| `--path <path>` | ✓ | ✓ | | ✓ | | Filter by executable path |
-| `--min-cpu <n>` | ✓ | ✓ | | ✓ | ✓ | Processes using >n% CPU |
-| `--min-mem <n>` | ✓ | ✓ | | ✓ | ✓ | Processes using >n MB memory |
-| `--status <s>` | ✓ | ✓ | | ✓ | ✓ | running, sleeping, stopped, zombie |
-
 ## Examples
 
+```bash
+# What's on port 3000?
+proc on :3000
+
+# What ports is node using?
+proc on node
+
+# Node processes in current directory
+proc by node --in .
+
+# Processes using >10% CPU
+proc list --min-cpu 10
+
+# Kill everything on ports 3000 and 8080
+proc kill :3000,:8080 -y
+
+# Process tree filtered by CPU usage
+proc tree --min-cpu 5
+
+# Find and recover stuck processes
+proc stuck
+proc unstick --force
+```
 
 ## Platform Support
 
@@ -148,6 +186,13 @@ Commands accept the same target syntax, with multi-target support:
 
 ## Building from Source
 
+```bash
+git clone https://github.com/yazeed/proc
+cd proc
+cargo build --release
+```
+
+The binary will be at `target/release/proc`.
 
 ## Contributing
 
