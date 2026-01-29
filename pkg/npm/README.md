@@ -6,7 +6,8 @@ Semantic CLI tool for process management. Target by port, process id (PID), name
 
 ```bash
 npm install -g proc-cli
-# or
+yarn global add proc-cli
+pnpm add -g proc-cli
 bun install -g proc-cli
 ```
 
