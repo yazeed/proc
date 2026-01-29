@@ -139,7 +139,7 @@ jobs:
           VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
           echo "Local version: $VERSION"
 
-          if cargo publish 2>&1 | tee /tmp/publish.log; then
+          if cargo publish --allow-dirty 2>&1 | tee /tmp/publish.log; then
             echo "Successfully published $VERSION to crates.io"
           else
             if grep -q "already exists" /tmp/publish.log; then
