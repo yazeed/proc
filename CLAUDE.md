@@ -136,40 +136,32 @@ cargo clippy             # Lint
 
 Pre-commit hook runs `cargo fmt --check` automatically.
 
-## Release Process
+## Releasing
 
-Releases are automated via GitHub Actions. On tag push:
-
-1. **Build**: Cross-compile for all platforms
-2. **GitHub Release**: Create release with binaries
-3. **crates.io**: Publish with `--allow-dirty`
-4. **npm**: Publish proc-cli package
-5. **Homebrew**: Update yazeed/homebrew-proc tap
-6. **Scoop**: Update yazeed/scoop-bucket-proc bucket
-7. **Docker**: Push to yazeed/proc on Docker Hub
-
-**Version files to update:**
-- `Cargo.toml` (version field)
-- `flake.nix` (version field)
-- `pkg/npm/package.json` (version field)
-- `CHANGELOG.md` (new section)
-
-## Package Distribution
-
-| Channel | Package Name | Install Command |
-|---------|-------------|-----------------|
-| crates.io | proc-cli | `cargo install proc-cli` |
-| npm | proc-cli | `npm install -g proc-cli` |
-| Homebrew | proc | `brew install yazeed/proc/proc` |
-| Scoop | proc | `scoop install yazeed/scoop-bucket-proc/proc` |
-| Docker | yazeed/proc | `docker run yazeed/proc` |
-| Nix | — | `nix profile install github:yazeed/proc` |
+**Follow [RELEASE.md](RELEASE.md) for every release.** Do not skip steps.
 
 ## Documentation Files
 
-- `README.md` — Main documentation, installation, examples
+- `README.md` — Main documentation, installation, examples, shell completions, man page
 - `CHANGELOG.md` — Keep a Changelog format, update with each release
+- `RELEASE.md` — Release checklist and publishing process
 - `ROADMAP.md` — Version plans, feature status, under consideration
 - `PHILOSOPHY.md` — Project manifesto, principles, feature test
 - `CONTRIBUTING.md` — Contribution guidelines
 - `SECURITY.md` — Security policy
+
+## Philosophy (Summary)
+
+See `PHILOSOPHY.md` for the full manifesto.
+
+**Principles:** Semantic, Explicit, Complete, Fast, Obvious
+
+**The Feature Test** — every feature must pass:
+1. Does it fit "process and port management"?
+2. Can it be expressed in one obvious command?
+3. Does it make the common case effortless?
+4. Is user intent explicit?
+5. Is it something you'd use weekly?
+6. Does it follow our conventions?
+
+**Out of scope:** Service management, containers, remote processes, GUIs, historical data.

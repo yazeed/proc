@@ -184,6 +184,29 @@ proc unstick --force
 | Windows | x86_64 | ✅ |
 | Docker | linux/amd64, linux/arm64 | ✅ |
 
+## Shell Completions
+
+Generate completions for your shell:
+
+```bash
+# Bash
+proc completions bash > /etc/bash_completion.d/proc
+
+# Zsh
+proc completions zsh > ~/.zsh/completions/_proc
+
+# Fish
+proc completions fish > ~/.config/fish/completions/proc.fish
+```
+
+## Man Page
+
+Generate and install the man page:
+
+```bash
+proc manpage | sudo tee /usr/local/share/man/man1/proc.1 > /dev/null
+```
+
 ## Building from Source
 
 ```bash

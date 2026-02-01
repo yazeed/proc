@@ -7,13 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-02-01
+
 ### Added
 
 - **PHILOSOPHY.md**: Project manifesto documenting principles, values, and the feature test
+- **RELEASE.md**: Comprehensive release checklist and publishing process
+- **CLAUDE.md**: Project-specific instructions for Claude Code
+- **Shell completions docs**: Added to README.md
+- **Man page docs**: Added to README.md
 
 ### Changed
 
 - **ROADMAP.md**: Updated with v1.4.0 highlights, competitive context, and philosophy references
+- **src/lib.rs**: Updated crate docs for docs.rs with v1.3/v1.4 features
 
 ## [1.4.0] - 2026-01-29
 

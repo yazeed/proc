@@ -1,34 +1,43 @@
 #![warn(missing_docs)]
 //! # proc - Semantic Process Management CLI
 //!
-//! `proc` is a semantic command-line tool that makes process management
-//! intuitive, cross-platform, and AI-centric.
+//! Semantic CLI tool for process management. Target by port, PID, name or path.
 //!
 //! ## Features
 //!
-//! - **Semantic Commands**: Commands mean what they say (`proc kill node`)
-//! - **Cross-Platform**: Works on macOS, Linux, and Windows
-//! - **Process Lifecycle**: DISCOVER → INSPECT → MANAGE → MONITOR → REMEDIATE
-//! - **Beautiful Output**: Colored terminal output and JSON for scripting
+//! - **Unified Targets**: `:port`, `PID`, and `name` work the same everywhere
+//! - **Multi-Target**: `proc kill :3000,:8080,node` - comma-separated targets
+//! - **Query Language**: `proc by node --in .` - composable filters
+//! - **Cross-Platform**: macOS, Linux, and Windows
+//! - **Shell Completions**: bash, zsh, fish via `proc completions`
+//! - **Man Pages**: `proc manpage` generates documentation
 //!
-//! ## Example
+//! ## Quick Start
 //!
 //! ```bash
-//! # List processes
-//! proc list node
-//!
-//! # What's on a port?
+//! # What's on port 3000?
 //! proc on :3000
 //!
-//! # List all listening ports
-//! proc ports
+//! # Kill multiple targets
+//! proc kill :3000,:8080,node -y
 //!
-//! # Kill a process
-//! proc kill node
+//! # Node processes in current directory
+//! proc by node --in .
 //!
-//! # Find stuck processes
-//! proc stuck
+//! # Preview before killing
+//! proc kill node --dry-run
+//!
+//! # Generate shell completions
+//! proc completions zsh > ~/.zsh/completions/_proc
 //! ```
+//!
+//! ## Commands
+//!
+//! **Discovery**: `on`, `by`, `in`, `list`, `info`, `ports`, `tree`, `stuck`
+//!
+//! **Lifecycle**: `kill`, `stop`, `unstick`
+//!
+//! **Tooling**: `completions`, `manpage`
 
 pub mod commands;
 pub mod core;
