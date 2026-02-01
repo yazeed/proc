@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **PHILOSOPHY.md**: Project manifesto documenting principles, values, and the feature test
+
+### Changed
+
+- **ROADMAP.md**: Updated with v1.4.0 highlights, competitive context, and philosophy references
+
 ## [1.4.0] - 2026-01-29
 
 ### Added
