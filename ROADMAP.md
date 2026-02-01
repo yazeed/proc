@@ -19,7 +19,7 @@ The goal is not to accumulate features, but to cover the process and port manage
 - **Practical simplicity**: Every feature solves a real, repeated problem
 - **Easy to remember**: Consistent patterns—know one command, know them all
 
-## Current Release (v1.3.3)
+## Current Release (v1.4.0)
 
 The core commands are complete, with the Proc Query Language and full CI/CD automation:
 
@@ -41,13 +41,13 @@ The core commands are complete, with the Proc Query Language and full CI/CD auto
 
 ## Planned
 
-### v1.4 — Polish
+### v1.4 — Polish ✅
 
 Shell completions and documentation to make proc feel native.
 
-- [ ] Shell completions (bash, zsh, fish)
-- [ ] Man pages
-- [ ] `--dry-run` for all destructive commands
+- [x] Shell completions (bash, zsh, fish)
+- [x] Man pages
+- [x] `--dry-run` for all destructive commands
 
 ### v1.5 — Watch
 

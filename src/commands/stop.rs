@@ -25,6 +25,10 @@ pub struct StopCommand {
     #[arg(long, short = 'y')]
     yes: bool,
 
+    /// Show what would be stopped without actually stopping
+    #[arg(long)]
+    dry_run: bool,
+
     /// Output as JSON
     #[arg(long, short)]
     json: bool,
@@ -55,6 +59,17 @@ impl StopCommand {
 
         if processes.is_empty() {
             return Err(ProcError::ProcessNotFound(self.target.clone()));
+        }
+
+        // Dry run: just show what would be stopped
+        if self.dry_run {
+            printer.warning(&format!(
+                "Dry run: would stop {} process{}",
+                processes.len(),
+                if processes.len() == 1 { "" } else { "es" }
+            ));
+            printer.print_processes(&processes);
+            return Ok(());
         }
 
         // Confirm if not --yes

@@ -2,12 +2,14 @@
 //!
 //! A semantic command-line tool for process management.
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
+use clap_complete::{generate, Shell};
 use proc_cli::commands::{
     ByCommand, InCommand, InfoCommand, KillCommand, ListCommand, OnCommand, PortsCommand,
     StopCommand, StuckCommand, TreeCommand, UnstickCommand,
 };
 use proc_cli::error::ExitCode;
+use std::io;
 use std::process;
 
 const VERSION_INFO: &str = concat!(
@@ -107,6 +109,18 @@ enum Commands {
     /// Attempt to recover stuck processes
     #[command(visible_alias = "u")]
     Unstick(UnstickCommand),
+
+    /// Generate shell completions
+    #[command(hide = true)]
+    Completions {
+        /// Shell to generate completions for
+        #[arg(value_enum)]
+        shell: Shell,
+    },
+
+    /// Generate man page
+    #[command(hide = true)]
+    Manpage,
 }
 
 fn main() {
@@ -124,6 +138,17 @@ fn main() {
         Commands::Tree(cmd) => cmd.execute(),
         Commands::Stuck(cmd) => cmd.execute(),
         Commands::Unstick(cmd) => cmd.execute(),
+        Commands::Completions { shell } => {
+            generate(shell, &mut Cli::command(), "proc", &mut io::stdout());
+            Ok(())
+        }
+        Commands::Manpage => {
+            let cmd = Cli::command();
+            let man = clap_mangen::Man::new(cmd);
+            man.render(&mut io::stdout())
+                .expect("Failed to generate man page");
+            Ok(())
+        }
     };
 
     if let Err(e) = result {

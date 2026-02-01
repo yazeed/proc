@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-01-29
+
+### Added
+
+- **Shell completions**: Generate completions for bash, zsh, and fish
+  - `proc completions bash > /etc/bash_completion.d/proc`
+  - `proc completions zsh > ~/.zsh/completions/_proc`
+  - `proc completions fish > ~/.config/fish/completions/proc.fish`
+
+- **Man page generation**: `proc manpage > /usr/local/share/man/man1/proc.1`
+
+- **`--dry-run` for stop command**: Preview what would be stopped
+  - `proc stop node --dry-run`
+
 ## [1.3.3] - 2026-01-29
 
 ### Changed
