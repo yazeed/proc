@@ -18,9 +18,8 @@ Thumbs.db
 /tmp
 *.log
 
-# Planning & GTM
+# Planning
 /plan
-/gtm
 # npm package - downloaded binaries
 /pkg/npm/proc
 /pkg/npm/proc.exe
