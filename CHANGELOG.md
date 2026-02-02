@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-02-01
+
+### Fixed
+
+- **Self-matching bug**: `proc kill <target>` no longer kills itself when target matches its own command line arguments
+- **Dry-run message visibility**: Message now appears after the process table (not before) so it's visible without scrolling
+- **Kill feedback**: All killed processes now show in results (previously proc would die mid-loop if it matched itself)
+
+### Changed
+
+- Destructive commands (`kill`, `stop`, `unstick`) now exclude the current process from target resolution
+
 ## [1.4.1] - 2026-02-01
 
 ### Added

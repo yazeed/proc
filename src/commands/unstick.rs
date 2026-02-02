@@ -16,7 +16,7 @@
 //!   proc unstick 1234      # Unstick PID 1234
 //!   proc unstick node      # Unstick stuck node processes
 
-use crate::core::{resolve_target, Process};
+use crate::core::{parse_targets, resolve_targets_excluding_self, Process};
 use crate::error::{ProcError, Result};
 use crate::ui::{OutputFormat, Printer};
 use clap::Args;
@@ -309,9 +309,15 @@ impl UnstickCommand {
         Ok(())
     }
 
-    /// Resolve target to processes
+    /// Resolve target to processes, excluding self
     fn resolve_target_processes(&self, target: &str) -> Result<Vec<Process>> {
-        resolve_target(target).map_err(|_| ProcError::ProcessNotFound(target.to_string()))
+        let targets = parse_targets(target);
+        let (processes, _) = resolve_targets_excluding_self(&targets);
+        if processes.is_empty() {
+            Err(ProcError::ProcessNotFound(target.to_string()))
+        } else {
+            Ok(processes)
+        }
     }
 
     /// Check if a process appears stuck (high CPU)

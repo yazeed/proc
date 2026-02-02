@@ -111,16 +111,33 @@ pub fn parse_targets(targets_str: &str) -> Vec<String> {
 ///
 /// Returns a tuple of (found processes, not found target strings)
 pub fn resolve_targets(targets: &[String]) -> (Vec<Process>, Vec<String>) {
+    resolve_targets_impl(targets, false)
+}
+
+/// Resolve multiple targets, excluding the current process (self)
+///
+/// Use this for destructive commands (kill, stop) to avoid proc killing itself
+/// when the target pattern matches proc's own command line arguments.
+pub fn resolve_targets_excluding_self(targets: &[String]) -> (Vec<Process>, Vec<String>) {
+    resolve_targets_impl(targets, true)
+}
+
+fn resolve_targets_impl(targets: &[String], exclude_self: bool) -> (Vec<Process>, Vec<String>) {
     use std::collections::HashSet;
 
     let mut all_processes = Vec::new();
     let mut seen_pids = HashSet::new();
     let mut not_found = Vec::new();
+    let self_pid = std::process::id();
 
     for target in targets {
         match resolve_target(target) {
             Ok(processes) => {
                 for proc in processes {
+                    // Skip self if requested (for destructive commands)
+                    if exclude_self && proc.pid == self_pid {
+                        continue;
+                    }
                     if seen_pids.insert(proc.pid) {
                         all_processes.push(proc);
                     }

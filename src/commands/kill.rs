@@ -8,7 +8,7 @@
 //!   proc kill :3000,1234,node   # Mixed targets (port + PID + name)
 //!   proc kill node --yes        # Skip confirmation
 
-use crate::core::{parse_targets, resolve_targets, Process};
+use crate::core::{parse_targets, resolve_targets_excluding_self, Process};
 use crate::error::{ProcError, Result};
 use crate::ui::{OutputFormat, Printer};
 use clap::Args;
@@ -52,8 +52,9 @@ impl KillCommand {
         let printer = Printer::new(format, self.verbose);
 
         // Parse comma-separated targets and resolve to processes
+        // Use resolve_targets_excluding_self to avoid killing ourselves
         let targets = parse_targets(&self.target);
-        let (processes, not_found) = resolve_targets(&targets);
+        let (processes, not_found) = resolve_targets_excluding_self(&targets);
 
         // Warn about targets that weren't found
         for target in &not_found {
@@ -66,12 +67,12 @@ impl KillCommand {
 
         // Dry run: just show what would be killed
         if self.dry_run {
+            printer.print_processes(&processes);
             printer.warning(&format!(
                 "Dry run: would kill {} process{}",
                 processes.len(),
                 if processes.len() == 1 { "" } else { "es" }
             ));
-            printer.print_processes(&processes);
             return Ok(());
         }
 
