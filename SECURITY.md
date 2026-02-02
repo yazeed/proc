@@ -17,7 +17,7 @@ We take security seriously. If you discover a security vulnerability in proc, pl
 
 **DO NOT** create a public GitHub issue for security vulnerabilities.
 
-Instead, please email security concerns to: **[me@yazeed.com](mailto:me@yazeed.com)**
+Instead, please email security concerns to: **me at yazeed.com**
 
 Include the following information:
 - Description of the vulnerability
@@ -97,6 +97,6 @@ We carefully vet all dependencies:
 
 ## Contact
 
-For security concerns: [me@yazeed.com](mailto:me@yazeed.com)
+For security concerns: me at yazeed.com
 
 For general questions: [GitHub Issues](https://github.com/yazeed/proc/issues)
