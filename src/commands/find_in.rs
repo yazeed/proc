@@ -22,10 +22,6 @@ pub struct InCommand {
     #[arg(long = "by", short = 'b')]
     pub by_name: Option<String>,
 
-    /// Filter by executable path
-    #[arg(long, short = 'p')]
-    pub exe_path: Option<String>,
-
     /// Only show processes using more than this CPU %
     #[arg(long)]
     pub min_cpu: Option<f32>,
@@ -100,18 +96,6 @@ impl InCommand {
             }
         };
 
-        // Resolve executable path filter
-        let exe_path_filter: Option<PathBuf> = self.exe_path.as_ref().map(|p| {
-            let path = PathBuf::from(p);
-            if path.is_relative() {
-                std::env::current_dir()
-                    .unwrap_or_else(|_| PathBuf::from("."))
-                    .join(path)
-            } else {
-                path
-            }
-        });
-
         // Apply filters
         processes.retain(|p| {
             // Directory filter (required for this command)
@@ -122,18 +106,6 @@ impl InCommand {
                 }
             } else {
                 return false;
-            }
-
-            // Executable path filter
-            if let Some(ref exe_path) = exe_path_filter {
-                if let Some(ref proc_exe) = p.exe_path {
-                    let proc_path = PathBuf::from(proc_exe);
-                    if !proc_path.starts_with(exe_path) {
-                        return false;
-                    }
-                } else {
-                    return false;
-                }
             }
 
             // CPU filter

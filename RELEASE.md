@@ -11,24 +11,36 @@ cargo test               # Tests pass
 cargo build --release    # Release builds
 ```
 
-## 2. Version Bump
+## 2. Manual Testing
+
+Test new features manually with the release binary:
+
+```bash
+./target/release/proc --version    # Verify version
+./target/release/proc --help       # Verify help includes new commands
+```
+
+Test new commands/flags work as expected before releasing.
+
+## 3. Version Bump
 
 Update version in ALL of these files:
 - [ ] `Cargo.toml` — version field
 - [ ] `pkg/npm/package.json` — version field
 - [ ] `flake.nix` — version field
 
-## 3. Documentation
+## 4. Documentation
 
-Update for new features:
+Update and verify all docs are complete:
+
 - [ ] `CHANGELOG.md` — Add new version section with changes
-- [ ] `README.md` — Document new commands, flags, features
+- [ ] `README.md` — Review thoroughly: hero examples, Quick Start, Commands table, Filters table, Examples section all reflect new features
 - [ ] `ROADMAP.md` — Mark completed items, update current release section
-- [ ] `src/lib.rs` — Update crate docs (shows on docs.rs)
+- [ ] `src/lib.rs` — Review Rust docs: Features list, Quick Start, Commands list all reflect new features (shows on docs.rs)
 - [ ] Verify `proc manpage` output includes new commands
 - [ ] Verify `proc completions` includes new commands
 
-## 4. Commit & Tag
+## 5. Commit & Tag
 
 ```bash
 git add -A
@@ -37,7 +49,7 @@ git tag vX.Y.Z
 git push && git push --tags
 ```
 
-## 5. Verify CI
+## 6. Verify CI
 
 After tag push, monitor GitHub Actions:
 - [ ] Build succeeds for all platforms
@@ -48,7 +60,7 @@ After tag push, monitor GitHub Actions:
 - [ ] Scoop bucket updated
 - [ ] Docker image pushed
 
-## 6. Post-Release Verification
+## 7. Post-Release Verification
 
 ```bash
 # Verify packages (after CI completes)

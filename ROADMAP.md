@@ -6,17 +6,26 @@ The goal is not to accumulate features, but to cover the process and port manage
 
 See [PHILOSOPHY.md](PHILOSOPHY.md) for our full manifesto.
 
-## Current Release (v1.4.0)
+## Current Release (v1.5.0)
 
-The core commands are complete, with the Proc Query Language, shell completions, and full CI/CD automation:
+The core commands are complete, with the Proc Query Language, shell completions, file lookup, and full CI/CD automation:
 
 | Area | Commands | Status |
 |------|----------|--------|
-| Discovery | `on`, `by`, `in`, `ports`, `list`, `info`, `tree`, `stuck` | ✅ |
+| Discovery | `on`, `for`, `by`, `in`, `ports`, `list`, `info`, `tree`, `stuck` | ✅ |
 | Lifecycle | `kill`, `stop`, `unstick` (all support multi-target) | ✅ |
 | Tooling | `completions`, `manpage` | ✅ |
 
-### v1.4.0 Highlights
+### v1.5.0 Highlights
+
+- **`proc for <file>`**: Find processes by file path
+  - `proc for ./script.py` — What's running this file?
+  - `proc for /usr/bin/node` — Processes running this executable
+  - `proc for app.log` — What has this file open?
+  - Supports relative paths, absolute paths, and tilde expansion
+  - Shows process info AND listening ports
+
+### v1.4.x Highlights
 
 - **Shell completions**: `proc completions bash|zsh|fish`
 - **Man page generation**: `proc manpage`
@@ -35,7 +44,7 @@ The core commands are complete, with the Proc Query Language, shell completions,
 
 ## Planned
 
-### v1.5 — Watch
+### v1.6 — Watch
 
 Real-time monitoring for when you need to observe.
 

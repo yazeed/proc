@@ -8,6 +8,7 @@
 //! - **Unified Targets**: `:port`, `PID`, and `name` work the same everywhere
 //! - **Multi-Target**: `proc kill :3000,:8080,node` - comma-separated targets
 //! - **Query Language**: `proc by node --in .` - composable filters
+//! - **File Lookup**: `proc for ./script.py` - find by file path
 //! - **Cross-Platform**: macOS, Linux, and Windows
 //! - **Shell Completions**: bash, zsh, fish via `proc completions`
 //! - **Man Pages**: `proc manpage` generates documentation
@@ -17,6 +18,9 @@
 //! ```bash
 //! # What's on port 3000?
 //! proc on :3000
+//!
+//! # What's running this file?
+//! proc for ./script.py
 //!
 //! # Kill multiple targets
 //! proc kill :3000,:8080,node -y
@@ -33,7 +37,7 @@
 //!
 //! ## Commands
 //!
-//! **Discovery**: `on`, `by`, `in`, `list`, `info`, `ports`, `tree`, `stuck`
+//! **Discovery**: `on`, `for`, `by`, `in`, `list`, `info`, `ports`, `tree`, `stuck`
 //!
 //! **Lifecycle**: `kill`, `stop`, `unstick`
 //!

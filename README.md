@@ -15,7 +15,7 @@ Semantic CLI tool for process management. Target by port, process id (PID), name
 
 ```bash
 proc on :3000                   # what's on port 3000?
-proc on :3000,:8080,node        # multi-target: ports + name
+proc for ./script.py            # what's running this file?
 proc by node --in . --min-cpu 5 # node in cwd using >5% CPU
 proc kill :3000,:8080,node -y   # kill mixed targets at once
 proc info :3000,1234            # info for port + PID
@@ -80,6 +80,11 @@ proc on :3000
 proc kill :3000
 ```
 
+**What's running this script?**
+```bash
+proc for ./script.py
+```
+
 **Find all node processes in current directory using >5% CPU:**
 ```bash
 proc by node --in . --min-cpu 5
@@ -108,6 +113,7 @@ All commands accept the same target syntax:
 | Command | Alias | Description |
 |---------|-------|-------------|
 | `on <target>` | `:` | Bidirectional port/process lookup |
+| `for <file>` | `f` | Find processes by file path |
 | `by <name>` | `b` | Filter processes by name |
 | `in <path>` | | Filter processes by working directory |
 | `list` | `l`, `ps` | List all processes |
@@ -132,7 +138,6 @@ Filters can be combined with discovery commands:
 |--------|-------------|
 | `--in <path>` | Filter by working directory |
 | `--by <name>` | Filter by process name |
-| `--path <path>` | Filter by executable path |
 | `--min-cpu <n>` | Processes using >n% CPU |
 | `--min-mem <n>` | Processes using >n MB memory |
 | `--status <s>` | Filter by status: running, sleeping, stopped, zombie |
@@ -155,6 +160,12 @@ proc on :3000
 
 # What ports is node using?
 proc on node
+
+# What's running this file?
+proc for ./script.py
+
+# What has this file open?
+proc for /var/log/app.log
 
 # Node processes in current directory
 proc by node --in .

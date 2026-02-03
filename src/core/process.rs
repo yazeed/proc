@@ -136,6 +136,64 @@ impl Process {
         Ok(processes)
     }
 
+    /// Find processes running a specific executable path
+    pub fn find_by_exe_path(path: &std::path::Path) -> Result<Vec<Process>> {
+        let all = Self::find_all()?;
+        let path_str = path.to_string_lossy();
+
+        Ok(all
+            .into_iter()
+            .filter(|p| {
+                if let Some(ref exe) = p.exe_path {
+                    // Exact match (compare as strings to avoid PathBuf allocation)
+                    exe == &*path_str || std::path::Path::new(exe) == path
+                } else {
+                    false
+                }
+            })
+            .collect())
+    }
+
+    /// Find processes that have a file open (Unix only via lsof)
+    #[cfg(unix)]
+    pub fn find_by_open_file(path: &std::path::Path) -> Result<Vec<Process>> {
+        use std::process::Command;
+
+        let output = Command::new("lsof")
+            .args(["-t", &path.to_string_lossy()]) // -t = terse (PIDs only)
+            .output();
+
+        let output = match output {
+            Ok(o) => o,
+            Err(_) => return Ok(vec![]), // lsof not available
+        };
+
+        if !output.status.success() {
+            return Ok(vec![]); // No processes have file open
+        }
+
+        let pids: Vec<u32> = String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .filter_map(|line| line.trim().parse().ok())
+            .collect();
+
+        let mut processes = Vec::new();
+        for pid in pids {
+            if let Ok(Some(proc)) = Self::find_by_pid(pid) {
+                processes.push(proc);
+            }
+        }
+
+        Ok(processes)
+    }
+
+    /// Find processes that have a file open (Windows stub)
+    #[cfg(not(unix))]
+    pub fn find_by_open_file(_path: &std::path::Path) -> Result<Vec<Process>> {
+        // Windows: Could use handle.exe from Sysinternals, but skip for now
+        Ok(vec![])
+    }
+
     /// Find processes that appear to be stuck (high CPU, no progress)
     /// This is a heuristic-based detection
     pub fn find_stuck(timeout: Duration) -> Result<Vec<Process>> {

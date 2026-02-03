@@ -5,8 +5,8 @@
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Shell};
 use proc_cli::commands::{
-    ByCommand, InCommand, InfoCommand, KillCommand, ListCommand, OnCommand, PortsCommand,
-    StopCommand, StuckCommand, TreeCommand, UnstickCommand,
+    ByCommand, ForCommand, InCommand, InfoCommand, KillCommand, ListCommand, OnCommand,
+    PortsCommand, StopCommand, StuckCommand, TreeCommand, UnstickCommand,
 };
 use proc_cli::error::ExitCode;
 use std::io;
@@ -33,6 +33,11 @@ Run 'proc --help' for examples or visit https://github.com/yazeed/proc"
     proc on :3000                  What's on port 3000?
     proc on :3000,:8080            What's on multiple ports?
     proc on node                   What ports are node processes using?
+
+  Find by File:
+    proc for ./script.py           What's running this file?
+    proc for /usr/bin/node         Processes running this executable
+    proc for app.log               What has this file open?
 
   Filter by Name:
     proc by node                   Processes named 'node'
@@ -70,6 +75,10 @@ enum Commands {
     /// Port/process lookup (bidirectional)
     #[command(visible_alias = ":")]
     On(OnCommand),
+
+    /// Find processes by file path
+    #[command(visible_alias = "f")]
+    For(ForCommand),
 
     /// Filter processes by name
     #[command(visible_alias = "b")]
@@ -128,6 +137,7 @@ fn main() {
 
     let result = match cli.command {
         Commands::On(cmd) => cmd.execute(),
+        Commands::For(cmd) => cmd.execute(),
         Commands::By(cmd) => cmd.execute(),
         Commands::In(cmd) => cmd.execute(),
         Commands::List(cmd) => cmd.execute(),

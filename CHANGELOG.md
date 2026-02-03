@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-02-02
+
+### Added
+
+- **`proc for <file>`**: Find processes by file path
+  - Find processes running a specific executable: `proc for /usr/bin/node`
+  - Find processes with a file open (via lsof): `proc for ./data.json`
+  - Supports relative paths, absolute paths, and tilde expansion: `proc for ~/bin/myapp`
+  - Shows process info AND listening ports (like `on` command)
+  - Composable filters: `--in`, `--by`, `--min-cpu`, `--min-mem`, `--status`
+
+### Removed
+
+- **`--path` filter from `proc by`**: Use `proc for <file>` instead
+- **`--exe-path` filter from `proc in`**: Use `proc for <file>` instead
+
 ## [1.4.2] - 2026-02-01
 
 ### Fixed
@@ -245,7 +261,14 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 
 ---
 
-[Unreleased]: https://github.com/yazeed/proc/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/yazeed/proc/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/yazeed/proc/compare/v1.4.2...v1.5.0
+[1.4.2]: https://github.com/yazeed/proc/compare/v1.4.1...v1.4.2
+[1.4.1]: https://github.com/yazeed/proc/compare/v1.4.0...v1.4.1
+[1.4.0]: https://github.com/yazeed/proc/compare/v1.3.3...v1.4.0
+[1.3.3]: https://github.com/yazeed/proc/compare/v1.3.2...v1.3.3
+[1.3.2]: https://github.com/yazeed/proc/compare/v1.3.1...v1.3.2
+[1.3.1]: https://github.com/yazeed/proc/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/yazeed/proc/compare/v1.2.3...v1.3.0
 [1.2.3]: https://github.com/yazeed/proc/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/yazeed/proc/compare/v1.2.1...v1.2.2
