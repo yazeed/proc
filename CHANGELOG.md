@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-02-03
+
+### Security
+
+- Updated `bytes` dependency to 1.11.1 to fix integer overflow vulnerability (RUSTSEC-2026-0007)
+
+### Changed
+
+- Added `cargo audit` to release checklist
+
 ## [1.5.0] - 2026-02-02
 
 ### Added
@@ -261,7 +271,8 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 
 ---
 
-[Unreleased]: https://github.com/yazeed/proc/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/yazeed/proc/compare/v1.5.1...HEAD
+[1.5.1]: https://github.com/yazeed/proc/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/yazeed/proc/compare/v1.4.2...v1.5.0
 [1.4.2]: https://github.com/yazeed/proc/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/yazeed/proc/compare/v1.4.0...v1.4.1

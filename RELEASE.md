@@ -9,6 +9,8 @@ cargo fmt --check        # Code formatted
 cargo clippy             # No warnings
 cargo test               # Tests pass
 cargo build --release    # Release builds
+cargo update             # Update dependencies
+cargo audit              # No security vulnerabilities
 ```
 
 ## 2. Manual Testing
