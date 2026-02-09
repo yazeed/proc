@@ -26,6 +26,10 @@ pub struct OnCommand {
     #[arg(long = "in", short = 'i')]
     pub in_dir: Option<String>,
 
+    /// Filter by process name
+    #[arg(long = "by", short = 'b')]
+    pub by_name: Option<String>,
+
     /// Output as JSON
     #[arg(long, short = 'j')]
     pub json: bool,
@@ -116,6 +120,20 @@ impl OnCommand {
         }
     }
 
+    /// Check if process matches --by filter
+    fn matches_by_filter(&self, proc: &Process) -> bool {
+        if let Some(ref name) = self.by_name {
+            proc.name.to_lowercase().contains(&name.to_lowercase())
+        } else {
+            true
+        }
+    }
+
+    /// Check if process matches all filters (--in and --by)
+    fn matches_filters(&self, proc: &Process) -> bool {
+        self.matches_in_filter(proc) && self.matches_by_filter(proc)
+    }
+
     /// Show what process is on a specific port
     fn show_process_on_port(&self, port: u16) -> Result<()> {
         let port_info = match PortInfo::find_by_port(port)? {
@@ -125,9 +143,9 @@ impl OnCommand {
 
         let process = Process::find_by_pid(port_info.pid)?;
 
-        // Apply --in filter if present
+        // Apply --in and --by filters if present
         if let Some(ref proc) = process {
-            if !self.matches_in_filter(proc) {
+            if !self.matches_filters(proc) {
                 return Err(ProcError::ProcessNotFound(format!(
                     "port {} (process not in specified directory)",
                     port
@@ -159,8 +177,8 @@ impl OnCommand {
         let process = Process::find_by_pid(pid)?
             .ok_or_else(|| ProcError::ProcessNotFound(pid.to_string()))?;
 
-        // Apply --in filter if present
-        if !self.matches_in_filter(&process) {
+        // Apply --in and --by filters if present
+        if !self.matches_filters(&process) {
             return Err(ProcError::ProcessNotFound(format!(
                 "PID {} (not in specified directory)",
                 pid
@@ -196,12 +214,12 @@ impl OnCommand {
             return Err(ProcError::ProcessNotFound(name.to_string()));
         }
 
-        // Apply --in filter if present
-        if self.in_dir.is_some() {
-            processes.retain(|p| self.matches_in_filter(p));
+        // Apply --in and --by filters if present
+        if self.in_dir.is_some() || self.by_name.is_some() {
+            processes.retain(|p| self.matches_filters(p));
             if processes.is_empty() {
                 return Err(ProcError::ProcessNotFound(format!(
-                    "'{}' (no matches in specified directory)",
+                    "'{}' (no matches with specified filters)",
                     name
                 )));
             }

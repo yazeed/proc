@@ -15,6 +15,7 @@ use clap::Args;
 use colored::*;
 use serde::Serialize;
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 /// Show process tree
 #[derive(Args, Debug)]
@@ -49,6 +50,14 @@ pub struct TreeCommand {
     /// Filter by status: running, sleeping, stopped, zombie
     #[arg(long)]
     status: Option<String>,
+
+    /// Filter by directory (defaults to current directory if no path given)
+    #[arg(long = "in", short = 'i', num_args = 0..=1, default_missing_value = ".")]
+    pub in_dir: Option<String>,
+
+    /// Filter by process name
+    #[arg(long = "by", short = 'b')]
+    pub by_name: Option<String>,
 }
 
 impl TreeCommand {
@@ -100,22 +109,51 @@ impl TreeCommand {
                         .collect()
                 }
                 TargetType::Name(ref pattern) => {
-                    // For name, do pattern matching
+                    // For name, do pattern matching (exclude self to avoid false positive)
                     let pattern_lower = pattern.to_lowercase();
+                    let self_pid = std::process::id();
                     all_processes
                         .iter()
                         .filter(|p| {
-                            p.name.to_lowercase().contains(&pattern_lower)
-                                || p.command
-                                    .as_ref()
-                                    .map(|c| c.to_lowercase().contains(&pattern_lower))
-                                    .unwrap_or(false)
+                            p.pid != self_pid
+                                && (p.name.to_lowercase().contains(&pattern_lower)
+                                    || p.command
+                                        .as_ref()
+                                        .map(|c| c.to_lowercase().contains(&pattern_lower))
+                                        .unwrap_or(false))
                         })
                         .collect()
                 }
             }
         } else {
             Vec::new() // Will show full tree
+        };
+
+        // Apply --in and --by filters (only for targeted mode)
+        let target_processes = if self.target.is_some() {
+            let in_dir_filter = resolve_in_dir(&self.in_dir);
+            target_processes
+                .into_iter()
+                .filter(|p| {
+                    if let Some(ref dir_path) = in_dir_filter {
+                        if let Some(ref cwd) = p.cwd {
+                            if !PathBuf::from(cwd).starts_with(dir_path) {
+                                return false;
+                            }
+                        } else {
+                            return false;
+                        }
+                    }
+                    if let Some(ref name) = self.by_name {
+                        if !p.name.to_lowercase().contains(&name.to_lowercase()) {
+                            return false;
+                        }
+                    }
+                    true
+                })
+                .collect()
+        } else {
+            target_processes
         };
 
         // Apply resource filters if specified
@@ -343,14 +381,16 @@ impl TreeCommand {
             TargetType::Port(_) | TargetType::Pid(_) => resolve_target(target)?,
             TargetType::Name(ref pattern) => {
                 let pattern_lower = pattern.to_lowercase();
+                let self_pid = std::process::id();
                 pid_map
                     .values()
                     .filter(|p| {
-                        p.name.to_lowercase().contains(&pattern_lower)
-                            || p.command
-                                .as_ref()
-                                .map(|c| c.to_lowercase().contains(&pattern_lower))
-                                .unwrap_or(false)
+                        p.pid != self_pid
+                            && (p.name.to_lowercase().contains(&pattern_lower)
+                                || p.command
+                                    .as_ref()
+                                    .map(|c| c.to_lowercase().contains(&pattern_lower))
+                                    .unwrap_or(false))
                     })
                     .map(|p| (*p).clone())
                     .collect()
@@ -525,4 +565,21 @@ struct TreeNode {
     memory_mb: f64,
     status: String,
     children: Vec<TreeNode>,
+}
+
+fn resolve_in_dir(in_dir: &Option<String>) -> Option<PathBuf> {
+    in_dir.as_ref().map(|p| {
+        if p == "." {
+            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+        } else {
+            let path = PathBuf::from(p);
+            if path.is_relative() {
+                std::env::current_dir()
+                    .unwrap_or_else(|_| PathBuf::from("."))
+                    .join(path)
+            } else {
+                path
+            }
+        }
+    })
 }

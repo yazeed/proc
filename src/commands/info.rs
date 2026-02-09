@@ -13,6 +13,7 @@ use crate::ui::{OutputFormat, Printer};
 use clap::Args;
 use colored::*;
 use serde::Serialize;
+use std::path::PathBuf;
 
 /// Show detailed process information
 #[derive(Args, Debug)]
@@ -28,6 +29,14 @@ pub struct InfoCommand {
     /// Show extra details
     #[arg(long, short)]
     verbose: bool,
+
+    /// Filter by directory (defaults to current directory if no path given)
+    #[arg(long = "in", short = 'i', num_args = 0..=1, default_missing_value = ".")]
+    pub in_dir: Option<String>,
+
+    /// Filter by process name
+    #[arg(long = "by", short = 'b')]
+    pub by_name: Option<String>,
 }
 
 impl InfoCommand {
@@ -64,6 +73,26 @@ impl InfoCommand {
                 Err(_) => not_found.push(target.clone()),
             }
         }
+
+        // Apply --in and --by filters
+        let in_dir_filter = resolve_in_dir(&self.in_dir);
+        found.retain(|p| {
+            if let Some(ref dir_path) = in_dir_filter {
+                if let Some(ref cwd) = p.cwd {
+                    if !PathBuf::from(cwd).starts_with(dir_path) {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            }
+            if let Some(ref name) = self.by_name {
+                if !p.name.to_lowercase().contains(&name.to_lowercase()) {
+                    return false;
+                }
+            }
+            true
+        });
 
         if self.json {
             printer.print_json(&InfoOutput {
@@ -172,4 +201,21 @@ struct InfoOutput<'a> {
     not_found_count: usize,
     processes: &'a [Process],
     not_found: &'a [String],
+}
+
+fn resolve_in_dir(in_dir: &Option<String>) -> Option<PathBuf> {
+    in_dir.as_ref().map(|p| {
+        if p == "." {
+            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+        } else {
+            let path = PathBuf::from(p);
+            if path.is_relative() {
+                std::env::current_dir()
+                    .unwrap_or_else(|_| PathBuf::from("."))
+                    .join(path)
+            } else {
+                path
+            }
+        }
+    })
 }

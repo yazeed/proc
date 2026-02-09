@@ -79,10 +79,17 @@ impl Process {
         sys.refresh_all();
 
         let pattern_lower = pattern.to_lowercase();
+        let self_pid = sysinfo::Pid::from_u32(std::process::id());
         let processes: Vec<Process> = sys
             .processes()
             .iter()
             .filter_map(|(pid, proc)| {
+                // Exclude self - proc's own command line args contain the search
+                // pattern, which would always be a false positive
+                if *pid == self_pid {
+                    return None;
+                }
+
                 let name = proc.name().to_string_lossy().to_string();
                 let cmd: String = proc
                     .cmd()

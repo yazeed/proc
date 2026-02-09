@@ -8,6 +8,7 @@
 //! - **Unified Targets**: `:port`, `PID`, and `name` work the same everywhere
 //! - **Multi-Target**: `proc kill :3000,:8080,node` - comma-separated targets
 //! - **Query Language**: `proc by node --in .` - composable filters
+//! - **Consistent Filters**: `--in` and `--by` work across all commands
 //! - **File Lookup**: `proc for ./script.py` - find by file path
 //! - **Cross-Platform**: macOS, Linux, and Windows
 //! - **Shell Completions**: bash, zsh, fish via `proc completions`
@@ -30,6 +31,9 @@
 //!
 //! # Preview before killing
 //! proc kill node --dry-run
+//!
+//! # Kill only node processes in current directory
+//! proc kill node --in .
 //!
 //! # Generate shell completions
 //! proc completions zsh > ~/.zsh/completions/_proc

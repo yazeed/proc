@@ -10,6 +10,7 @@ use crate::error::Result;
 use crate::ui::{OutputFormat, Printer};
 use clap::Args;
 use dialoguer::Confirm;
+use std::path::PathBuf;
 use std::time::Duration;
 
 /// Find stuck/hung processes
@@ -34,6 +35,14 @@ pub struct StuckCommand {
     /// Show verbose output
     #[arg(long, short = 'v')]
     pub verbose: bool,
+
+    /// Filter by directory (defaults to current directory if no path given)
+    #[arg(long = "in", short = 'i', num_args = 0..=1, default_missing_value = ".")]
+    pub in_dir: Option<String>,
+
+    /// Filter by process name
+    #[arg(long = "by", short = 'b')]
+    pub by_name: Option<String>,
 }
 
 impl StuckCommand {
@@ -47,7 +56,27 @@ impl StuckCommand {
         let printer = Printer::new(format, self.verbose);
 
         let timeout = Duration::from_secs(self.timeout);
-        let processes = Process::find_stuck(timeout)?;
+        let mut processes = Process::find_stuck(timeout)?;
+
+        // Apply --in and --by filters
+        let in_dir_filter = resolve_in_dir(&self.in_dir);
+        processes.retain(|p| {
+            if let Some(ref dir_path) = in_dir_filter {
+                if let Some(ref cwd) = p.cwd {
+                    if !PathBuf::from(cwd).starts_with(dir_path) {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            }
+            if let Some(ref name) = self.by_name {
+                if !p.name.to_lowercase().contains(&name.to_lowercase()) {
+                    return false;
+                }
+            }
+            true
+        });
 
         if processes.is_empty() {
             printer.success(&format!(
@@ -99,4 +128,21 @@ impl StuckCommand {
 
         Ok(())
     }
+}
+
+fn resolve_in_dir(in_dir: &Option<String>) -> Option<PathBuf> {
+    in_dir.as_ref().map(|p| {
+        if p == "." {
+            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+        } else {
+            let path = PathBuf::from(p);
+            if path.is_relative() {
+                std::env::current_dir()
+                    .unwrap_or_else(|_| PathBuf::from("."))
+                    .join(path)
+            } else {
+                path
+            }
+        }
+    })
 }

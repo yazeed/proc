@@ -2,7 +2,7 @@
 //!
 //! Examples:
 //!   proc ports              # Show all listening ports
-//!   proc ports --filter node # Filter by process name
+//!   proc ports --by node     # Filter by process name
 //!   proc ports --exposed    # Only network-accessible ports (0.0.0.0)
 //!   proc ports --local      # Only localhost ports (127.0.0.1)
 //!   proc ports -v           # Show with executable paths
@@ -14,13 +14,18 @@ use clap::Args;
 use colored::*;
 use serde::Serialize;
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 /// List all listening ports
 #[derive(Args, Debug)]
 pub struct PortsCommand {
     /// Filter by process name
-    #[arg(long, short = 'f')]
-    pub filter: Option<String>,
+    #[arg(long = "by", short = 'b')]
+    pub by_name: Option<String>,
+
+    /// Filter by directory (defaults to current directory if no path given)
+    #[arg(long = "in", short = 'i', num_args = 0..=1, default_missing_value = ".")]
+    pub in_dir: Option<String>,
 
     /// Only show network-exposed ports (0.0.0.0, ::)
     #[arg(long, short = 'e')]
@@ -49,9 +54,24 @@ impl PortsCommand {
         let mut ports = PortInfo::get_all_listening()?;
 
         // Filter by process name if specified
-        if let Some(ref filter) = self.filter {
-            let filter_lower = filter.to_lowercase();
-            ports.retain(|p| p.process_name.to_lowercase().contains(&filter_lower));
+        if let Some(ref name) = self.by_name {
+            let name_lower = name.to_lowercase();
+            ports.retain(|p| p.process_name.to_lowercase().contains(&name_lower));
+        }
+
+        // Filter by directory if specified
+        if let Some(ref _dir) = self.in_dir {
+            let in_dir_filter = resolve_in_dir(&self.in_dir);
+            if let Some(ref dir_path) = in_dir_filter {
+                ports.retain(|p| {
+                    if let Ok(Some(proc)) = Process::find_by_pid(p.pid) {
+                        if let Some(ref cwd) = proc.cwd {
+                            return PathBuf::from(cwd).starts_with(dir_path);
+                        }
+                    }
+                    false
+                });
+            }
         }
 
         // Filter by address exposure
@@ -207,4 +227,21 @@ fn truncate_string(s: &str, max_len: usize) -> String {
     } else {
         format!("{}...", &s[..max_len.saturating_sub(3)])
     }
+}
+
+fn resolve_in_dir(in_dir: &Option<String>) -> Option<PathBuf> {
+    in_dir.as_ref().map(|p| {
+        if p == "." {
+            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+        } else {
+            let path = PathBuf::from(p);
+            if path.is_relative() {
+                std::env::current_dir()
+                    .unwrap_or_else(|_| PathBuf::from("."))
+                    .join(path)
+            } else {
+                path
+            }
+        }
+    })
 }

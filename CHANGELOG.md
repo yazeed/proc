@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-02-09
+
+### Added
+
+- **`--in` and `--by` flags across all commands**: Consistent filtering by directory and process name
+  - `proc kill node --in .` — Only kill node processes in current directory
+  - `proc stop node --by worker` — Only stop node processes matching "worker"
+  - `proc info node --in . --by server` — Scoped process info
+  - `proc tree node --in .` — Tree scoped to directory (targeted mode only)
+  - `proc stuck --by node` — Only stuck node processes
+  - `proc unstick --in . --by node` — Scoped unstick
+- **`--in` flag for `proc ports`**: Filter listening ports by process working directory
+  - `proc ports --in .` — Only ports from processes in current directory
+
+### Changed
+
+- **`proc ports`**: Renamed `--filter`/`-f` to `--by`/`-b` for consistency with other commands
+
+### Updated
+
+- Updated dependencies (`clap`, `sysinfo`, `regex`, `anyhow`, and others)
+
 ## [1.5.1] - 2026-02-03
 
 ### Security

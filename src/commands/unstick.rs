@@ -23,6 +23,7 @@ use clap::Args;
 use colored::*;
 use dialoguer::Confirm;
 use serde::Serialize;
+use std::path::PathBuf;
 use std::time::Duration;
 
 #[cfg(unix)]
@@ -55,6 +56,14 @@ pub struct UnstickCommand {
     /// Output as JSON
     #[arg(long, short)]
     json: bool,
+
+    /// Filter by directory (defaults to current directory if no path given)
+    #[arg(long = "in", short = 'i', num_args = 0..=1, default_missing_value = ".")]
+    pub in_dir: Option<String>,
+
+    /// Filter by process name
+    #[arg(long = "by", short = 'b')]
+    pub by_name: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -77,7 +86,7 @@ impl UnstickCommand {
         let printer = Printer::new(format, false);
 
         // Get processes to unstick
-        let stuck = if let Some(ref target) = self.target {
+        let mut stuck = if let Some(ref target) = self.target {
             // Specific target
             self.resolve_target_processes(target)?
         } else {
@@ -85,6 +94,26 @@ impl UnstickCommand {
             let timeout = Duration::from_secs(self.timeout);
             Process::find_stuck(timeout)?
         };
+
+        // Apply --in and --by filters
+        let in_dir_filter = resolve_in_dir(&self.in_dir);
+        stuck.retain(|p| {
+            if let Some(ref dir_path) = in_dir_filter {
+                if let Some(ref cwd) = p.cwd {
+                    if !PathBuf::from(cwd).starts_with(dir_path) {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            }
+            if let Some(ref name) = self.by_name {
+                if !p.name.to_lowercase().contains(&name.to_lowercase()) {
+                    return false;
+                }
+            }
+            true
+        });
 
         if stuck.is_empty() {
             if self.json {
@@ -490,4 +519,21 @@ struct ProcessOutcome {
     pid: u32,
     name: String,
     outcome: String,
+}
+
+fn resolve_in_dir(in_dir: &Option<String>) -> Option<PathBuf> {
+    in_dir.as_ref().map(|p| {
+        if p == "." {
+            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+        } else {
+            let path = PathBuf::from(p);
+            if path.is_relative() {
+                std::env::current_dir()
+                    .unwrap_or_else(|_| PathBuf::from("."))
+                    .join(path)
+            } else {
+                path
+            }
+        }
+    })
 }

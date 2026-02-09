@@ -13,6 +13,7 @@ use crate::error::{ProcError, Result};
 use crate::ui::{OutputFormat, Printer};
 use clap::Args;
 use dialoguer::Confirm;
+use std::path::PathBuf;
 
 /// Kill process(es)
 #[derive(Args, Debug)]
@@ -39,6 +40,14 @@ pub struct KillCommand {
     /// Send SIGTERM instead of SIGKILL (graceful)
     #[arg(long, short = 'g')]
     pub graceful: bool,
+
+    /// Filter by directory (defaults to current directory if no path given)
+    #[arg(long = "in", short = 'i', num_args = 0..=1, default_missing_value = ".")]
+    pub in_dir: Option<String>,
+
+    /// Filter by process name
+    #[arg(long = "by", short = 'b')]
+    pub by_name: Option<String>,
 }
 
 impl KillCommand {
@@ -54,12 +63,32 @@ impl KillCommand {
         // Parse comma-separated targets and resolve to processes
         // Use resolve_targets_excluding_self to avoid killing ourselves
         let targets = parse_targets(&self.target);
-        let (processes, not_found) = resolve_targets_excluding_self(&targets);
+        let (mut processes, not_found) = resolve_targets_excluding_self(&targets);
 
         // Warn about targets that weren't found
         for target in &not_found {
             printer.warning(&format!("Target not found: {}", target));
         }
+
+        // Apply --in and --by filters
+        let in_dir_filter = resolve_in_dir(&self.in_dir);
+        processes.retain(|p| {
+            if let Some(ref dir_path) = in_dir_filter {
+                if let Some(ref cwd) = p.cwd {
+                    if !PathBuf::from(cwd).starts_with(dir_path) {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            }
+            if let Some(ref name) = self.by_name {
+                if !p.name.to_lowercase().contains(&name.to_lowercase()) {
+                    return false;
+                }
+            }
+            true
+        });
 
         if processes.is_empty() {
             return Err(ProcError::ProcessNotFound(self.target.clone()));
@@ -147,4 +176,21 @@ impl KillCommand {
         }
         println!();
     }
+}
+
+fn resolve_in_dir(in_dir: &Option<String>) -> Option<PathBuf> {
+    in_dir.as_ref().map(|p| {
+        if p == "." {
+            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+        } else {
+            let path = PathBuf::from(p);
+            if path.is_relative() {
+                std::env::current_dir()
+                    .unwrap_or_else(|_| PathBuf::from("."))
+                    .join(path)
+            } else {
+                path
+            }
+        }
+    })
 }

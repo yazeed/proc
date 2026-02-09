@@ -6,17 +6,26 @@ The goal is not to accumulate features, but to cover the process and port manage
 
 See [PHILOSOPHY.md](PHILOSOPHY.md) for our full manifesto.
 
-## Current Release (v1.5.0)
+## Current Release (v1.6.0)
 
-The core commands are complete, with the Proc Query Language, shell completions, file lookup, and full CI/CD automation:
+The core commands are complete, with the Proc Query Language, shell completions, file lookup, consistent filtering, and full CI/CD automation:
 
 | Area | Commands | Status |
 |------|----------|--------|
 | Discovery | `on`, `for`, `by`, `in`, `ports`, `list`, `info`, `tree`, `stuck` | ✅ |
-| Lifecycle | `kill`, `stop`, `unstick` (all support multi-target) | ✅ |
+| Lifecycle | `kill`, `stop`, `unstick` (all support multi-target + filters) | ✅ |
 | Tooling | `completions`, `manpage` | ✅ |
 
-### v1.5.0 Highlights
+### v1.6.0 Highlights
+
+- **`--in` and `--by` everywhere**: All commands now support `--in` (directory) and `--by` (name) filters
+  - `proc kill node --in .` — Only kill node processes in current directory
+  - `proc stop node --by worker` — Only stop "worker" node processes
+  - `proc ports --by node --in .` — Ports from node processes in cwd
+  - `proc stuck --by node` — Only stuck node processes
+- **`proc ports`**: Renamed `--filter` to `--by` for consistency
+
+### v1.5.x Highlights
 
 - **`proc for <file>`**: Find processes by file path
   - `proc for ./script.py` — What's running this file?
@@ -44,7 +53,7 @@ The core commands are complete, with the Proc Query Language, shell completions,
 
 ## Planned
 
-### v1.6 — Watch
+### v1.7 — Watch
 
 Real-time monitoring for when you need to observe.
 

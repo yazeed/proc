@@ -132,7 +132,7 @@ All commands accept the same target syntax:
 
 ### Filters
 
-Filters can be combined with discovery commands:
+Filters can be combined with discovery and lifecycle commands:
 
 | Filter | Description |
 |--------|-------------|
@@ -175,6 +175,9 @@ proc list --min-cpu 10
 
 # Kill everything on ports 3000 and 8080
 proc kill :3000,:8080 -y
+
+# Kill only node processes in current directory
+proc kill node --in . --dry-run
 
 # Process tree filtered by CPU usage
 proc tree --min-cpu 5
