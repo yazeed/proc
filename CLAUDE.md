@@ -122,6 +122,17 @@ impl CmdCommand {
 - **JSON output**: All commands support `--json` for scripting
 - **Short flags**: `-y` (yes), `-j` (json), `-v` (verbose)
 
+### Shared Utilities
+
+Use the shared modules instead of writing local helpers:
+
+- **`crate::core::resolve_in_dir`** — resolves `--in` directory paths (handles `.`, relative, absolute)
+- **`crate::ui::format_duration`** — formats seconds as human-readable duration
+- **`crate::ui::truncate_string`** / **`truncate_path`** — truncates with `…`
+- **`crate::ui::colorize_status`** — colors process status strings
+- **`printer.print_confirmation(action, &processes)`** — unified `⚠` confirmation prompt
+- **`printer.print_action_result(action, &succeeded, &failed)`** — unified result summary for destructive commands
+
 ### Error Handling
 
 Use `ProcError` variants from `src/error.rs`. Return `Result<()>` from execute methods.
