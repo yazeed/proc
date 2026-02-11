@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-02-11
+
+### Added
+
+- **Terminal-adaptive tables**: Process and port tables now use `comfy-table` with `ContentArrangement::Dynamic` — tables adapt to terminal width automatically, no more overflow on 80-column terminals. Falls back to 120 chars when stdout is not a TTY
+- **New filters**:
+  - `--min-uptime <seconds>`: Filter by process uptime (on `list`, `by`, `in`, `for`, `tree`)
+  - `--parent <pid>`: Filter by parent PID (on `list`, `by`, `in`)
+  - `--range <start-end>`: Filter ports by range, e.g. `--range 3000-9000` (on `ports`)
+  - `--limit/-n`: Limit result count (on `ports`, `for`)
+  - `--sort/-s`: Sort results by cpu, mem, pid, or name (on `for`)
+  - `--dry-run`: Preview before killing stuck processes (on `stuck --kill`)
+- **Multi-target `proc list`**: Comma-separated names with PID deduplication
+  - `proc list node,python` — find both node and python processes
+- **`--verbose/-v`**: Added to `stop`, `tree`, and `unstick` (previously missing)
+- **Shared utility modules**: `src/core/filters.rs` and `src/ui/format.rs`
+- **Unified confirmation prompts**: `print_confirmation` and `print_action_result` in Printer
+
+### Changed
+
+- **`--json` short flag standardized**: All commands now use explicit `-j` (previously some used inferred short flags)
+- **`--in` flag on `on` and `for`**: Now supports `num_args = 0..=1` with `default_missing_value = "."` matching all other commands
+- **Confirmation prompts unified**: All destructive commands now use `⚠` icon consistently (stop previously used `!`)
+- **Philosophy criterion #5 updated**: Changed from "Is it something you'd use weekly?" to "Does it deepen proc's command of its domain?"
+
+### Removed
+
+- **Duplicated code**: Eliminated 12 copies of `resolve_in_dir`, 3 copies of `format_duration`, 3 copies of `truncate_string`, and inline `colorize_status` — all replaced by shared modules
+
 ## [1.6.0] - 2026-02-09
 
 ### Added
@@ -293,7 +322,9 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 
 ---
 
-[Unreleased]: https://github.com/yazeed/proc/compare/v1.5.1...HEAD
+[Unreleased]: https://github.com/yazeed/proc/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/yazeed/proc/compare/v1.6.0...v1.7.0
+[1.6.0]: https://github.com/yazeed/proc/compare/v1.5.1...v1.6.0
 [1.5.1]: https://github.com/yazeed/proc/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/yazeed/proc/compare/v1.4.2...v1.5.0
 [1.4.2]: https://github.com/yazeed/proc/compare/v1.4.1...v1.4.2

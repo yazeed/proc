@@ -8,7 +8,9 @@
 //!   proc tree --min-cpu 10 # Only processes using >10% CPU
 //!   proc tree 1234 -a      # Show ancestry (path UP to root)
 
-use crate::core::{parse_target, resolve_target, Process, ProcessStatus, TargetType};
+use crate::core::{
+    parse_target, resolve_in_dir, resolve_target, Process, ProcessStatus, TargetType,
+};
 use crate::error::Result;
 use crate::ui::{OutputFormat, Printer};
 use clap::Args;
@@ -27,8 +29,12 @@ pub struct TreeCommand {
     #[arg(long, short)]
     ancestors: bool,
 
+    /// Show verbose output
+    #[arg(long, short = 'v')]
+    verbose: bool,
+
     /// Output as JSON
-    #[arg(long, short)]
+    #[arg(long, short = 'j')]
     json: bool,
 
     /// Maximum depth to display
@@ -51,6 +57,10 @@ pub struct TreeCommand {
     #[arg(long)]
     status: Option<String>,
 
+    /// Only show processes running longer than this (seconds)
+    #[arg(long)]
+    min_uptime: Option<u64>,
+
     /// Filter by directory (defaults to current directory if no path given)
     #[arg(long = "in", short = 'i', num_args = 0..=1, default_missing_value = ".")]
     pub in_dir: Option<String>,
@@ -68,7 +78,7 @@ impl TreeCommand {
         } else {
             OutputFormat::Human
         };
-        let printer = Printer::new(format, false);
+        let printer = Printer::new(format, self.verbose);
 
         // Get all processes
         let all_processes = Process::find_all()?;
@@ -180,11 +190,27 @@ impl TreeCommand {
                     return false;
                 }
             }
+            if let Some(min_uptime) = self.min_uptime {
+                if let Some(start_time) = p.start_time {
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0);
+                    if now.saturating_sub(start_time) < min_uptime {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            }
             true
         };
 
         // Apply filters to target processes or find filtered roots
-        let has_filters = self.min_cpu.is_some() || self.min_mem.is_some() || self.status.is_some();
+        let has_filters = self.min_cpu.is_some()
+            || self.min_mem.is_some()
+            || self.status.is_some()
+            || self.min_uptime.is_some();
 
         if self.json {
             let tree_nodes = if self.target.is_some() {
@@ -565,21 +591,4 @@ struct TreeNode {
     memory_mb: f64,
     status: String,
     children: Vec<TreeNode>,
-}
-
-fn resolve_in_dir(in_dir: &Option<String>) -> Option<PathBuf> {
-    in_dir.as_ref().map(|p| {
-        if p == "." {
-            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-        } else {
-            let path = PathBuf::from(p);
-            if path.is_relative() {
-                std::env::current_dir()
-                    .unwrap_or_else(|_| PathBuf::from("."))
-                    .join(path)
-            } else {
-                path
-            }
-        }
-    })
 }

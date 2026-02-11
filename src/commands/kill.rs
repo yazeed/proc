@@ -8,7 +8,7 @@
 //!   proc kill :3000,1234,node   # Mixed targets (port + PID + name)
 //!   proc kill node --yes        # Skip confirmation
 
-use crate::core::{parse_targets, resolve_targets_excluding_self, Process};
+use crate::core::{parse_targets, resolve_in_dir, resolve_targets_excluding_self};
 use crate::error::{ProcError, Result};
 use crate::ui::{OutputFormat, Printer};
 use clap::Args;
@@ -107,7 +107,7 @@ impl KillCommand {
 
         // Confirm before killing (unless --yes)
         if !self.yes && !self.json {
-            self.print_confirmation_prompt(&processes);
+            printer.print_confirmation("kill", &processes);
 
             let confirmed = Confirm::new()
                 .with_prompt(format!(
@@ -153,44 +153,4 @@ impl KillCommand {
             )))
         }
     }
-
-    fn print_confirmation_prompt(&self, processes: &[Process]) {
-        use colored::*;
-
-        println!(
-            "\n{} Found {} process{} to kill:\n",
-            "⚠".yellow().bold(),
-            processes.len().to_string().cyan().bold(),
-            if processes.len() == 1 { "" } else { "es" }
-        );
-
-        for proc in processes {
-            println!(
-                "  {} {} [PID {}] - CPU: {:.1}%, MEM: {:.1}MB",
-                "→".bright_black(),
-                proc.name.white().bold(),
-                proc.pid.to_string().cyan(),
-                proc.cpu_percent,
-                proc.memory_mb
-            );
-        }
-        println!();
-    }
-}
-
-fn resolve_in_dir(in_dir: &Option<String>) -> Option<PathBuf> {
-    in_dir.as_ref().map(|p| {
-        if p == "." {
-            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-        } else {
-            let path = PathBuf::from(p);
-            if path.is_relative() {
-                std::env::current_dir()
-                    .unwrap_or_else(|_| PathBuf::from("."))
-                    .join(path)
-            } else {
-                path
-            }
-        }
-    })
 }

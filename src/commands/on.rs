@@ -8,9 +8,11 @@
 //!   proc on node --in .        # Node processes in cwd and their ports
 
 use crate::core::{
-    find_ports_for_pid, parse_target, parse_targets, resolve_target, PortInfo, Process, TargetType,
+    find_ports_for_pid, parse_target, parse_targets, resolve_in_dir, resolve_target, PortInfo,
+    Process, TargetType,
 };
 use crate::error::{ProcError, Result};
+use crate::ui::format_duration;
 use clap::Args;
 use colored::*;
 use serde::Serialize;
@@ -22,8 +24,8 @@ pub struct OnCommand {
     /// Target(s): :port, PID, or process name (comma-separated for multiple)
     pub target: String,
 
-    /// Filter by directory (for name targets)
-    #[arg(long = "in", short = 'i')]
+    /// Filter by directory (defaults to current directory if no path given)
+    #[arg(long = "in", short = 'i', num_args = 0..=1, default_missing_value = ".")]
     pub in_dir: Option<String>,
 
     /// Filter by process name
@@ -88,27 +90,9 @@ impl OnCommand {
         Ok(())
     }
 
-    /// Resolve --in filter path
-    fn resolve_in_dir(&self) -> Option<PathBuf> {
-        self.in_dir.as_ref().map(|p| {
-            if p == "." {
-                std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-            } else {
-                let path = PathBuf::from(p);
-                if path.is_relative() {
-                    std::env::current_dir()
-                        .unwrap_or_else(|_| PathBuf::from("."))
-                        .join(path)
-                } else {
-                    path
-                }
-            }
-        })
-    }
-
     /// Check if process matches --in filter
     fn matches_in_filter(&self, proc: &Process) -> bool {
-        if let Some(ref dir_path) = self.resolve_in_dir() {
+        if let Some(ref dir_path) = resolve_in_dir(&self.in_dir) {
             if let Some(ref proc_cwd) = proc.cwd {
                 let proc_path = PathBuf::from(proc_cwd);
                 proc_path.starts_with(dir_path)
@@ -340,18 +324,6 @@ impl OnCommand {
         }
 
         println!();
-    }
-}
-
-fn format_duration(secs: u64) -> String {
-    if secs < 60 {
-        format!("{}s", secs)
-    } else if secs < 3600 {
-        format!("{}m {}s", secs / 60, secs % 60)
-    } else if secs < 86400 {
-        format!("{}h {}m", secs / 3600, (secs % 3600) / 60)
-    } else {
-        format!("{}d {}h", secs / 86400, (secs % 86400) / 3600)
     }
 }
 

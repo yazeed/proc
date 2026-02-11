@@ -34,6 +34,14 @@ pub struct InCommand {
     #[arg(long)]
     pub status: Option<String>,
 
+    /// Only show processes running longer than this (seconds)
+    #[arg(long)]
+    pub min_uptime: Option<u64>,
+
+    /// Only show children of this parent PID
+    #[arg(long)]
+    pub parent: Option<u32>,
+
     /// Output as JSON
     #[arg(long, short = 'j')]
     pub json: bool,
@@ -132,6 +140,28 @@ impl InCommand {
                     _ => true,
                 };
                 if !status_match {
+                    return false;
+                }
+            }
+
+            // Uptime filter
+            if let Some(min_uptime) = self.min_uptime {
+                if let Some(start_time) = p.start_time {
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0);
+                    if now.saturating_sub(start_time) < min_uptime {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            }
+
+            // Parent PID filter
+            if let Some(ppid) = self.parent {
+                if p.parent_pid != Some(ppid) {
                     return false;
                 }
             }

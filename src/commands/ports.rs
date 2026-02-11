@@ -7,9 +7,9 @@
 //!   proc ports --local      # Only localhost ports (127.0.0.1)
 //!   proc ports -v           # Show with executable paths
 
-use crate::core::{PortInfo, Process};
+use crate::core::{resolve_in_dir, PortInfo, Process};
 use crate::error::Result;
-use crate::ui::{OutputFormat, Printer};
+use crate::ui::{truncate_string, OutputFormat, Printer};
 use clap::Args;
 use colored::*;
 use serde::Serialize;
@@ -46,6 +46,14 @@ pub struct PortsCommand {
     /// Sort by: port, pid, name
     #[arg(long, short = 's', default_value = "port")]
     pub sort: String,
+
+    /// Limit the number of results
+    #[arg(long, short = 'n')]
+    pub limit: Option<usize>,
+
+    /// Filter ports by range (e.g., 8000-9000)
+    #[arg(long, short = 'r')]
+    pub range: Option<String>,
 }
 
 impl PortsCommand {
@@ -93,6 +101,17 @@ impl PortsCommand {
             });
         }
 
+        // Filter by port range (e.g., "3000-9000")
+        if let Some(ref range) = self.range {
+            if let Some((start, end)) = range.split_once('-') {
+                if let (Ok(start), Ok(end)) =
+                    (start.trim().parse::<u16>(), end.trim().parse::<u16>())
+                {
+                    ports.retain(|p| p.port >= start && p.port <= end);
+                }
+            }
+        }
+
         // Sort ports
         match self.sort.to_lowercase().as_str() {
             "port" => ports.sort_by_key(|p| p.port),
@@ -103,6 +122,11 @@ impl PortsCommand {
                     .cmp(&b.process_name.to_lowercase())
             }),
             _ => ports.sort_by_key(|p| p.port),
+        }
+
+        // Apply limit if specified
+        if let Some(limit) = self.limit {
+            ports.truncate(limit);
         }
 
         // In verbose mode, fetch process info for paths
@@ -219,29 +243,4 @@ impl PortsCommand {
             ports: enriched,
         });
     }
-}
-
-fn truncate_string(s: &str, max_len: usize) -> String {
-    if s.len() <= max_len {
-        s.to_string()
-    } else {
-        format!("{}...", &s[..max_len.saturating_sub(3)])
-    }
-}
-
-fn resolve_in_dir(in_dir: &Option<String>) -> Option<PathBuf> {
-    in_dir.as_ref().map(|p| {
-        if p == "." {
-            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-        } else {
-            let path = PathBuf::from(p);
-            if path.is_relative() {
-                std::env::current_dir()
-                    .unwrap_or_else(|_| PathBuf::from("."))
-                    .join(path)
-            } else {
-                path
-            }
-        }
-    })
 }

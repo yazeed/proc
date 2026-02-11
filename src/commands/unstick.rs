@@ -16,9 +16,9 @@
 //!   proc unstick 1234      # Unstick PID 1234
 //!   proc unstick node      # Unstick stuck node processes
 
-use crate::core::{parse_targets, resolve_targets_excluding_self, Process};
+use crate::core::{parse_targets, resolve_in_dir, resolve_targets_excluding_self, Process};
 use crate::error::{ProcError, Result};
-use crate::ui::{OutputFormat, Printer};
+use crate::ui::{format_duration, OutputFormat, Printer};
 use clap::Args;
 use colored::*;
 use dialoguer::Confirm;
@@ -53,8 +53,12 @@ pub struct UnstickCommand {
     #[arg(long)]
     dry_run: bool,
 
+    /// Show verbose output
+    #[arg(long, short = 'v')]
+    verbose: bool,
+
     /// Output as JSON
-    #[arg(long, short)]
+    #[arg(long, short = 'j')]
     json: bool,
 
     /// Filter by directory (defaults to current directory if no path given)
@@ -83,7 +87,7 @@ impl UnstickCommand {
         } else {
             OutputFormat::Human
         };
-        let printer = Printer::new(format, false);
+        let printer = Printer::new(format, self.verbose);
 
         // Get processes to unstick
         let mut stuck = if let Some(ref target) = self.target {
@@ -487,18 +491,6 @@ impl UnstickCommand {
     }
 }
 
-fn format_duration(secs: u64) -> String {
-    if secs < 60 {
-        format!("{}s", secs)
-    } else if secs < 3600 {
-        format!("{}m", secs / 60)
-    } else if secs < 86400 {
-        format!("{}h {}m", secs / 3600, (secs % 3600) / 60)
-    } else {
-        format!("{}d {}h", secs / 86400, (secs % 86400) / 3600)
-    }
-}
-
 #[derive(Serialize)]
 struct UnstickOutput {
     action: &'static str,
@@ -519,21 +511,4 @@ struct ProcessOutcome {
     pid: u32,
     name: String,
     outcome: String,
-}
-
-fn resolve_in_dir(in_dir: &Option<String>) -> Option<PathBuf> {
-    in_dir.as_ref().map(|p| {
-        if p == "." {
-            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-        } else {
-            let path = PathBuf::from(p);
-            if path.is_relative() {
-                std::env::current_dir()
-                    .unwrap_or_else(|_| PathBuf::from("."))
-                    .join(path)
-            } else {
-                path
-            }
-        }
-    })
 }

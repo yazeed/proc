@@ -1,6 +1,6 @@
 [package]
 name = "proc-cli"
-version = "1.6.0"
+version = "1.7.0"
 edition = "2021"
 authors = ["Yazeed Al Oyoun <me@yazeed.com>"]
 description = "A semantic CLI tool for process management"
@@ -24,6 +24,8 @@ clap_mangen = "0.2"
 
 # Output & Formatting
 colored = "3.1"
+comfy-table = "7.2"
+crossterm = "0.29"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 

@@ -6,15 +6,30 @@ The goal is not to accumulate features, but to cover the process and port manage
 
 See [PHILOSOPHY.md](PHILOSOPHY.md) for our full manifesto.
 
-## Current Release (v1.6.0)
+## Current Release (v1.7.0)
 
-The core commands are complete, with the Proc Query Language, shell completions, file lookup, consistent filtering, and full CI/CD automation:
+The core commands are complete, with the Proc Query Language, shell completions, file lookup, consistent filtering, terminal-adaptive tables, and full CI/CD automation:
 
 | Area | Commands | Status |
 |------|----------|--------|
 | Discovery | `on`, `for`, `by`, `in`, `ports`, `list`, `info`, `tree`, `stuck` | ✅ |
 | Lifecycle | `kill`, `stop`, `unstick` (all support multi-target + filters) | ✅ |
 | Tooling | `completions`, `manpage` | ✅ |
+
+### v1.7.0 Highlights
+
+- **Terminal-adaptive tables**: Process and port tables now adapt to terminal width using `comfy-table`, no more overflow on 80-column terminals
+- **Deduplication**: Extracted shared utilities (`resolve_in_dir`, `format_duration`, `truncate_string`, `colorize_status`) — 12 duplicate copies eliminated
+- **Flag consistency**: `--verbose`/`-v` added to `stop`, `tree`, `unstick`; `--json` short flag standardized to `-j` across all commands; `--in` defaults fixed on `on` and `for`
+- **New filters**:
+  - `--min-uptime` on `list`, `by`, `in`, `for`, `tree` — filter by process uptime
+  - `--parent` on `list`, `by`, `in` — filter by parent PID
+  - `--range` on `ports` — filter by port range (e.g., `3000-9000`)
+  - `--limit` on `ports` and `for` — cap result count
+  - `--sort` on `for` — sort by cpu, mem, pid, name
+  - `--dry-run` on `stuck --kill` — preview before killing
+- **Multi-target `proc list`**: `proc list node,python` — comma-separated names, deduplicated
+- **Unified confirmation prompts**: All destructive commands use consistent `⚠` icon
 
 ### v1.6.0 Highlights
 
@@ -53,7 +68,7 @@ The core commands are complete, with the Proc Query Language, shell completions,
 
 ## Planned
 
-### v1.7 — Watch
+### v1.8 — Watch
 
 Real-time monitoring for when you need to observe.
 
@@ -99,9 +114,9 @@ proc thaw :3000       # Resume frozen process
 - Freeze long-running transfers (rsync) to free disk space, then resume
 - Pause a process to attach debugger or investigate
 
-**Philosophy check:** ✅ Fits process management, ✅ obvious commands, ✅ explicit intent, ⚠️ niche (monthly, not weekly use).
+**Philosophy check:** ✅ Fits process management, ✅ obvious commands, ✅ explicit intent, ✅ deepens domain mastery (pause/resume completes the process lifecycle).
 
-**Status:** Useful but niche. Would consider if there's user demand.
+**Status:** Strong candidate. Completes the process lifecycle alongside kill/stop/unstick.
 
 ### Quiet Mode
 

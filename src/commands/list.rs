@@ -7,7 +7,7 @@
 //!   proc list --in /project    # Processes in /project
 //!   proc list --min-cpu 10     # Processes using >10% CPU
 
-use crate::core::{Process, ProcessStatus};
+use crate::core::{resolve_in_dir, Process, ProcessStatus};
 use crate::error::Result;
 use crate::ui::{OutputFormat, Printer};
 use clap::Args;
@@ -39,6 +39,14 @@ pub struct ListCommand {
     #[arg(long)]
     pub status: Option<String>,
 
+    /// Only show processes running longer than this (seconds)
+    #[arg(long)]
+    pub min_uptime: Option<u64>,
+
+    /// Only show children of this parent PID
+    #[arg(long)]
+    pub parent: Option<u32>,
+
     /// Output as JSON
     #[arg(long, short = 'j')]
     pub json: bool,
@@ -66,28 +74,31 @@ impl ListCommand {
         };
         let printer = Printer::new(format, self.verbose);
 
-        // Get base process list
+        // Get base process list (supports comma-separated names)
         let mut processes = if let Some(ref name) = self.name {
-            Process::find_by_name(name)?
+            let names: Vec<String> = name
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            let mut all = Vec::new();
+            let mut seen = std::collections::HashSet::new();
+            for n in &names {
+                if let Ok(found) = Process::find_by_name(n) {
+                    for p in found {
+                        if seen.insert(p.pid) {
+                            all.push(p);
+                        }
+                    }
+                }
+            }
+            all
         } else {
             Process::find_all()?
         };
 
         // Resolve --in filter path
-        let in_dir_filter: Option<PathBuf> = self.in_dir.as_ref().map(|p| {
-            if p == "." {
-                std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-            } else {
-                let path = PathBuf::from(p);
-                if path.is_relative() {
-                    std::env::current_dir()
-                        .unwrap_or_else(|_| PathBuf::from("."))
-                        .join(path)
-                } else {
-                    path
-                }
-            }
-        });
+        let in_dir_filter = resolve_in_dir(&self.in_dir);
 
         // Resolve path filter
         let path_filter: Option<PathBuf> = self.path.as_ref().map(|p| {
@@ -151,6 +162,28 @@ impl ListCommand {
                     _ => true,
                 };
                 if !status_match {
+                    return false;
+                }
+            }
+
+            // Uptime filter
+            if let Some(min_uptime) = self.min_uptime {
+                if let Some(start_time) = p.start_time {
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0);
+                    if now.saturating_sub(start_time) < min_uptime {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            }
+
+            // Parent PID filter
+            if let Some(ppid) = self.parent {
+                if p.parent_pid != Some(ppid) {
                     return false;
                 }
             }

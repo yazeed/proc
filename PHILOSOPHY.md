@@ -68,8 +68,8 @@ Before any feature enters proc, it must pass all six questions:
 4. **Is user intent explicit?**
    Destructive operations need confirmation. Ambiguous inputs need clarification.
 
-5. **Is it something you'd use weekly?**
-   Occasional needs can use existing tools. proc is for repeated friction.
+5. **Does it deepen proc's command of its domain?**
+   Robust tools handle the case you didn't expect to need. Sophistication is completeness without complexity.
 
 6. **Does it follow our conventions?**
    Unified targets, natural grammar, consistent output. No exceptions.

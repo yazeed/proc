@@ -5,7 +5,7 @@
 //!   proc stuck --timeout 60 # Find processes stuck > 1 minute
 //!   proc stuck --kill       # Find and kill stuck processes
 
-use crate::core::Process;
+use crate::core::{resolve_in_dir, Process};
 use crate::error::Result;
 use crate::ui::{OutputFormat, Printer};
 use clap::Args;
@@ -23,6 +23,10 @@ pub struct StuckCommand {
     /// Kill found stuck processes
     #[arg(long, short = 'k')]
     pub kill: bool,
+
+    /// Show what would be killed without actually killing
+    #[arg(long)]
+    pub dry_run: bool,
 
     /// Skip confirmation when killing
     #[arg(long, short = 'y')]
@@ -93,6 +97,17 @@ impl StuckCommand {
         ));
         printer.print_processes(&processes);
 
+        // Dry run: show what would be killed
+        if self.kill && self.dry_run {
+            printer.print_processes(&processes);
+            printer.warning(&format!(
+                "Dry run: would kill {} stuck process{}",
+                processes.len(),
+                if processes.len() == 1 { "" } else { "es" }
+            ));
+            return Ok(());
+        }
+
         // Kill if requested
         if self.kill {
             if !self.yes && !self.json {
@@ -128,21 +143,4 @@ impl StuckCommand {
 
         Ok(())
     }
-}
-
-fn resolve_in_dir(in_dir: &Option<String>) -> Option<PathBuf> {
-    in_dir.as_ref().map(|p| {
-        if p == "." {
-            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-        } else {
-            let path = PathBuf::from(p);
-            if path.is_relative() {
-                std::env::current_dir()
-                    .unwrap_or_else(|_| PathBuf::from("."))
-                    .join(path)
-            } else {
-                path
-            }
-        }
-    })
 }

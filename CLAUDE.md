@@ -40,11 +40,13 @@ src/
 │   └── unstick.rs    # proc unstick
 ├── core/             # Shared logic
 │   ├── mod.rs        # Exports
+│   ├── filters.rs    # Shared filter utilities (resolve_in_dir)
 │   ├── target.rs     # Target parsing (:port, PID, name) and resolution
 │   ├── process.rs    # Process operations
 │   └── port.rs       # Port operations
 └── ui/               # Output formatting
     ├── mod.rs
+    ├── format.rs     # Shared formatting (format_duration, truncate_*, colorize_status)
     └── output.rs     # Printer, OutputFormat (Human/Json)
 ```
 
@@ -161,7 +163,7 @@ See `PHILOSOPHY.md` for the full manifesto.
 2. Can it be expressed in one obvious command?
 3. Does it make the common case effortless?
 4. Is user intent explicit?
-5. Is it something you'd use weekly?
+5. Does it deepen proc's command of its domain?
 6. Does it follow our conventions?
 
 **Out of scope:** Service management, containers, remote processes, GUIs, historical data.

@@ -140,7 +140,12 @@ Filters can be combined with discovery and lifecycle commands:
 | `--by <name>` | Filter by process name |
 | `--min-cpu <n>` | Processes using >n% CPU |
 | `--min-mem <n>` | Processes using >n MB memory |
+| `--min-uptime <s>` | Processes running longer than s seconds |
+| `--parent <pid>` | Children of a specific parent PID |
 | `--status <s>` | Filter by status: running, sleeping, stopped, zombie |
+| `--range <s-e>` | Filter ports by range (e.g., `3000-9000`) |
+| `--sort/-s <key>` | Sort by: cpu, mem, pid, name |
+| `--limit/-n <n>` | Limit number of results |
 
 ### Options
 

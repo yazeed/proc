@@ -7,12 +7,11 @@
 //!   proc stop :3000,:8080       # Stop multiple targets
 //!   proc stop :3000,1234,node   # Mixed targets (port + PID + name)
 
-use crate::core::{parse_targets, resolve_targets_excluding_self, Process};
+use crate::core::{parse_targets, resolve_in_dir, resolve_targets_excluding_self, Process};
 use crate::error::{ProcError, Result};
 use crate::ui::{OutputFormat, Printer};
 use clap::Args;
 use dialoguer::Confirm;
-use serde::Serialize;
 use std::path::PathBuf;
 
 /// Stop process(es) gracefully with SIGTERM
@@ -31,8 +30,12 @@ pub struct StopCommand {
     dry_run: bool,
 
     /// Output as JSON
-    #[arg(long, short)]
+    #[arg(long, short = 'j')]
     json: bool,
+
+    /// Show verbose output
+    #[arg(long, short = 'v')]
+    verbose: bool,
 
     /// Timeout in seconds to wait before force kill
     #[arg(long, short, default_value = "10")]
@@ -55,7 +58,7 @@ impl StopCommand {
         } else {
             OutputFormat::Human
         };
-        let printer = Printer::new(format, false);
+        let printer = Printer::new(format, self.verbose);
 
         // Parse comma-separated targets and resolve to processes
         // Use resolve_targets_excluding_self to avoid stopping ourselves
@@ -104,7 +107,7 @@ impl StopCommand {
 
         // Confirm if not --yes
         if !self.yes && !self.json {
-            self.show_processes(&processes);
+            printer.print_confirmation("stop", &processes);
 
             let prompt = format!(
                 "Stop {} process{}?",
@@ -146,24 +149,7 @@ impl StopCommand {
         }
 
         // Output results
-        if self.json {
-            printer.print_json(&StopOutput {
-                action: "stop",
-                success: failed.is_empty(),
-                stopped_count: stopped.len(),
-                failed_count: failed.len(),
-                stopped: &stopped,
-                failed: &failed
-                    .iter()
-                    .map(|(p, e)| FailedStop {
-                        process: p,
-                        error: e,
-                    })
-                    .collect::<Vec<_>>(),
-            });
-        } else {
-            self.print_results(&printer, &stopped, &failed);
-        }
+        printer.print_action_result("Stopped", &stopped, &failed);
 
         Ok(())
     }
@@ -181,98 +167,4 @@ impl StopCommand {
 
         false
     }
-
-    fn show_processes(&self, processes: &[Process]) {
-        use colored::*;
-
-        println!(
-            "\n{} Found {} process{}:\n",
-            "!".yellow().bold(),
-            processes.len().to_string().cyan().bold(),
-            if processes.len() == 1 { "" } else { "es" }
-        );
-
-        for proc in processes {
-            println!(
-                "  {} {} [PID {}] - {:.1}% CPU, {:.1} MB",
-                "→".bright_black(),
-                proc.name.white().bold(),
-                proc.pid.to_string().cyan(),
-                proc.cpu_percent,
-                proc.memory_mb
-            );
-        }
-        println!();
-    }
-
-    fn print_results(&self, printer: &Printer, stopped: &[Process], failed: &[(Process, String)]) {
-        use colored::*;
-
-        if !stopped.is_empty() {
-            println!(
-                "{} Stopped {} process{}",
-                "✓".green().bold(),
-                stopped.len().to_string().cyan().bold(),
-                if stopped.len() == 1 { "" } else { "es" }
-            );
-            for proc in stopped {
-                println!(
-                    "  {} {} [PID {}]",
-                    "→".bright_black(),
-                    proc.name.white(),
-                    proc.pid.to_string().cyan()
-                );
-            }
-        }
-
-        if !failed.is_empty() {
-            printer.error(&format!(
-                "Failed to stop {} process{}",
-                failed.len(),
-                if failed.len() == 1 { "" } else { "es" }
-            ));
-            for (proc, err) in failed {
-                println!(
-                    "  {} {} [PID {}]: {}",
-                    "→".bright_black(),
-                    proc.name.white(),
-                    proc.pid.to_string().cyan(),
-                    err.red()
-                );
-            }
-        }
-    }
-}
-
-#[derive(Serialize)]
-struct StopOutput<'a> {
-    action: &'static str,
-    success: bool,
-    stopped_count: usize,
-    failed_count: usize,
-    stopped: &'a [Process],
-    failed: &'a [FailedStop<'a>],
-}
-
-#[derive(Serialize)]
-struct FailedStop<'a> {
-    process: &'a Process,
-    error: &'a str,
-}
-
-fn resolve_in_dir(in_dir: &Option<String>) -> Option<PathBuf> {
-    in_dir.as_ref().map(|p| {
-        if p == "." {
-            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-        } else {
-            let path = PathBuf::from(p);
-            if path.is_relative() {
-                std::env::current_dir()
-                    .unwrap_or_else(|_| PathBuf::from("."))
-                    .join(path)
-            } else {
-                path
-            }
-        }
-    })
 }

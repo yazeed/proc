@@ -7,9 +7,9 @@
 //!   proc info :3000,:8080       # Info for multiple targets
 //!   proc info :3000,1234,node   # Mixed targets (port + PID + name)
 
-use crate::core::{parse_targets, resolve_target, Process, ProcessStatus};
+use crate::core::{parse_targets, resolve_in_dir, resolve_target, Process};
 use crate::error::Result;
-use crate::ui::{OutputFormat, Printer};
+use crate::ui::{colorize_status, format_duration, OutputFormat, Printer};
 use clap::Args;
 use colored::*;
 use serde::Serialize;
@@ -23,11 +23,11 @@ pub struct InfoCommand {
     targets: Vec<String>,
 
     /// Output as JSON
-    #[arg(long, short)]
+    #[arg(long, short = 'j')]
     json: bool,
 
     /// Show extra details
-    #[arg(long, short)]
+    #[arg(long, short = 'v')]
     verbose: bool,
 
     /// Filter by directory (defaults to current directory if no path given)
@@ -149,13 +149,7 @@ impl InfoCommand {
         }
 
         let status_str = format!("{:?}", proc.status);
-        let status_colored = match proc.status {
-            ProcessStatus::Running => status_str.green(),
-            ProcessStatus::Sleeping => status_str.blue(),
-            ProcessStatus::Stopped => status_str.yellow(),
-            ProcessStatus::Zombie => status_str.red(),
-            _ => status_str.white(),
-        };
+        let status_colored = colorize_status(&proc.status, &status_str);
         println!("  {} {}", "Status:".bright_black(), status_colored);
 
         println!("  {} {:.1}%", "CPU:".bright_black(), proc.cpu_percent);
@@ -181,18 +175,6 @@ impl InfoCommand {
     }
 }
 
-fn format_duration(secs: u64) -> String {
-    if secs < 60 {
-        format!("{}s", secs)
-    } else if secs < 3600 {
-        format!("{}m {}s", secs / 60, secs % 60)
-    } else if secs < 86400 {
-        format!("{}h {}m", secs / 3600, (secs % 3600) / 60)
-    } else {
-        format!("{}d {}h", secs / 86400, (secs % 86400) / 3600)
-    }
-}
-
 #[derive(Serialize)]
 struct InfoOutput<'a> {
     action: &'static str,
@@ -201,21 +183,4 @@ struct InfoOutput<'a> {
     not_found_count: usize,
     processes: &'a [Process],
     not_found: &'a [String],
-}
-
-fn resolve_in_dir(in_dir: &Option<String>) -> Option<PathBuf> {
-    in_dir.as_ref().map(|p| {
-        if p == "." {
-            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-        } else {
-            let path = PathBuf::from(p);
-            if path.is_relative() {
-                std::env::current_dir()
-                    .unwrap_or_else(|_| PathBuf::from("."))
-                    .join(path)
-            } else {
-                path
-            }
-        }
-    })
 }

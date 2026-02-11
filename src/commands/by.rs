@@ -6,7 +6,7 @@
 //!   proc by node --min-cpu 5   # Node processes using >5% CPU
 //!   proc by "my app"           # Processes with spaces in name
 
-use crate::core::{Process, ProcessStatus};
+use crate::core::{resolve_in_dir, Process, ProcessStatus};
 use crate::error::Result;
 use crate::ui::{OutputFormat, Printer};
 use clap::Args;
@@ -33,6 +33,14 @@ pub struct ByCommand {
     /// Filter by status: running, sleeping, stopped, zombie
     #[arg(long)]
     pub status: Option<String>,
+
+    /// Only show processes running longer than this (seconds)
+    #[arg(long)]
+    pub min_uptime: Option<u64>,
+
+    /// Only show children of this parent PID
+    #[arg(long)]
+    pub parent: Option<u32>,
 
     /// Output as JSON
     #[arg(long, short = 'j')]
@@ -65,20 +73,7 @@ impl ByCommand {
         let mut processes = Process::find_by_name(&self.name)?;
 
         // Resolve --in filter path
-        let in_dir_filter: Option<PathBuf> = self.in_dir.as_ref().map(|p| {
-            if p == "." {
-                std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-            } else {
-                let path = PathBuf::from(p);
-                if path.is_relative() {
-                    std::env::current_dir()
-                        .unwrap_or_else(|_| PathBuf::from("."))
-                        .join(path)
-                } else {
-                    path
-                }
-            }
-        });
+        let in_dir_filter = resolve_in_dir(&self.in_dir);
 
         // Apply filters
         processes.retain(|p| {
@@ -118,6 +113,28 @@ impl ByCommand {
                     _ => true,
                 };
                 if !status_match {
+                    return false;
+                }
+            }
+
+            // Uptime filter
+            if let Some(min_uptime) = self.min_uptime {
+                if let Some(start_time) = p.start_time {
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0);
+                    if now.saturating_sub(start_time) < min_uptime {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            }
+
+            // Parent PID filter
+            if let Some(ppid) = self.parent {
+                if p.parent_pid != Some(ppid) {
                     return false;
                 }
             }

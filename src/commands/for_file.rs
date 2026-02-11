@@ -6,8 +6,9 @@
 //!   proc for /var/log/app.log    # What has this file open?
 //!   proc for ~/bin/myapp         # Tilde expansion
 
-use crate::core::{find_ports_for_pid, PortInfo, Process, ProcessStatus};
+use crate::core::{find_ports_for_pid, resolve_in_dir, PortInfo, Process, ProcessStatus};
 use crate::error::{ProcError, Result};
+use crate::ui::truncate_string;
 use clap::Args;
 use colored::*;
 use serde::Serialize;
@@ -20,8 +21,8 @@ pub struct ForCommand {
     /// File path (relative, absolute, or with ~)
     pub file: String,
 
-    /// Filter by working directory
-    #[arg(long = "in", short = 'i')]
+    /// Filter by working directory (defaults to current directory if no path given)
+    #[arg(long = "in", short = 'i', num_args = 0..=1, default_missing_value = ".")]
     pub in_dir: Option<String>,
 
     /// Filter by process name
@@ -40,6 +41,10 @@ pub struct ForCommand {
     #[arg(long)]
     pub status: Option<String>,
 
+    /// Only show processes running longer than this (seconds)
+    #[arg(long)]
+    pub min_uptime: Option<u64>,
+
     /// Output as JSON
     #[arg(long, short = 'j')]
     pub json: bool,
@@ -47,6 +52,14 @@ pub struct ForCommand {
     /// Show verbose output
     #[arg(long, short = 'v')]
     pub verbose: bool,
+
+    /// Sort by: cpu, mem, pid, name
+    #[arg(long, short = 's', default_value = "cpu")]
+    pub sort: String,
+
+    /// Limit the number of results
+    #[arg(long, short = 'n')]
+    pub limit: Option<usize>,
 }
 
 impl ForCommand {
@@ -80,7 +93,29 @@ impl ForCommand {
         // 5. Apply filters
         self.apply_filters(&mut processes);
 
-        // 6. Handle no results
+        // 6. Sort processes
+        match self.sort.to_lowercase().as_str() {
+            "cpu" => processes.sort_by(|a, b| {
+                b.cpu_percent
+                    .partial_cmp(&a.cpu_percent)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            }),
+            "mem" | "memory" => processes.sort_by(|a, b| {
+                b.memory_mb
+                    .partial_cmp(&a.memory_mb)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            }),
+            "pid" => processes.sort_by_key(|p| p.pid),
+            "name" => processes.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase())),
+            _ => {}
+        }
+
+        // 7. Apply limit if specified
+        if let Some(limit) = self.limit {
+            processes.truncate(limit);
+        }
+
+        // 8. Handle no results
         if processes.is_empty() {
             return Err(ProcError::ProcessNotFound(format!(
                 "No processes found for file: {}",
@@ -88,14 +123,14 @@ impl ForCommand {
             )));
         }
 
-        // 7. For each process, get ports
+        // 9. For each process, get ports
         let mut results: Vec<(Process, Vec<PortInfo>)> = Vec::new();
         for proc in processes {
             let ports = find_ports_for_pid(proc.pid)?;
             results.push((proc, ports));
         }
 
-        // 8. Output
+        // 10. Output
         if self.json {
             self.print_json(&results)?;
         } else {
@@ -133,21 +168,7 @@ impl ForCommand {
     }
 
     fn apply_filters(&self, processes: &mut Vec<Process>) {
-        // Directory filter (--in)
-        let in_dir_filter: Option<PathBuf> = self.in_dir.as_ref().map(|p| {
-            if p == "." {
-                std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-            } else {
-                let path = Self::expand_tilde(p);
-                if path.is_relative() {
-                    std::env::current_dir()
-                        .unwrap_or_else(|_| PathBuf::from("."))
-                        .join(path)
-                } else {
-                    path
-                }
-            }
-        });
+        let in_dir_filter = resolve_in_dir(&self.in_dir);
 
         processes.retain(|p| {
             // Directory filter (--in)
@@ -198,21 +219,23 @@ impl ForCommand {
                 }
             }
 
+            // Uptime filter
+            if let Some(min_uptime) = self.min_uptime {
+                if let Some(start_time) = p.start_time {
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0);
+                    if now.saturating_sub(start_time) < min_uptime {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            }
+
             true
         });
-    }
-
-    fn expand_tilde(path: &str) -> PathBuf {
-        if let Some(stripped) = path.strip_prefix("~/") {
-            if let Ok(home) = std::env::var("HOME") {
-                return PathBuf::from(home).join(stripped);
-            }
-        } else if path == "~" {
-            if let Ok(home) = std::env::var("HOME") {
-                return PathBuf::from(home);
-            }
-        }
-        PathBuf::from(path)
     }
 
     fn print_human(&self, results: &[(Process, Vec<PortInfo>)]) {
@@ -305,7 +328,7 @@ impl ForCommand {
                 println!(
                     "  {:>7}  {:<15}  {:>5.1}  {:>6.1}MB  {}",
                     proc.pid.to_string().cyan(),
-                    truncate(&proc.name, 15).white(),
+                    truncate_string(&proc.name, 15).white(),
                     proc.cpu_percent,
                     proc.memory_mb,
                     ports_str
@@ -327,14 +350,6 @@ impl ForCommand {
 
         println!("{}", serde_json::to_string_pretty(&output)?);
         Ok(())
-    }
-}
-
-fn truncate(s: &str, max_len: usize) -> String {
-    if s.len() <= max_len {
-        s.to_string()
-    } else {
-        format!("{}…", &s[..max_len - 1])
     }
 }
 

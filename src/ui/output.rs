@@ -3,7 +3,10 @@
 //! Provides colored terminal output and JSON formatting.
 
 use crate::core::{PortInfo, Process};
+use crate::ui::format::{colorize_status, truncate_path, truncate_string};
 use colored::*;
+use comfy_table::presets::NOTHING;
+use comfy_table::{Attribute, Cell, CellAlignment, Color, ContentArrangement, Table};
 use serde::Serialize;
 
 /// Output format selection
@@ -20,6 +23,11 @@ pub enum OutputFormat {
 pub struct Printer {
     format: OutputFormat,
     verbose: bool,
+}
+
+/// Detect terminal width, falling back to 120 when stdout is not a TTY.
+fn terminal_width() -> u16 {
+    crossterm::terminal::size().map(|(w, _)| w).unwrap_or(120)
 }
 
 impl Printer {
@@ -137,23 +145,73 @@ impl Printer {
                 println!();
             }
         } else {
-            // Normal: compact table with all key columns
-            println!(
-                "{:<7} {:<20} {:<12} {:<35} {:>5} {:>8} {:>8}",
-                "PID".bright_blue().bold(),
-                "PATH".bright_blue().bold(),
-                "NAME".bright_blue().bold(),
-                "ARGS".bright_blue().bold(),
-                "CPU%".bright_blue().bold(),
-                "MEM".bright_blue().bold(),
-                "STATUS".bright_blue().bold(),
-            );
-            println!("{}", "─".repeat(100).bright_black());
+            let width = terminal_width();
+
+            let mut table = Table::new();
+            table
+                .load_preset(NOTHING)
+                .set_content_arrangement(ContentArrangement::Dynamic)
+                .set_width(width);
+
+            // Header
+            table.set_header(vec![
+                Cell::new("PID")
+                    .fg(Color::Blue)
+                    .add_attribute(Attribute::Bold),
+                Cell::new("PATH")
+                    .fg(Color::Blue)
+                    .add_attribute(Attribute::Bold),
+                Cell::new("NAME")
+                    .fg(Color::Blue)
+                    .add_attribute(Attribute::Bold),
+                Cell::new("ARGS")
+                    .fg(Color::Blue)
+                    .add_attribute(Attribute::Bold),
+                Cell::new("CPU%")
+                    .fg(Color::Blue)
+                    .add_attribute(Attribute::Bold)
+                    .set_alignment(CellAlignment::Right),
+                Cell::new("MEM")
+                    .fg(Color::Blue)
+                    .add_attribute(Attribute::Bold)
+                    .set_alignment(CellAlignment::Right),
+                Cell::new("STATUS")
+                    .fg(Color::Blue)
+                    .add_attribute(Attribute::Bold)
+                    .set_alignment(CellAlignment::Right),
+            ]);
+
+            // Set fixed-width columns and flexible ones
+            use comfy_table::ColumnConstraint::*;
+            use comfy_table::Width::*;
+            table
+                .column_mut(0)
+                .expect("PID column")
+                .set_constraint(Absolute(Fixed(7)));
+            table
+                .column_mut(1)
+                .expect("PATH column")
+                .set_constraint(LowerBoundary(Fixed(10)));
+            table
+                .column_mut(2)
+                .expect("NAME column")
+                .set_constraint(LowerBoundary(Fixed(10)));
+            // ARGS column is flexible — gets remaining space
+            table
+                .column_mut(4)
+                .expect("CPU% column")
+                .set_constraint(Absolute(Fixed(6)));
+            table
+                .column_mut(5)
+                .expect("MEM column")
+                .set_constraint(Absolute(Fixed(9)));
+            table
+                .column_mut(6)
+                .expect("STATUS column")
+                .set_constraint(Absolute(Fixed(8)));
 
             for proc in processes {
-                let name = truncate_string(&proc.name, 11);
                 let status_str = format!("{:?}", proc.status);
-                let status_colored = colorize_status(&proc.status, &status_str);
 
                 // Show directory of executable
                 let path_display = proc
@@ -172,15 +230,12 @@ impl Printer {
                     .command
                     .as_ref()
                     .map(|c| {
-                        // Skip the first element (executable) to show just the args
                         let parts: Vec<&str> = c.split_whitespace().collect();
                         if parts.len() > 1 {
-                            // Simplify paths to just filenames where possible
                             let args: Vec<String> = parts[1..]
                                 .iter()
                                 .map(|arg| {
                                     if arg.contains('/') && !arg.starts_with('-') {
-                                        // It's a path - extract filename
                                         std::path::Path::new(arg)
                                             .file_name()
                                             .map(|f| f.to_string_lossy().to_string())
@@ -190,24 +245,38 @@ impl Printer {
                                     }
                                 })
                                 .collect();
-                            truncate_string(&args.join(" "), 34)
+                            args.join(" ")
                         } else {
-                            truncate_string(c, 34)
+                            c.clone()
                         }
                     })
                     .unwrap_or_else(|| "-".to_string());
 
-                println!(
-                    "{:<7} {:<20} {:<12} {:<35} {:>5.1} {:>6.1}MB {:>8}",
-                    proc.pid.to_string().cyan(),
-                    path_display.bright_black(),
-                    name.white(),
-                    cmd_display.bright_black(),
-                    proc.cpu_percent,
-                    proc.memory_mb,
-                    status_colored,
-                );
+                let mem_display = format!("{:.1}MB", proc.memory_mb);
+
+                let status_color = match proc.status {
+                    crate::core::ProcessStatus::Running => Color::Green,
+                    crate::core::ProcessStatus::Sleeping => Color::Blue,
+                    crate::core::ProcessStatus::Stopped => Color::Yellow,
+                    crate::core::ProcessStatus::Zombie => Color::Red,
+                    _ => Color::White,
+                };
+
+                table.add_row(vec![
+                    Cell::new(proc.pid).fg(Color::Cyan),
+                    Cell::new(&path_display).fg(Color::DarkGrey),
+                    Cell::new(&proc.name).fg(Color::White),
+                    Cell::new(&cmd_display).fg(Color::DarkGrey),
+                    Cell::new(format!("{:.1}", proc.cpu_percent))
+                        .set_alignment(CellAlignment::Right),
+                    Cell::new(&mem_display).set_alignment(CellAlignment::Right),
+                    Cell::new(&status_str)
+                        .fg(status_color)
+                        .set_alignment(CellAlignment::Right),
+                ]);
             }
+
+            println!("{table}");
         }
         println!();
     }
@@ -239,30 +308,69 @@ impl Printer {
         );
         println!();
 
-        // Header
-        println!(
-            "{:<8} {:<10} {:<8} {:<20} {:<15}",
-            "PORT".bright_blue().bold(),
-            "PROTO".bright_blue().bold(),
-            "PID".bright_blue().bold(),
-            "PROCESS".bright_blue().bold(),
-            "ADDRESS".bright_blue().bold()
-        );
-        println!("{}", "─".repeat(65).bright_black());
+        let width = terminal_width();
+
+        let mut table = Table::new();
+        table
+            .load_preset(NOTHING)
+            .set_content_arrangement(ContentArrangement::Dynamic)
+            .set_width(width);
+
+        table.set_header(vec![
+            Cell::new("PORT")
+                .fg(Color::Blue)
+                .add_attribute(Attribute::Bold),
+            Cell::new("PROTO")
+                .fg(Color::Blue)
+                .add_attribute(Attribute::Bold),
+            Cell::new("PID")
+                .fg(Color::Blue)
+                .add_attribute(Attribute::Bold),
+            Cell::new("PROCESS")
+                .fg(Color::Blue)
+                .add_attribute(Attribute::Bold),
+            Cell::new("ADDRESS")
+                .fg(Color::Blue)
+                .add_attribute(Attribute::Bold),
+        ]);
+
+        use comfy_table::ColumnConstraint::*;
+        use comfy_table::Width::*;
+        table
+            .column_mut(0)
+            .expect("PORT column")
+            .set_constraint(Absolute(Fixed(8)));
+        table
+            .column_mut(1)
+            .expect("PROTO column")
+            .set_constraint(Absolute(Fixed(6)));
+        table
+            .column_mut(2)
+            .expect("PID column")
+            .set_constraint(Absolute(Fixed(8)));
+        table
+            .column_mut(3)
+            .expect("PROCESS column")
+            .set_constraint(LowerBoundary(Fixed(12)));
+        table
+            .column_mut(4)
+            .expect("ADDRESS column")
+            .set_constraint(LowerBoundary(Fixed(10)));
 
         for port in ports {
             let addr = port.address.as_deref().unwrap_or("*");
             let proto = format!("{:?}", port.protocol).to_uppercase();
 
-            println!(
-                "{:<8} {:<10} {:<8} {:<20} {:<15}",
-                port.port.to_string().cyan().bold(),
-                proto.white(),
-                port.pid.to_string().cyan(),
-                truncate_string(&port.process_name, 19).white(),
-                addr.bright_black()
-            );
+            table.add_row(vec![
+                Cell::new(port.port).fg(Color::Cyan),
+                Cell::new(&proto).fg(Color::White),
+                Cell::new(port.pid).fg(Color::Cyan),
+                Cell::new(truncate_string(&port.process_name, 19)).fg(Color::White),
+                Cell::new(addr).fg(Color::DarkGrey),
+            ]);
         }
+
+        println!("{table}");
         println!();
     }
 
@@ -308,18 +416,24 @@ impl Printer {
         }
     }
 
-    /// Print kill confirmation
-    pub fn print_kill_result(&self, killed: &[Process], failed: &[(Process, String)]) {
+    /// Print action result (generalized for kill/stop/unstick)
+    pub fn print_action_result(
+        &self,
+        action: &str,
+        succeeded: &[Process],
+        failed: &[(Process, String)],
+    ) {
         match self.format {
             OutputFormat::Human => {
-                if !killed.is_empty() {
+                if !succeeded.is_empty() {
                     println!(
-                        "{} Killed {} process{}",
+                        "{} {} {} process{}",
                         "✓".green().bold(),
-                        killed.len().to_string().cyan().bold(),
-                        if killed.len() == 1 { "" } else { "es" }
+                        action,
+                        succeeded.len().to_string().cyan().bold(),
+                        if succeeded.len() == 1 { "" } else { "es" }
                     );
-                    for proc in killed {
+                    for proc in succeeded {
                         println!(
                             "  {} {} [PID {}]",
                             "→".bright_black(),
@@ -330,8 +444,9 @@ impl Printer {
                 }
                 if !failed.is_empty() {
                     println!(
-                        "{} Failed to kill {} process{}",
+                        "{} Failed to {} {} process{}",
                         "✗".red().bold(),
+                        action.to_lowercase(),
                         failed.len(),
                         if failed.len() == 1 { "" } else { "es" }
                     );
@@ -347,15 +462,15 @@ impl Printer {
                 }
             }
             OutputFormat::Json => {
-                self.print_json(&KillOutput {
-                    action: "kill",
+                self.print_json(&ActionOutput {
+                    action,
                     success: failed.is_empty(),
-                    killed_count: killed.len(),
+                    succeeded_count: succeeded.len(),
                     failed_count: failed.len(),
-                    killed,
+                    succeeded,
                     failed: &failed
                         .iter()
-                        .map(|(p, e)| FailedKill {
+                        .map(|(p, e)| FailedAction {
                             process: p,
                             error: e,
                         })
@@ -364,40 +479,33 @@ impl Printer {
             }
         }
     }
-}
 
-/// Truncate a string to a maximum length
-fn truncate_string(s: &str, max_len: usize) -> String {
-    if s.len() <= max_len {
-        s.to_string()
-    } else {
-        format!("{}...", &s[..max_len.saturating_sub(3)])
+    /// Print kill result (delegates to print_action_result for backwards compatibility)
+    pub fn print_kill_result(&self, killed: &[Process], failed: &[(Process, String)]) {
+        self.print_action_result("Killed", killed, failed);
     }
-}
 
-/// Truncate a path intelligently - show the end (most relevant part)
-fn truncate_path(path: &str, max_len: usize) -> String {
-    if path.len() <= max_len {
-        path.to_string()
-    } else {
-        // Show ...ending of path
-        let start = path.len().saturating_sub(max_len.saturating_sub(3));
-        format!("...{}", &path[start..])
-    }
-}
+    /// Print a confirmation prompt showing processes about to be acted on
+    pub fn print_confirmation(&self, action: &str, processes: &[Process]) {
+        println!(
+            "\n{} Found {} process{} to {}:\n",
+            "⚠".yellow().bold(),
+            processes.len().to_string().cyan().bold(),
+            if processes.len() == 1 { "" } else { "es" },
+            action
+        );
 
-/// Colorize process status
-fn colorize_status(
-    status: &crate::core::ProcessStatus,
-    status_str: &str,
-) -> colored::ColoredString {
-    use colored::*;
-    match status {
-        crate::core::ProcessStatus::Running => status_str.green(),
-        crate::core::ProcessStatus::Sleeping => status_str.blue(),
-        crate::core::ProcessStatus::Stopped => status_str.yellow(),
-        crate::core::ProcessStatus::Zombie => status_str.red(),
-        _ => status_str.white(),
+        for proc in processes {
+            println!(
+                "  {} {} [PID {}] - CPU: {:.1}%, MEM: {:.1}MB",
+                "→".bright_black(),
+                proc.name.white().bold(),
+                proc.pid.to_string().cyan(),
+                proc.cpu_percent,
+                proc.memory_mb
+            );
+        }
+        println!();
     }
 }
 
@@ -426,17 +534,17 @@ struct SinglePortOutput<'a> {
 }
 
 #[derive(Serialize)]
-struct KillOutput<'a> {
-    action: &'static str,
+struct ActionOutput<'a> {
+    action: &'a str,
     success: bool,
-    killed_count: usize,
+    succeeded_count: usize,
     failed_count: usize,
-    killed: &'a [Process],
-    failed: &'a [FailedKill<'a>],
+    succeeded: &'a [Process],
+    failed: &'a [FailedAction<'a>],
 }
 
 #[derive(Serialize)]
-struct FailedKill<'a> {
+struct FailedAction<'a> {
     process: &'a Process,
     error: &'a str,
 }
