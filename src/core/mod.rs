@@ -8,7 +8,7 @@ pub mod port;
 pub mod process;
 pub mod target;
 
-pub use filters::resolve_in_dir;
+pub use filters::{resolve_in_dir, sort_processes, PortSortKey, SortKey};
 pub use port::{parse_port, PortInfo, Protocol};
 pub use process::{Process, ProcessStatus};
 pub use target::{

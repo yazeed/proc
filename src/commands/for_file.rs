@@ -6,7 +6,9 @@
 //!   proc for /var/log/app.log    # What has this file open?
 //!   proc for ~/bin/myapp         # Tilde expansion
 
-use crate::core::{find_ports_for_pid, resolve_in_dir, PortInfo, Process, ProcessStatus};
+use crate::core::{
+    find_ports_for_pid, resolve_in_dir, sort_processes, PortInfo, Process, ProcessStatus, SortKey,
+};
 use crate::error::{ProcError, Result};
 use crate::ui::{format_memory, truncate_string};
 use clap::Args;
@@ -54,8 +56,8 @@ pub struct ForCommand {
     pub verbose: bool,
 
     /// Sort by: cpu, mem, pid, name
-    #[arg(long, short = 's', default_value = "cpu")]
-    pub sort: String,
+    #[arg(long, short = 's', value_enum, default_value_t = SortKey::Cpu)]
+    pub sort: SortKey,
 
     /// Limit the number of results
     #[arg(long, short = 'n')]
@@ -94,21 +96,7 @@ impl ForCommand {
         self.apply_filters(&mut processes);
 
         // 6. Sort processes
-        match self.sort.to_lowercase().as_str() {
-            "cpu" => processes.sort_by(|a, b| {
-                b.cpu_percent
-                    .partial_cmp(&a.cpu_percent)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            }),
-            "mem" | "memory" => processes.sort_by(|a, b| {
-                b.memory_mb
-                    .partial_cmp(&a.memory_mb)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            }),
-            "pid" => processes.sort_by_key(|p| p.pid),
-            "name" => processes.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase())),
-            _ => {}
-        }
+        sort_processes(&mut processes, self.sort);
 
         // 7. Apply limit if specified
         if let Some(limit) = self.limit {

@@ -184,10 +184,12 @@ impl Printer {
             // Set fixed-width columns and flexible ones
             use comfy_table::ColumnConstraint::*;
             use comfy_table::Width::*;
+            // Fixed widths must account for comfy-table's per-cell padding (1 left + 1 right = 2)
+            // Content width = Fixed(N) - 2
             table
                 .column_mut(0)
                 .expect("PID column")
-                .set_constraint(Absolute(Fixed(7)));
+                .set_constraint(Absolute(Fixed(8))); // 6 content — fits "999999"
             table
                 .column_mut(1)
                 .expect("PATH column")
@@ -196,19 +198,24 @@ impl Printer {
                 .column_mut(2)
                 .expect("NAME column")
                 .set_constraint(LowerBoundary(Fixed(10)));
-            // ARGS column is flexible — gets remaining space
+            // ARGS: flexible but capped so it doesn't squeeze other columns
+            let args_max = (width / 2).max(30);
+            table
+                .column_mut(3)
+                .expect("ARGS column")
+                .set_constraint(UpperBoundary(Fixed(args_max)));
             table
                 .column_mut(4)
                 .expect("CPU% column")
-                .set_constraint(Absolute(Fixed(6)));
+                .set_constraint(Absolute(Fixed(8))); // 6 content — fits "100.0"
             table
                 .column_mut(5)
                 .expect("MEM column")
-                .set_constraint(Absolute(Fixed(9)));
+                .set_constraint(Absolute(Fixed(11))); // 9 content — fits "9999.9MB"
             table
                 .column_mut(6)
                 .expect("STATUS column")
-                .set_constraint(Absolute(Fixed(10)));
+                .set_constraint(Absolute(Fixed(12))); // 10 content — fits "Sleeping"
 
             for proc in processes {
                 let status_str = format!("{:?}", proc.status);
@@ -249,7 +256,7 @@ impl Printer {
                             if result.is_empty() {
                                 "-".to_string()
                             } else {
-                                result
+                                truncate_string(&result, (args_max as usize).saturating_sub(2))
                             }
                         } else {
                             // No args beyond the executable itself

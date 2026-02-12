@@ -151,7 +151,14 @@ Pre-commit hook runs `cargo fmt --check` automatically.
 
 ## Releasing
 
-**Follow [RELEASE.md](RELEASE.md) for every release.** Do not skip steps.
+**ALWAYS follow [RELEASE.md](RELEASE.md) for every release.** Do not skip steps. This includes:
+
+1. Pre-release checks: `cargo fmt --check`, `cargo clippy`, `cargo test`, `cargo build --release`, `cargo update`, `cargo audit`
+2. Manual testing with the release binary (`./target/release/proc --version`, `--help`, new features)
+3. Version bump in ALL files: `Cargo.toml`, `pkg/npm/package.json`, `flake.nix`
+4. Documentation: `CHANGELOG.md`, `README.md`, `ROADMAP.md`, `src/lib.rs` — verify all reflect new changes
+5. Commit, tag, push (tag push triggers CI for all package managers)
+6. Verify CI completes successfully
 
 ## Documentation Files
 

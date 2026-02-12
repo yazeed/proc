@@ -7,7 +7,7 @@
 //!   proc list --in /project    # Processes in /project
 //!   proc list --min-cpu 10     # Processes using >10% CPU
 
-use crate::core::{resolve_in_dir, Process, ProcessStatus};
+use crate::core::{resolve_in_dir, sort_processes, Process, ProcessStatus, SortKey};
 use crate::error::Result;
 use crate::ui::{OutputFormat, Printer};
 use clap::Args;
@@ -60,8 +60,8 @@ pub struct ListCommand {
     pub limit: Option<usize>,
 
     /// Sort by: cpu, mem, pid, name
-    #[arg(long, short = 's', default_value = "cpu")]
-    pub sort: String,
+    #[arg(long, short = 's', value_enum, default_value_t = SortKey::Cpu)]
+    pub sort: SortKey,
 }
 
 impl ListCommand {
@@ -192,21 +192,7 @@ impl ListCommand {
         });
 
         // Sort processes
-        match self.sort.to_lowercase().as_str() {
-            "cpu" => processes.sort_by(|a, b| {
-                b.cpu_percent
-                    .partial_cmp(&a.cpu_percent)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            }),
-            "mem" | "memory" => processes.sort_by(|a, b| {
-                b.memory_mb
-                    .partial_cmp(&a.memory_mb)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            }),
-            "pid" => processes.sort_by_key(|p| p.pid),
-            "name" => processes.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase())),
-            _ => {} // Keep default order
-        }
+        sort_processes(&mut processes, self.sort);
 
         // Apply limit if specified
         if let Some(limit) = self.limit {
