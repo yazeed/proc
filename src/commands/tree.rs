@@ -12,7 +12,7 @@ use crate::core::{
     parse_target, resolve_in_dir, resolve_target, Process, ProcessStatus, TargetType,
 };
 use crate::error::Result;
-use crate::ui::{OutputFormat, Printer};
+use crate::ui::{format_memory, OutputFormat, Printer};
 use clap::Args;
 use colored::*;
 use serde::Serialize;
@@ -333,14 +333,14 @@ impl TreeCommand {
             };
 
             println!(
-                "{}{}{} {} [{}] {:.1}% {:.1}MB",
+                "{}{}{} {} [{}] {:.1}% {}",
                 prefix.bright_black(),
                 connector.bright_black(),
                 status_indicator,
                 proc.name.white().bold(),
                 proc.pid.to_string().cyan(),
                 proc.cpu_percent,
-                proc.memory_mb
+                format_memory(proc.memory_mb)
             );
         }
 
@@ -489,26 +489,26 @@ impl TreeCommand {
             if is_target {
                 // Highlight the target
                 println!(
-                    "{}{}{} {} [{}] {:.1}% {:.1}MB  {}",
+                    "{}{}{} {} [{}] {:.1}% {}  {}",
                     indent.bright_black(),
                     connector.bright_black(),
                     status_indicator,
                     proc.name.cyan().bold(),
                     proc.pid.to_string().cyan().bold(),
                     proc.cpu_percent,
-                    proc.memory_mb,
+                    format_memory(proc.memory_mb),
                     "← target".yellow()
                 );
             } else {
                 println!(
-                    "{}{}{} {} [{}] {:.1}% {:.1}MB",
+                    "{}{}{} {} [{}] {:.1}% {}",
                     indent.bright_black(),
                     connector.bright_black(),
                     status_indicator,
                     proc.name.white(),
                     proc.pid.to_string().cyan(),
                     proc.cpu_percent,
-                    proc.memory_mb
+                    format_memory(proc.memory_mb)
                 );
             }
         }

@@ -5,5 +5,5 @@
 pub mod format;
 pub mod output;
 
-pub use format::{colorize_status, format_duration, truncate_path, truncate_string};
+pub use format::{colorize_status, format_duration, format_memory, truncate_path, truncate_string};
 pub use output::{OutputFormat, Printer};

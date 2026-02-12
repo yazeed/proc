@@ -17,7 +17,7 @@ Semantic CLI tool for process management. Target by port, process id (PID), name
 proc on :3000                   # what's on port 3000?
 proc for ./script.py            # what's running this file?
 proc by node --in . --min-cpu 5 # node in cwd using >5% CPU
-proc kill :3000,:8080,node -y   # kill mixed targets at once
+proc kill :3000,:8080,node      # kill mixed targets at once
 proc info :3000,1234            # info for port + PID
 ```
 
@@ -92,7 +92,7 @@ proc by node --in . --min-cpu 5
 
 **Kill multiple targets at once:**
 ```bash
-proc kill :3000,:8080,node -y
+proc kill :3000,:8080,node
 ```
 
 ## Target Syntax
@@ -179,7 +179,7 @@ proc by node --in .
 proc list --min-cpu 10
 
 # Kill everything on ports 3000 and 8080
-proc kill :3000,:8080 -y
+proc kill :3000,:8080
 
 # Kill only node processes in current directory
 proc kill node --in . --dry-run

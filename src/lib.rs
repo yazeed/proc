@@ -25,7 +25,7 @@
 //! proc for ./script.py
 //!
 //! # Kill multiple targets
-//! proc kill :3000,:8080,node -y
+//! proc kill :3000,:8080,node
 //!
 //! # Node processes in current directory
 //! proc by node --in .

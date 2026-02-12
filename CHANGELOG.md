@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-02-11
+
+### Fixed
+
+- **STATUS column wrapping**: Fixed table column too narrow for "Running"/"Sleeping" text
+- **Memory display**: Human-readable adaptive units — `512KB`, `6.0MB`, `3.0GB` instead of always showing MB
+- **PATH column too narrow**: Removed hardcoded 19-char truncation, increased minimum width so paths are readable
+- **ARGS column showing executable**: When a process has no arguments, shows `-` instead of repeating the full executable path
+- **Misleading error tips**: Replaced clap's confusing `tip: to pass '...' as a value, use '-- ...'` with smart "did you mean?" suggestions using edit distance and substring matching (e.g., `--cpu` → `did you mean '--min-cpu'?`)
+- **Help example consistency**: Removed `-y` flag from kill example to match the pattern of other examples
+
 ## [1.7.0] - 2026-02-11
 
 ### Added
@@ -322,7 +333,8 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 
 ---
 
-[Unreleased]: https://github.com/yazeed/proc/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/yazeed/proc/compare/v1.7.1...HEAD
+[1.7.1]: https://github.com/yazeed/proc/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/yazeed/proc/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/yazeed/proc/compare/v1.5.1...v1.6.0
 [1.5.1]: https://github.com/yazeed/proc/compare/v1.5.0...v1.5.1

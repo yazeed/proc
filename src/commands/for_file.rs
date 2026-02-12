@@ -8,7 +8,7 @@
 
 use crate::core::{find_ports_for_pid, resolve_in_dir, PortInfo, Process, ProcessStatus};
 use crate::error::{ProcError, Result};
-use crate::ui::truncate_string;
+use crate::ui::{format_memory, truncate_string};
 use clap::Args;
 use colored::*;
 use serde::Serialize;
@@ -261,7 +261,11 @@ impl ForCommand {
                 proc.pid.to_string().cyan()
             );
             println!("    {} {:.1}%", "CPU:".bright_black(), proc.cpu_percent);
-            println!("    {} {:.1} MB", "MEM:".bright_black(), proc.memory_mb);
+            println!(
+                "    {} {}",
+                "MEM:".bright_black(),
+                format_memory(proc.memory_mb)
+            );
 
             if let Some(ref path) = proc.exe_path {
                 println!("    {} {}", "Path:".bright_black(), path.bright_black());
@@ -326,11 +330,11 @@ impl ForCommand {
                 };
 
                 println!(
-                    "  {:>7}  {:<15}  {:>5.1}  {:>6.1}MB  {}",
+                    "  {:>7}  {:<15}  {:>5.1}  {:>8}  {}",
                     proc.pid.to_string().cyan(),
                     truncate_string(&proc.name, 15).white(),
                     proc.cpu_percent,
-                    proc.memory_mb,
+                    format_memory(proc.memory_mb),
                     ports_str
                 );
             }

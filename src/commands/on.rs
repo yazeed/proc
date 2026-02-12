@@ -12,7 +12,7 @@ use crate::core::{
     Process, TargetType,
 };
 use crate::error::{ProcError, Result};
-use crate::ui::format_duration;
+use crate::ui::{format_duration, format_memory};
 use clap::Args;
 use colored::*;
 use serde::Serialize;
@@ -265,10 +265,10 @@ impl OnCommand {
 
         if let Some(proc) = process {
             println!(
-                "  {} {:.1}% CPU, {:.1} MB",
+                "  {} {:.1}% CPU, {}",
                 "Resources:".bright_black(),
                 proc.cpu_percent,
-                proc.memory_mb
+                format_memory(proc.memory_mb)
             );
 
             if let Some(start_time) = proc.start_time {

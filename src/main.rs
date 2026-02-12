@@ -54,7 +54,7 @@ Run 'proc --help' for examples or visit https://github.com/yazeed/proc"
 
   Info/Kill/Stop (multi-target):
     proc info :3000,:8080          Info for multiple targets
-    proc kill :3000,node -y        Kill port 3000 and node processes
+    proc kill :3000,node           Kill port 3000 and node processes
     proc stop :3000,:8080          Stop multiple targets gracefully
 
   Other:
@@ -132,8 +132,111 @@ enum Commands {
     Manpage,
 }
 
+/// Extract the unknown argument from a clap error message
+fn extract_unknown_arg(msg: &str) -> Option<String> {
+    // Pattern: "unexpected argument 'X' found"
+    let start = msg.find("unexpected argument '")? + "unexpected argument '".len();
+    let end = msg[start..].find('\'')?;
+    Some(msg[start..start + end].to_string())
+}
+
+/// Simple edit distance for flag suggestion
+fn edit_distance(a: &str, b: &str) -> usize {
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    let (m, n) = (a.len(), b.len());
+    let mut dp = vec![vec![0usize; n + 1]; m + 1];
+    for (i, row) in dp.iter_mut().enumerate().take(m + 1) {
+        row[0] = i;
+    }
+    for (j, val) in dp[0].iter_mut().enumerate().take(n + 1) {
+        *val = j;
+    }
+    for i in 1..=m {
+        for j in 1..=n {
+            let cost = if a[i - 1] == b[j - 1] { 0 } else { 1 };
+            dp[i][j] = (dp[i - 1][j] + 1)
+                .min(dp[i][j - 1] + 1)
+                .min(dp[i - 1][j - 1] + cost);
+        }
+    }
+    dp[m][n]
+}
+
+/// Find the closest matching flag for a subcommand
+fn suggest_flag(unknown: &str, subcmd_name: &str) -> Option<String> {
+    let cmd = Cli::command();
+    let subcmd = cmd.find_subcommand(subcmd_name)?;
+    let unknown_clean = unknown.trim_start_matches('-');
+
+    let mut best: Option<String> = None;
+    let mut best_dist = usize::MAX;
+
+    for arg in subcmd.get_arguments() {
+        if let Some(long) = arg.get_long() {
+            // Check edit distance (skip very short flags and large length differences)
+            let len_diff = (unknown_clean.len() as isize - long.len() as isize).unsigned_abs();
+            if len_diff <= 2 && long.len() >= 3 {
+                let dist = edit_distance(unknown_clean, long);
+                if dist < best_dist {
+                    best_dist = dist;
+                    best = Some(format!("--{}", long));
+                }
+            }
+
+            // Also check if unknown is a substring of the flag (e.g., "cpu" → "min-cpu")
+            if long.contains(unknown_clean) && unknown_clean.len() >= 3 {
+                return Some(format!("--{}", long));
+            }
+        }
+    }
+
+    // Only suggest if edit distance is reasonable
+    let threshold = if unknown_clean.len() <= 4 { 2 } else { 3 };
+    if best_dist <= threshold {
+        best
+    } else {
+        None
+    }
+}
+
 fn main() {
-    let cli = Cli::parse();
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(e) => {
+            use clap::error::ErrorKind;
+
+            // Let help/version pass through as-is
+            if matches!(e.kind(), ErrorKind::DisplayHelp | ErrorKind::DisplayVersion) {
+                e.exit();
+            }
+
+            // Strip clap's misleading "tip:" lines
+            let msg = e.to_string();
+            let cleaned: String = msg
+                .lines()
+                .filter(|line| !line.trim_start().starts_with("tip:"))
+                .collect::<Vec<_>>()
+                .join("\n");
+            eprint!("{}", cleaned);
+
+            // Try to suggest a similar flag
+            if matches!(
+                e.kind(),
+                ErrorKind::UnknownArgument | ErrorKind::InvalidValue
+            ) {
+                let args: Vec<String> = std::env::args().collect();
+                let subcmd = args.iter().skip(1).find(|a| !a.starts_with('-'));
+                let unknown = extract_unknown_arg(&msg);
+                if let (Some(subcmd), Some(unknown)) = (subcmd, unknown) {
+                    if let Some(suggestion) = suggest_flag(&unknown, subcmd) {
+                        eprintln!("\n  tip: did you mean '{}'?", suggestion);
+                    }
+                }
+            }
+
+            process::exit(2);
+        }
+    };
 
     let result = match cli.command {
         Commands::On(cmd) => cmd.execute(),

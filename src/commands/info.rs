@@ -9,7 +9,7 @@
 
 use crate::core::{parse_targets, resolve_in_dir, resolve_target, Process};
 use crate::error::Result;
-use crate::ui::{colorize_status, format_duration, OutputFormat, Printer};
+use crate::ui::{colorize_status, format_duration, format_memory, OutputFormat, Printer};
 use clap::Args;
 use colored::*;
 use serde::Serialize;
@@ -153,7 +153,11 @@ impl InfoCommand {
         println!("  {} {}", "Status:".bright_black(), status_colored);
 
         println!("  {} {:.1}%", "CPU:".bright_black(), proc.cpu_percent);
-        println!("  {} {:.1} MB", "Memory:".bright_black(), proc.memory_mb);
+        println!(
+            "  {} {}",
+            "Memory:".bright_black(),
+            format_memory(proc.memory_mb)
+        );
 
         if let Some(start_time) = proc.start_time {
             let duration = std::time::SystemTime::now()

@@ -39,6 +39,19 @@ pub fn truncate_path(path: &str, max_len: usize) -> String {
     }
 }
 
+/// Format memory in MB to a human-readable string with adaptive units.
+///
+/// Examples: "512KB", "6.0MB", "3.0GB"
+pub fn format_memory(memory_mb: f64) -> String {
+    if memory_mb < 1.0 {
+        format!("{:.0}KB", memory_mb * 1000.0)
+    } else if memory_mb < 1000.0 {
+        format!("{:.1}MB", memory_mb)
+    } else {
+        format!("{:.1}GB", memory_mb / 1000.0)
+    }
+}
+
 /// Colorize a process status string based on the status variant.
 pub fn colorize_status(status: &ProcessStatus, status_str: &str) -> ColoredString {
     match status {

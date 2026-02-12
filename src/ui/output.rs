@@ -3,7 +3,7 @@
 //! Provides colored terminal output and JSON formatting.
 
 use crate::core::{PortInfo, Process};
-use crate::ui::format::{colorize_status, truncate_path, truncate_string};
+use crate::ui::format::{colorize_status, format_memory, truncate_string};
 use colored::*;
 use comfy_table::presets::NOTHING;
 use comfy_table::{Attribute, Cell, CellAlignment, Color, ContentArrangement, Table};
@@ -117,12 +117,12 @@ impl Printer {
                 let status_colored = colorize_status(&proc.status, &status_str);
 
                 println!(
-                    "{} {} {}  {:.1}% CPU  {:.1} MB  {}",
+                    "{} {} {}  {:.1}% CPU  {}  {}",
                     proc.pid.to_string().cyan().bold(),
                     proc.name.white().bold(),
                     format!("[{}]", status_colored).bright_black(),
                     proc.cpu_percent,
-                    proc.memory_mb,
+                    format_memory(proc.memory_mb),
                     proc.user.as_deref().unwrap_or("-").bright_black()
                 );
 
@@ -191,7 +191,7 @@ impl Printer {
             table
                 .column_mut(1)
                 .expect("PATH column")
-                .set_constraint(LowerBoundary(Fixed(10)));
+                .set_constraint(LowerBoundary(Fixed(20)));
             table
                 .column_mut(2)
                 .expect("NAME column")
@@ -208,19 +208,19 @@ impl Printer {
             table
                 .column_mut(6)
                 .expect("STATUS column")
-                .set_constraint(Absolute(Fixed(8)));
+                .set_constraint(Absolute(Fixed(10)));
 
             for proc in processes {
                 let status_str = format!("{:?}", proc.status);
 
-                // Show directory of executable
+                // Show directory of executable (let comfy-table handle truncation)
                 let path_display = proc
                     .exe_path
                     .as_ref()
                     .map(|p| {
                         std::path::Path::new(p)
                             .parent()
-                            .map(|parent| truncate_path(&parent.to_string_lossy(), 19))
+                            .map(|parent| parent.to_string_lossy().to_string())
                             .unwrap_or_else(|| "-".to_string())
                     })
                     .unwrap_or_else(|| "-".to_string());
@@ -245,14 +245,20 @@ impl Printer {
                                     }
                                 })
                                 .collect();
-                            args.join(" ")
+                            let result = args.join(" ");
+                            if result.is_empty() {
+                                "-".to_string()
+                            } else {
+                                result
+                            }
                         } else {
-                            c.clone()
+                            // No args beyond the executable itself
+                            "-".to_string()
                         }
                     })
                     .unwrap_or_else(|| "-".to_string());
 
-                let mem_display = format!("{:.1}MB", proc.memory_mb);
+                let mem_display = format_memory(proc.memory_mb);
 
                 let status_color = match proc.status {
                     crate::core::ProcessStatus::Running => Color::Green,
@@ -497,12 +503,12 @@ impl Printer {
 
         for proc in processes {
             println!(
-                "  {} {} [PID {}] - CPU: {:.1}%, MEM: {:.1}MB",
+                "  {} {} [PID {}] - CPU: {:.1}%, MEM: {}",
                 "→".bright_black(),
                 proc.name.white().bold(),
                 proc.pid.to_string().cyan(),
                 proc.cpu_percent,
-                proc.memory_mb
+                format_memory(proc.memory_mb)
             );
         }
         println!();
