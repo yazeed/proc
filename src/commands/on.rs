@@ -250,6 +250,9 @@ impl OnCommand {
         );
 
         if let Some(proc) = process {
+            if let Some(ref cwd) = proc.cwd {
+                println!("  {} {}", "Directory:".bright_black(), cwd);
+            }
             if let Some(ref path) = proc.exe_path {
                 println!("  {} {}", "Path:".bright_black(), path.bright_black());
             }
@@ -313,9 +316,13 @@ impl OnCommand {
             }
         }
 
+        if let Some(ref cwd) = process.cwd {
+            println!();
+            println!("  {} {}", "Directory:".bright_black(), cwd);
+        }
+
         if self.verbose {
             if let Some(ref path) = process.exe_path {
-                println!();
                 println!("  {} {}", "Path:".bright_black(), path.bright_black());
             }
             if let Some(ref cmd) = process.command {

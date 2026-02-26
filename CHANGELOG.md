@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.3] - 2026-02-26
+
+### Added
+
+- **Working directory in output**: `proc on`, `proc info`, and all table views now show the process working directory — instantly tells you which project folder a process is running from
+  - `proc on :3000` shows `Directory: /Users/you/Sites/my-app` instead of only the binary path
+  - `proc info` shows `Directory:` between Name and Path
+  - `proc on <name>` reverse lookup shows `Directory:` for each process
+
+### Changed
+
+- **Table `PATH` → `DIR` column**: Process tables (`list`, `by`, `in`, `kill`, `stop`, `stuck`) now show the working directory instead of the executable's parent directory — far more useful for identifying which project a process belongs to
+
+### Updated
+
+- Updated dependencies (`clap`, `sysinfo`, `syn`, `regex-syntax`, and others)
+
 ## [1.7.2] - 2026-02-11
 
 ### Fixed

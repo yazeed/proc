@@ -132,6 +132,10 @@ impl InfoCommand {
             proc.pid.to_string().cyan()
         );
 
+        if let Some(ref cwd) = proc.cwd {
+            println!("  {} {}", "Directory:".bright_black(), cwd);
+        }
+
         if let Some(ref path) = proc.exe_path {
             println!("  {} {}", "Path:".bright_black(), path);
         }

@@ -158,7 +158,7 @@ impl Printer {
                 Cell::new("PID")
                     .fg(Color::Blue)
                     .add_attribute(Attribute::Bold),
-                Cell::new("PATH")
+                Cell::new("DIR")
                     .fg(Color::Blue)
                     .add_attribute(Attribute::Bold),
                 Cell::new("NAME")
@@ -192,7 +192,7 @@ impl Printer {
                 .set_constraint(Absolute(Fixed(8))); // 6 content — fits "999999"
             table
                 .column_mut(1)
-                .expect("PATH column")
+                .expect("DIR column")
                 .set_constraint(LowerBoundary(Fixed(20)));
             table
                 .column_mut(2)
@@ -220,17 +220,8 @@ impl Printer {
             for proc in processes {
                 let status_str = format!("{:?}", proc.status);
 
-                // Show directory of executable (let comfy-table handle truncation)
-                let path_display = proc
-                    .exe_path
-                    .as_ref()
-                    .map(|p| {
-                        std::path::Path::new(p)
-                            .parent()
-                            .map(|parent| parent.to_string_lossy().to_string())
-                            .unwrap_or_else(|| "-".to_string())
-                    })
-                    .unwrap_or_else(|| "-".to_string());
+                // Show working directory (where the process was started from)
+                let path_display = proc.cwd.as_deref().unwrap_or("-").to_string();
 
                 // Show command args (skip executable, simplify paths to filenames)
                 let cmd_display = proc
