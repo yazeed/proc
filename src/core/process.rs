@@ -129,14 +129,16 @@ impl Process {
             .map(|proc| Process::from_sysinfo(sysinfo_pid, proc)))
     }
 
-    /// Get all running processes
+    /// Get all running processes (excludes proc's own process)
     pub fn find_all() -> Result<Vec<Process>> {
         let mut sys = System::new_all();
         sys.refresh_all();
 
+        let self_pid = sysinfo::Pid::from_u32(std::process::id());
         let processes: Vec<Process> = sys
             .processes()
             .iter()
+            .filter(|(pid, _)| **pid != self_pid)
             .map(|(pid, proc)| Process::from_sysinfo(*pid, proc))
             .collect();
 
