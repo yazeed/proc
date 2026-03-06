@@ -8,11 +8,13 @@ title: blog
 <ul class="post-list">
   {% for post in site.posts %}
   <li class="post-item">
-    <a href="{{ post.url | prepend: site.baseurl }}">{{ post.title }}</a>
-    <div class="post-meta">{{ post.date | date: "%B %d, %Y" }}</div>
-    {% if post.description %}
-    <div class="post-desc">{{ post.description }}</div>
-    {% endif %}
+    <a href="{{ post.url | prepend: site.baseurl }}" class="post-link">
+      <span class="post-title">{{ post.title }}</span>
+      <span class="post-meta">{{ post.date | date: "%B %d, %Y" }}</span>
+      {% if post.description %}
+      <span class="post-desc">{{ post.description }}</span>
+      {% endif %}
+    </a>
   </li>
   {% endfor %}
 </ul>

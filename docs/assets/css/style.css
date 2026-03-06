@@ -188,28 +188,35 @@ hr {
   background: var(--accent-dim);
 }
 
-.post-item a {
+.post-link {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+
+.post-link .post-title {
   font-family: var(--font-mono);
   font-size: 0.95rem;
   font-weight: 400;
   color: var(--text-bright);
-  text-decoration: none;
   display: block;
   line-height: 1.4;
 }
 
-.post-item a:hover { color: var(--accent); }
+.post-item:hover .post-title { color: var(--accent); }
 
-.post-item .post-meta {
+.post-link .post-meta {
   font-family: var(--font-mono);
   font-size: 0.75rem;
   color: var(--text-muted);
+  display: block;
   margin-top: 0.35rem;
 }
 
-.post-item .post-desc {
+.post-link .post-desc {
   font-size: 0.9rem;
   color: var(--text-muted);
+  display: block;
   margin-top: 0.4rem;
   line-height: 1.5;
 }
