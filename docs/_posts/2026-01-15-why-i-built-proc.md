@@ -92,4 +92,4 @@ cargo install proc-cli            # Rust
 npm install -g proc-cli           # npm/bun
 ```
 
-See the [GitHub repo](https://github.com/yazeed/proc) for all options.
+See the [GitHub repo](https://github.com/yazeed/proc) for all installation options.

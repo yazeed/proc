@@ -209,6 +209,8 @@ proc kill :3000 --yes    # Kill whatever is on port 3000
 
 No flags to remember. No `awk` to extract PIDs. No platform-specific code paths. `proc on :3000` returns the process name, PID, port, command, and working directory in one call, and `--json` gives you machine-readable output if you're scripting.
 
+## Install
+
 ```bash
 brew install yazeed/proc/proc     # macOS
 cargo install proc-cli            # Rust

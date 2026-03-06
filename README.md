@@ -36,7 +36,7 @@ proc info :3000,1234            # info for port + PID
 | Watch in real-time | `proc watch node` | `watch -n2 'ps aux \| grep node'` |
 | What runs this file? | `proc for ./app.js` | `lsof ./app.js` or `fuser ./app.js` |
 
-One syntax. One tool. [Full comparison &rarr;](https://yazeed.github.io/proc/blog/proc-vs-lsof-fuser-killport-fkill/)
+One syntax. One tool. [Full comparison &rarr;](https://yazeed.github.io/proc/posts/proc-vs-lsof-fuser-killport-fkill/)
 
 ## Install
 

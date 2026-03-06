@@ -5,7 +5,7 @@ description: "bidirectional port/process lookup."
 permalink: /commands/on
 ---
 
-port/process lookup — works both ways.
+port/process lookup — works both ways. alias: `:`.
 
 ```bash
 proc on :3000          # what's on port 3000?

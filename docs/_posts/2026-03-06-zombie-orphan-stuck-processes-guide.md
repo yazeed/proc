@@ -272,11 +272,10 @@ proc stuck
 ```
 
 ```
-! Found 3 potentially stuck processes:
+! Found 2 potentially stuck processes:
 
   -> node [PID 4821] - 98.2% CPU, running for 2h 15m
   -> webpack [PID 4830] - 87.5% CPU, running for 2h 15m
-  -> python [PID 6012] - 0.0% CPU, running for 45m
 ```
 
 Attempt recovery with escalating signals (SIGCONT, then SIGINT):
@@ -309,4 +308,4 @@ cargo install proc-cli            # Rust
 npm install -g proc-cli           # npm/bun
 ```
 
-Source and documentation: [github.com/yazeed/proc](https://github.com/yazeed/proc)
+See the [GitHub repo](https://github.com/yazeed/proc) for all installation options.

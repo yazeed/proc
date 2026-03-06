@@ -5,7 +5,7 @@ description: "filter processes by name."
 permalink: /commands/by
 ---
 
-find processes matching a name pattern.
+find processes matching a name pattern. alias: `b`.
 
 ```bash
 proc by node               # all node processes

@@ -28,9 +28,9 @@ permalink: /commands
 | [stop](stop) | `s` | graceful stop (SIGTERM, then SIGKILL) |
 | [unstick](unstick) | `u` | attempt to recover stuck processes |
 
-## universal options
+## common options
 
-these flags work on every command:
+most commands support these flags (check individual command pages for details):
 
 | flag | short | description |
 |------|-------|-------------|

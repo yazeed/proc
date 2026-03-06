@@ -452,19 +452,19 @@ If you have [proc](https://github.com/yazeed/proc) installed, the process inspec
 Check what's on a port and get JSON back:
 
 ```bash
-proc on :3000 --json | jq '.[] | .pid'
+proc on :3000 --json | jq '.process.pid'
 ```
 
 Find high-CPU processes without awk column gymnastics:
 
 ```bash
-proc list --json | jq '.[] | select(.cpu_percent > 50) | {pid, name, cpu_percent}'
+proc list --json | jq '.processes[] | select(.cpu_percent > 50) | {pid, name, cpu_percent}'
 ```
 
 Check if a specific process is running by name:
 
 ```bash
-if proc by myapp --json | jq -e 'length > 0' > /dev/null 2>&1; then
+if proc by myapp --json | jq -e '.count > 0' > /dev/null 2>&1; then
     echo "myapp is running"
 fi
 ```
@@ -483,7 +483,6 @@ The `--json` flag gives you named fields instead of positional columns. No awk, 
 brew install yazeed/proc/proc     # macOS
 cargo install proc-cli            # Rust
 npm install -g proc-cli           # npm/bun
-nix profile install github:yazeed/proc  # Nix
 ```
 
-See the [GitHub repo](https://github.com/yazeed/proc) for documentation and all installation options.
+See the [GitHub repo](https://github.com/yazeed/proc) for all installation options.

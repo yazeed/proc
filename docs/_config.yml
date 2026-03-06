@@ -3,7 +3,7 @@ description: Semantic CLI tool for process management. Target by port, PID, name
 url: https://yazeed.github.io
 baseurl: /proc
 
-permalink: /blog/:title/
+permalink: /posts/:title/
 
 plugins:
   - jekyll-seo-tag

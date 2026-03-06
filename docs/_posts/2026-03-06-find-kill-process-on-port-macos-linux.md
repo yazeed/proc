@@ -208,7 +208,7 @@ result=$(fuser 3000/tcp 2>&1)
 fuser -k 3000/tcp
 ```
 
-This sends SIGKILL to every process on the port. **No confirmation, no signal choice, no preview.** It kills immediately. Be cautious with this on production systems where multiple processes might share a port (e.g., behind a load balancer or with SO_REUSEPORT).
+This sends SIGKILL to every process on the port. **No confirmation, no preview.** It kills immediately. Be cautious with this on production systems where multiple processes might share a port (e.g., behind a load balancer or with SO_REUSEPORT).
 
 You can specify a signal:
 
@@ -243,7 +243,7 @@ lsof -i :3000 -P -n | awk 'NR>1 {print $2, $1}'
 # Using grep -oP (Perl regex, Linux only)
 ss -tlnp | grep :3000 | grep -oP 'pid=\K[0-9]+'
 
-# Using awk and match (more portable)
+# Using awk and match (gawk only — capture groups are a gawk extension)
 ss -tlnp | grep :3000 | awk '{match($0, /pid=([0-9]+)/, a); print a[1]}'
 
 # Using sed
@@ -437,12 +437,12 @@ proc kill :3000,:8080,:4200
 
 Same commands on macOS and Linux. No flags to remember, no awk pipelines to construct.
 
-Install:
+## Install
 
 ```bash
-brew install yazeed/proc/proc     # macOS (Homebrew)
-cargo install proc-cli            # Rust (Cargo)
-npm install -g proc-cli           # npm / bun
+brew install yazeed/proc/proc     # macOS
+cargo install proc-cli            # Rust
+npm install -g proc-cli           # npm/bun
 ```
 
-Source and docs: [github.com/yazeed/proc](https://github.com/yazeed/proc)
+See the [GitHub repo](https://github.com/yazeed/proc) for all installation options.

@@ -17,7 +17,7 @@
       <div class="nav-links">
         <a href="{{ site.baseurl }}/commands"{% if page.url contains "/commands" %} class="active"{% endif %}>commands</a>
         <a href="{{ site.baseurl }}/install"{% if page.url == "/install" %} class="active"{% endif %}>install</a>
-        <a href="{{ site.baseurl }}/"{% if page.url == "/" %} class="active"{% endif %}>posts</a>
+        <a href="{{ site.baseurl }}/"{% if page.url == "/" or page.layout == "post" %} class="active"{% endif %}>posts</a>
         <a href="{{ site.baseurl }}/changelog"{% if page.url == "/changelog" %} class="active"{% endif %}>changelog</a>
         <a href="https://github.com/yazeed/proc">github</a>
       </div>

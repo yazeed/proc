@@ -5,7 +5,7 @@ description: "find processes by file path."
 permalink: /commands/for
 ---
 
-find processes running a specific file.
+find processes running a specific file. alias: `f`.
 
 ```bash
 proc for ./script.py       # what's running this file?

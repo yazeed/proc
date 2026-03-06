@@ -236,7 +236,7 @@ proc on node                # See what ports node is using (without killing)
 
 It handles target resolution, deduplication, confirmation prompts, and signal management. The full pipeline is still there for you when you need something unusual -- understanding it is worth your time regardless of what tools you use.
 
-Install:
+## Install
 
 ```bash
 brew install yazeed/proc/proc     # macOS
@@ -244,4 +244,4 @@ cargo install proc-cli            # Rust
 npm install -g proc-cli           # npm/bun
 ```
 
-See the [GitHub repo](https://github.com/yazeed/proc) for documentation and all installation options.
+See the [GitHub repo](https://github.com/yazeed/proc) for all installation options.
