@@ -15,7 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Technical blog posts**: 6 posts on GitHub Pages covering Unix process management, awk pipelines, ss/netstat/lsof comparison, zombie processes, and shell scripting patterns
+- **GitHub Pages blog** ([yazeed.github.io/proc](https://yazeed.github.io/proc/)): 7 technical posts covering Unix process management, awk pipelines, ss/netstat/lsof internals, zombie processes, and shell scripting patterns
+- **Install page**: Dedicated [install page](https://yazeed.github.io/proc/install) with all platforms, shell completions, and man page setup
+- **Blog redesign**: Custom terminal editorial theme — Azeret Mono + Newsreader typography, syntax highlighting, SEO meta tags
+- **Blog badge** in README linking to GitHub Pages
 
 ## [1.8.0] - 2026-03-06
 
