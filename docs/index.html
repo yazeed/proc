@@ -1,0 +1,75 @@
+---
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>proc — blog</title>
+  <meta name="description" content="{{ site.description }}">
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #58a6ff;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+    }
+    .container { max-width: 780px; margin: 0 auto; padding: 40px 20px; }
+    h1 { font-size: 2em; margin-bottom: 8px; }
+    .tagline { color: var(--text-muted); margin-bottom: 40px; font-size: 1.1em; }
+    .post-list { list-style: none; padding: 0; }
+    .post-list li {
+      padding: 16px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .post-list a {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 1.15em;
+      font-weight: 500;
+    }
+    .post-list a:hover { text-decoration: underline; }
+    .post-date {
+      color: var(--text-muted);
+      font-size: 0.85em;
+      margin-top: 4px;
+    }
+    footer {
+      margin-top: 60px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+    footer a { color: var(--text-muted); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>proc</h1>
+    <p class="tagline">{{ site.description }}</p>
+    <ul class="post-list">
+      {% for post in site.posts %}
+      <li>
+        <a href="{{ post.url | prepend: site.baseurl }}">{{ post.title }}</a>
+        <div class="post-date">{{ post.date | date: "%B %d, %Y" }}</div>
+      </li>
+      {% endfor %}
+    </ul>
+    <footer>
+      <a href="https://github.com/yazeed/proc">GitHub</a> &middot;
+      <a href="https://crates.io/crates/proc-cli">crates.io</a> &middot;
+      <a href="https://www.npmjs.com/package/proc-cli">npm</a>
+    </footer>
+  </div>
+</body>
+</html>

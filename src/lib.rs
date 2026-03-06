@@ -8,8 +8,10 @@
 //! - **Unified Targets**: `:port`, `PID`, and `name` work the same everywhere
 //! - **Multi-Target**: `proc kill :3000,:8080,node` - comma-separated targets
 //! - **Query Language**: `proc by node --in .` - composable filters
+//! - **Working Directory**: See which project folder a process is running from
 //! - **Terminal-Adaptive Tables**: Tables adjust to terminal width automatically
 //! - **Consistent Filters**: `--in`, `--by`, `--min-uptime`, `--parent`, `--range`, `--sort`, `--limit`
+//! - **Real-Time Monitoring**: `proc watch` / `proc top` - live process table with auto-refresh
 //! - **File Lookup**: `proc for ./script.py` - find by file path
 //! - **Cross-Platform**: macOS, Linux, and Windows
 //! - **Shell Completions**: bash, zsh, fish via `proc completions`
@@ -36,13 +38,16 @@
 //! # Kill only node processes in current directory
 //! proc kill node --in .
 //!
+//! # Watch processes in real-time
+//! proc watch node --in .
+//!
 //! # Generate shell completions
 //! proc completions zsh > ~/.zsh/completions/_proc
 //! ```
 //!
 //! ## Commands
 //!
-//! **Discovery**: `on`, `for`, `by`, `in`, `list`, `info`, `ports`, `tree`, `stuck`
+//! **Discovery**: `on`, `for`, `by`, `in`, `list`, `info`, `ports`, `tree`, `stuck`, `watch`
 //!
 //! **Lifecycle**: `kill`, `stop`, `unstick`
 //!

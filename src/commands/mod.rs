@@ -17,6 +17,7 @@ pub mod stop;
 pub mod stuck;
 pub mod tree;
 pub mod unstick;
+pub mod watch;
 
 pub use by::ByCommand;
 pub use find_in::InCommand;
@@ -30,3 +31,4 @@ pub use stop::StopCommand;
 pub use stuck::StuckCommand;
 pub use tree::TreeCommand;
 pub use unstick::UnstickCommand;
+pub use watch::WatchCommand;

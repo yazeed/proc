@@ -66,8 +66,8 @@ impl KillCommand {
         let (mut processes, not_found) = resolve_targets_excluding_self(&targets);
 
         // Warn about targets that weren't found
-        for target in &not_found {
-            printer.warning(&format!("Target not found: {}", target));
+        if !not_found.is_empty() {
+            printer.warning(&format!("Not found: {}", not_found.join(", ")));
         }
 
         // Apply --in and --by filters

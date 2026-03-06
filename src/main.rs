@@ -6,7 +6,7 @@ use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Shell};
 use proc_cli::commands::{
     ByCommand, ForCommand, InCommand, InfoCommand, KillCommand, ListCommand, OnCommand,
-    PortsCommand, StopCommand, StuckCommand, TreeCommand, UnstickCommand,
+    PortsCommand, StopCommand, StuckCommand, TreeCommand, UnstickCommand, WatchCommand,
 };
 use proc_cli::error::ExitCode;
 use std::io;
@@ -56,6 +56,13 @@ Run 'proc --help' for examples or visit https://github.com/yazeed/proc"
     proc info :3000,:8080          Info for multiple targets
     proc kill :3000,node           Kill port 3000 and node processes
     proc stop :3000,:8080          Stop multiple targets gracefully
+
+  Watch (Real-Time):
+    proc watch                     Watch all processes (alias: proc top)
+    proc watch node                Watch node processes
+    proc watch :3000               Watch process on port 3000
+    proc watch -n 1 --sort mem     1s refresh, sorted by memory
+    proc watch --in . --by node    Node processes in current directory
 
   Other:
     proc ports                     List all listening ports
@@ -110,6 +117,10 @@ enum Commands {
     /// Show process tree
     #[command(visible_alias = "t")]
     Tree(TreeCommand),
+
+    /// Watch processes in real-time
+    #[command(visible_aliases = ["w", "top"])]
+    Watch(WatchCommand),
 
     /// Find stuck/hung processes
     #[command(visible_alias = "x")]
@@ -249,6 +260,7 @@ fn main() {
         Commands::Kill(cmd) => cmd.execute(),
         Commands::Stop(cmd) => cmd.execute(),
         Commands::Tree(cmd) => cmd.execute(),
+        Commands::Watch(cmd) => cmd.execute(),
         Commands::Stuck(cmd) => cmd.execute(),
         Commands::Unstick(cmd) => cmd.execute(),
         Commands::Completions { shell } => {

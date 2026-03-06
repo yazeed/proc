@@ -109,9 +109,7 @@ impl InfoCommand {
             }
 
             if !not_found.is_empty() {
-                for target in &not_found {
-                    printer.warning(&format!("Target '{}' not found", target));
-                }
+                printer.warning(&format!("Not found: {}", not_found.join(", ")));
             }
         }
 

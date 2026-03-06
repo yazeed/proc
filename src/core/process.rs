@@ -326,7 +326,7 @@ impl Process {
     }
 
     /// Convert from sysinfo Process
-    fn from_sysinfo(pid: Pid, proc: &sysinfo::Process) -> Self {
+    pub(crate) fn from_sysinfo(pid: Pid, proc: &sysinfo::Process) -> Self {
         let cmd_vec = proc.cmd();
         let command = if cmd_vec.is_empty() {
             None

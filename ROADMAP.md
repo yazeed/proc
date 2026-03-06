@@ -6,15 +6,39 @@ The goal is not to accumulate features, but to cover the process and port manage
 
 See [PHILOSOPHY.md](PHILOSOPHY.md) for our full manifesto.
 
-## Current Release (v1.7.0)
+## Current Release (v1.8.0)
 
-The core commands are complete, with the Proc Query Language, shell completions, file lookup, consistent filtering, terminal-adaptive tables, and full CI/CD automation:
+The core commands are complete, with real-time monitoring, the Proc Query Language, shell completions, file lookup, consistent filtering, terminal-adaptive tables, and full CI/CD automation:
 
 | Area | Commands | Status |
 |------|----------|--------|
 | Discovery | `on`, `for`, `by`, `in`, `ports`, `list`, `info`, `tree`, `stuck` | ✅ |
+| Monitoring | `watch` (alias: `top`) — real-time process monitoring | ✅ |
 | Lifecycle | `kill`, `stop`, `unstick` (all support multi-target + filters) | ✅ |
 | Tooling | `completions`, `manpage` | ✅ |
+
+### v1.8.0 Highlights
+
+- **`proc watch`**: Real-time process monitoring with auto-refresh
+  - `proc watch` — watch all processes (alias: `proc top`)
+  - `proc watch node` — watch node processes
+  - `proc watch :3000` — watch process on port 3000
+  - `--interval/-n` — configurable refresh interval (default: 2s)
+  - `--sort/-s` — sort by cpu, mem, pid, name
+  - `--limit/-l` — cap number of results
+  - Combines with `--in`, `--by`, `--min-cpu`, `--min-mem` filters
+  - Alternate screen + raw mode for clean terminal experience
+  - NDJSON output (`--json`) for streaming to other tools
+  - Non-TTY detection: single snapshot when piped
+
+### v1.7.4 Highlights
+
+- **Self-exclusion**: `proc` no longer shows itself in `find_all()` results — fixes false positives across `list`, `by`, `in`, `stuck`, and other enumeration commands
+
+### v1.7.3 Highlights
+
+- **Working directory in output**: `proc on`, `proc info`, and all table views now show the process working directory — instantly tells you which project folder a process is running from
+- **Table `PATH` → `DIR` column**: Process tables now show working directory instead of executable path
 
 ### v1.7.0 Highlights
 
@@ -65,18 +89,6 @@ The core commands are complete, with the Proc Query Language, shell completions,
 - **PID deduplication**: Overlapping targets resolved safely
 - **Automated publishing**: All package managers update on release
   - crates.io, npm, Homebrew, Scoop, Docker — all via CI
-
-## Planned
-
-### v1.8 — Watch
-
-Real-time monitoring for when you need to observe.
-
-- [ ] `proc watch :3000` — Monitor a port
-- [ ] `proc watch node` — Monitor processes by name
-- [ ] `proc watch 1234` — Monitor a specific PID
-
-**Competitive context:** procs offers `--watch` mode for continuous updates. proc's version will use unified targets.
 
 ## Under Consideration
 
@@ -138,7 +150,7 @@ proc on :3000 -q      # Output PID only, no formatting
 
 **Competitive context:** fkill offers `--silent` for similar use cases.
 
-## Not Planned
+### Not Planned
 
 These are outside proc's scope. See [PHILOSOPHY.md](PHILOSOPHY.md) for why.
 
@@ -147,7 +159,7 @@ These are outside proc's scope. See [PHILOSOPHY.md](PHILOSOPHY.md) for why.
 - **Remote processes** — Use ssh + proc
 - **Historical data** — Use proper monitoring tools
 - **GUI/Dashboard** — proc is a CLI tool
-- **Interactive TUI mode** — fkill offers fuzzy search UI; proc is for when you know what you want
+- **Interactive TUI mode** — fkill offers fuzzy search UI; proc is for when you know what you want. Note: `proc watch` provides real-time monitoring without interactivity.
 - **Auto-updates** — Use your package manager
 
 ---

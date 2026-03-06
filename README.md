@@ -1,6 +1,8 @@
 # proc
 
-<img width="894" height="400" alt="proc-logo" src="https://github.com/user-attachments/assets/b4b44b5c-d94d-4cc2-9fda-d572c3544131" /><br/>
+<p align="center">
+  <img src="demo.gif" alt="proc demo" width="800" />
+</p>
 
 [![CI](https://github.com/yazeed/proc/workflows/CI/badge.svg)](https://github.com/yazeed/proc/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -20,6 +22,20 @@ proc by node --in . --min-cpu 5 # node in cwd using >5% CPU
 proc kill :3000,:8080,node      # kill mixed targets at once
 proc info :3000,1234            # info for port + PID
 ```
+
+### Why proc?
+
+| Task | proc | Without proc |
+|------|------|-------------|
+| What's on port 3000? | `proc on :3000` | `lsof -i :3000 -P -n` |
+| Kill it | `proc kill :3000` | `lsof -i :3000 -t \| xargs kill -9` |
+| Ports used by node | `proc on node` | `lsof -i -P -n \| grep node` |
+| Node processes in cwd | `proc by node --in .` | `ps aux \| grep node` + manual check |
+| Kill mixed targets | `proc kill :3000,:8080,node` | Three separate commands |
+| Watch in real-time | `proc watch node` | `watch -n2 'ps aux \| grep node'` |
+| What runs this file? | `proc for ./app.js` | `lsof ./app.js` or `fuser ./app.js` |
+
+One syntax. One tool. [Full comparison &rarr;](https://yazeed.github.io/proc/blog/proc-vs-lsof-fuser-killport-fkill/)
 
 ## Install
 
@@ -95,6 +111,11 @@ proc by node --in . --min-cpu 5
 proc kill :3000,:8080,node
 ```
 
+**Watch processes in real-time:**
+```bash
+proc watch node --in .
+```
+
 ## Target Syntax
 
 All commands accept the same target syntax:
@@ -120,6 +141,7 @@ All commands accept the same target syntax:
 | `info <target>` | `i` | Detailed process information |
 | `ports` | `p` | List all listening ports |
 | `tree` | `t` | Process hierarchy |
+| `watch` | `w`, `top` | Real-time process monitoring |
 
 ### Lifecycle
 
@@ -138,14 +160,21 @@ Filters can be combined with discovery and lifecycle commands:
 |--------|-------------|
 | `--in <path>` | Filter by working directory |
 | `--by <name>` | Filter by process name |
+| `--path <path>` | Filter by executable path (`list`) |
 | `--min-cpu <n>` | Processes using >n% CPU |
 | `--min-mem <n>` | Processes using >n MB memory |
 | `--min-uptime <s>` | Processes running longer than s seconds |
 | `--parent <pid>` | Children of a specific parent PID |
 | `--status <s>` | Filter by status: running, sleeping, stopped, zombie |
+| `--exposed` | Only network-exposed ports (`ports`) |
+| `--local` | Only localhost ports (`ports`) |
 | `--range <s-e>` | Filter ports by range (e.g., `3000-9000`) |
 | `--sort/-s <key>` | Sort by: cpu, mem, pid, name |
 | `--limit/-n <n>` | Limit number of results |
+| `--ancestors/-a` | Show ancestry path to root (`tree`) |
+| `--depth/-d <n>` | Maximum tree depth (default: 10) |
+| `--compact/-C` | Show PIDs only in compact view (`tree`) |
+| `--timeout/-t <s>` | Seconds before considered stuck (default: 300) |
 
 ### Options
 
@@ -155,7 +184,10 @@ Filters can be combined with discovery and lifecycle commands:
 | `--verbose` | `-v` | Show paths, cwd, full commands |
 | `--yes` | `-y` | Skip confirmation |
 | `--dry-run` | | Preview without executing |
-| `--force` | `-f` | Force action |
+| `--force` | `-f` | Force termination if recovery fails (`unstick`) |
+| `--graceful` | `-g` | Send SIGTERM instead of SIGKILL (`kill`) |
+| `--kill` | `-k` | Kill found stuck processes (`stuck`) |
+| `--interval` | `-n` | Refresh interval for watch (seconds) |
 
 ## Examples
 
@@ -186,6 +218,18 @@ proc kill node --in . --dry-run
 
 # Process tree filtered by CPU usage
 proc tree --min-cpu 5
+
+# Watch all processes sorted by CPU (alias: proc top)
+proc watch
+
+# Watch node processes with 1s refresh
+proc watch node -n 1
+
+# Watch process on port 3000
+proc watch :3000
+
+# Watch processes in cwd sorted by memory
+proc watch --in . --sort mem
 
 # Find and recover stuck processes
 proc stuck

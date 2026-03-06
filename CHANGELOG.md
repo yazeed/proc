@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-03-06
+
+### Added
+
+- **`proc watch`**: Real-time process monitoring with auto-refresh
+  - Watch all processes: `proc watch` (alias: `proc top`, `proc w`)
+  - Watch by target: `proc watch node`, `proc watch :3000`, `proc watch 1234`
+  - Configurable refresh interval: `--interval/-n` (default: 2s)
+  - Sort by cpu, mem, pid, name: `--sort/-s` (default: cpu)
+  - Limit results: `--limit/-l`
+  - Combines with existing filters: `--in`, `--by`, `--min-cpu`, `--min-mem`
+  - Alternate screen + raw mode for clean terminal experience
+  - Exit with `q`, `Esc`, or `Ctrl+C` — terminal always restored
+  - NDJSON output (`--json`) for streaming to other tools
+  - Non-TTY detection: single snapshot when piped
+  - Panic hook ensures terminal state is restored on crash
+
+### Fixed
+
+- **Multi-target "not found" output**: Commands (`kill`, `stop`, `info`) now show a single consolidated warning (e.g., `Not found: :3000, :8080`) instead of one line per missing target
+
 ## [1.7.4] - 2026-03-01
 
 ### Fixed
@@ -369,7 +390,11 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 
 ---
 
-[Unreleased]: https://github.com/yazeed/proc/compare/v1.7.1...HEAD
+[Unreleased]: https://github.com/yazeed/proc/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/yazeed/proc/compare/v1.7.4...v1.8.0
+[1.7.4]: https://github.com/yazeed/proc/compare/v1.7.3...v1.7.4
+[1.7.3]: https://github.com/yazeed/proc/compare/v1.7.2...v1.7.3
+[1.7.2]: https://github.com/yazeed/proc/compare/v1.7.1...v1.7.2
 [1.7.1]: https://github.com/yazeed/proc/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/yazeed/proc/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/yazeed/proc/compare/v1.5.1...v1.6.0
