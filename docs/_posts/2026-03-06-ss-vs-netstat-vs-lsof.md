@@ -1,5 +1,5 @@
 ---
-title: "ss vs netstat vs lsof: A Practical Guide"
+title: "ss vs netstat vs lsof: a practical guide"
 description: "When to use ss, netstat, or lsof for network debugging. How each works under the hood, output differences, and awk patterns for parsing."
 date: 2026-03-06
 ---

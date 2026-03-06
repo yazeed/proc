@@ -1,5 +1,5 @@
 ---
-title: "The ps | grep | awk | kill Pipeline, Explained"
+title: "the ps | grep | awk | kill pipeline, explained"
 description: "Break down the classic ps aux | grep | awk | xargs kill pipeline. What each piece does, why grep -v grep, and how awk extracts PIDs."
 date: 2026-03-06
 ---

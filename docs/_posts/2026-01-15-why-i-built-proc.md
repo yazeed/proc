@@ -1,5 +1,5 @@
 ---
-title: "Why I Built proc"
+title: "why i built proc"
 description: "I kept forgetting how to find what's on port 3000. So I built a tool where the command you'd guess is the command that works."
 date: 2026-01-15
 ---

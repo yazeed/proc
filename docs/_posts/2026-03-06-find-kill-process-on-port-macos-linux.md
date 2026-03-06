@@ -1,5 +1,5 @@
 ---
-title: "How to Find and Kill a Process on Any Port (macOS and Linux)"
+title: "how to find and kill a process on any port (macOS and Linux)"
 description: "Every method to find and kill a process by port number on macOS and Linux — lsof, ss, netstat, fuser, and awk tricks for parsing their output."
 date: 2026-03-06
 ---
