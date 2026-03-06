@@ -1,7 +1,7 @@
 # proc
 
 <p align="center">
-  <img src="demo.gif" alt="proc demo" width="800" />
+  <img src="https://raw.githubusercontent.com/yazeed/proc/main/demo.gif" alt="proc demo" width="800" />
 </p>
 
 [![CI](https://github.com/yazeed/proc/workflows/CI/badge.svg)](https://github.com/yazeed/proc/actions)
