@@ -6,7 +6,7 @@ date: 2026-01-15
 
 I couldn't remember the flags.
 
-Every few weeks I'd need to find what's running on a port, or kill a stuck process, or figure out which node instance was eating CPU. And every time, I'd end up looking up the same `lsof` incantation:
+Every day I'd need to find what's running on a port, what process is running from the current folder, or figure out which node instance was eating CPU. And every time, I'd end up looking up the same `lsof` incantation:
 
 ```bash
 lsof -i :3000 -P -n

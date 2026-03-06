@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.1] - 2026-03-06
+
+### Fixed
+
+- **README demo image**: Use absolute URL for demo.gif so it renders on Docker Hub, crates.io, and npm
+
+### Added
+
+- **Technical blog posts**: 6 posts on GitHub Pages covering Unix process management, awk pipelines, ss/netstat/lsof comparison, zombie processes, and shell scripting patterns
+
 ## [1.8.0] - 2026-03-06
 
 ### Added
@@ -390,7 +400,8 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 
 ---
 
-[Unreleased]: https://github.com/yazeed/proc/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/yazeed/proc/compare/v1.8.1...HEAD
+[1.8.1]: https://github.com/yazeed/proc/compare/v1.8.0...v1.8.1
 [1.8.0]: https://github.com/yazeed/proc/compare/v1.7.4...v1.8.0
 [1.7.4]: https://github.com/yazeed/proc/compare/v1.7.3...v1.7.4
 [1.7.3]: https://github.com/yazeed/proc/compare/v1.7.2...v1.7.3
