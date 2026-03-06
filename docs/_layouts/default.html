@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {% seo %}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Azeret+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}">
+</head>
+<body>
+  <div class="ambient"></div>
+  <nav class="site-nav">
+    <div class="nav-inner">
+      <a href="{{ site.baseurl }}/" class="nav-logo">proc</a>
+      <div class="nav-links">
+        <a href="{{ site.baseurl }}/"{% if page.url == "/" %} class="active"{% endif %}>blog</a>
+        <a href="{{ site.baseurl }}/install"{% if page.url == "/install" %} class="active"{% endif %}>install</a>
+        <a href="https://github.com/yazeed/proc">github</a>
+      </div>
+    </div>
+  </nav>
+  <main class="site-main">
+    <div class="container">
+      {{ content }}
+    </div>
+  </main>
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <span>{{ site.description }}</span>
+      <div class="footer-links">
+        <a href="https://github.com/yazeed/proc">github</a>
+        <a href="https://crates.io/crates/proc-cli">crates.io</a>
+        <a href="https://www.npmjs.com/package/proc-cli">npm</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

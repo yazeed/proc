@@ -2,11 +2,11 @@ title: proc
 description: Semantic CLI tool for process management. Target by port, PID, name or path.
 url: https://yazeed.github.io
 baseurl: /proc
-remote_theme: pages-themes/minimal@v0.2.0
-plugins:
-  - jekyll-remote-theme
 
 permalink: /blog/:title/
+
+plugins:
+  - jekyll-seo-tag
 
 defaults:
   - scope:
@@ -14,3 +14,8 @@ defaults:
       type: "posts"
     values:
       layout: "post"
+  - scope:
+      path: ""
+      type: "pages"
+    values:
+      layout: "page"

@@ -1,139 +1,16 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ page.title }} | proc</title>
-  <meta name="description" content="{{ page.description | default: site.description }}">
-  <style>
-    :root {
-      --bg: #0d1117;
-      --surface: #161b22;
-      --border: #30363d;
-      --text: #e6edf3;
-      --text-muted: #8b949e;
-      --accent: #58a6ff;
-      --accent-subtle: #1f6feb;
-      --green: #3fb950;
-      --code-bg: #1c2128;
-    }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.7;
-      font-size: 16px;
-    }
-    .container {
-      max-width: 780px;
-      margin: 0 auto;
-      padding: 40px 20px;
-    }
-    header {
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 20px;
-      margin-bottom: 40px;
-    }
-    header a {
-      color: var(--text-muted);
-      text-decoration: none;
-      font-size: 14px;
-    }
-    header a:hover { color: var(--accent); }
-    h1 {
-      font-size: 2em;
-      margin-bottom: 8px;
-      color: var(--text);
-    }
-    .meta {
-      color: var(--text-muted);
-      font-size: 14px;
-      margin-bottom: 32px;
-    }
-    h2 {
-      font-size: 1.4em;
-      margin: 40px 0 16px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid var(--border);
-    }
-    h3 {
-      font-size: 1.15em;
-      margin: 28px 0 12px;
-    }
-    p { margin-bottom: 16px; }
-    a { color: var(--accent); text-decoration: none; }
-    a:hover { text-decoration: underline; }
-    code {
-      background: var(--code-bg);
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-size: 0.9em;
-      font-family: 'SF Mono', 'Fira Code', monospace;
-    }
-    pre {
-      background: var(--code-bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 16px;
-      overflow-x: auto;
-      margin-bottom: 16px;
-    }
-    pre code {
-      background: none;
-      padding: 0;
-      font-size: 0.85em;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 20px;
-      font-size: 0.9em;
-    }
-    th, td {
-      text-align: left;
-      padding: 10px 14px;
-      border: 1px solid var(--border);
-    }
-    th {
-      background: var(--surface);
-      font-weight: 600;
-    }
-    td code { font-size: 0.85em; }
-    ul, ol { margin-bottom: 16px; padding-left: 24px; }
-    li { margin-bottom: 6px; }
-    strong { color: var(--text); }
-    blockquote {
-      border-left: 3px solid var(--accent-subtle);
-      padding-left: 16px;
-      color: var(--text-muted);
-      margin-bottom: 16px;
-    }
-    footer {
-      margin-top: 60px;
-      padding-top: 20px;
-      border-top: 1px solid var(--border);
-      color: var(--text-muted);
-      font-size: 14px;
-    }
-    footer a { color: var(--text-muted); }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <header>
-      <a href="{{ site.baseurl }}/">&larr; proc blog</a>
-    </header>
-    <article>
-      <h1>{{ page.title }}</h1>
-      <div class="meta">{{ page.date | date: "%B %d, %Y" }}</div>
-      {{ content }}
-    </article>
-    <footer>
-      <a href="https://github.com/yazeed/proc">GitHub</a> &middot;
-      <a href="https://crates.io/crates/proc-cli">crates.io</a> &middot;
-      <a href="https://www.npmjs.com/package/proc-cli">npm</a>
-    </footer>
+---
+layout: default
+---
+<article>
+  <div class="post-header">
+    <a href="{{ site.baseurl }}/" class="post-back">&larr; blog</a>
+    <h1>{{ page.title }}</h1>
+    <div class="post-meta">{{ page.date | date: "%B %d, %Y" }}</div>
+    {% if page.description %}
+    <p class="post-description">{{ page.description }}</p>
+    {% endif %}
   </div>
-</body>
-</html>
+  <div class="post-content">
+    {{ content }}
+  </div>
+</article>
