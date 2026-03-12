@@ -90,6 +90,88 @@ The core commands are complete, with real-time monitoring, the Proc Query Langua
 - **Automated publishing**: All package managers update on release
   - crates.io, npm, Homebrew, Scoop, Docker — all via CI
 
+## Planned
+
+Features accepted for implementation. Each passes our [philosophy](PHILOSOPHY.md) test.
+
+### Freeze/Thaw (SIGSTOP/SIGCONT)
+
+Temporarily pause and resume processes without terminating them.
+
+```
+proc freeze :3000          # Pause process on port 3000
+proc freeze node --in .    # Pause node processes in cwd
+proc thaw :3000            # Resume frozen process
+proc thaw node             # Resume all frozen node processes
+```
+
+**Use cases:**
+- Pause resource-heavy processes temporarily (free CPU without killing)
+- Freeze a process to attach debugger or investigate
+- Pause long-running transfers to free bandwidth, then resume
+
+**Philosophy check:** ✅ Fits process management, ✅ obvious commands, ✅ explicit intent, ✅ deepens domain mastery.
+
+**Why:** Completes the process lifecycle. proc has kill (SIGKILL), stop (SIGTERM→SIGKILL), unstick (SIGCONT→SIGINT), but no way to pause and resume. Every developer knows `Ctrl+Z` but has no semantic way to do it by port or name. Supports `--in`, `--by`, `--yes`, `--dry-run`, `--json` like other lifecycle commands.
+
+### Orphans (Orphaned Process Discovery)
+
+Find orphaned processes — children whose parent has exited.
+
+```
+proc orphans               # All orphaned processes
+proc orphans --in .        # Orphans in current project directory
+proc orphans --by node     # Orphaned node processes
+proc orphans --kill        # Find and kill orphans (with confirmation)
+```
+
+**Use cases:**
+- Find "ghost" Node/webpack/Python processes left behind after a crashed dev server
+- Clean up leaked child processes that are eating CPU in the background
+- Identify processes reparented to PID 1 (init/launchd) after their parent was killed
+
+**Philosophy check:** ✅ Fits process management, ✅ one obvious command, ✅ common case effortless, ✅ explicit intent, ✅ deepens domain mastery (no other tool makes this easy).
+
+**Why:** `proc stuck` finds high-CPU processes. `proc orphans` finds abandoned processes — a different problem with a different heuristic (PPID=1 or reparented, filtering out daemons). Completes the diagnostic toolkit alongside `stuck`.
+
+### Clean (Kill + Verify)
+
+Kill processes on ports and verify they're gone. The common dev server restart workflow in one command.
+
+```
+proc clean :3000              # Kill what's on port 3000, verify it's free
+proc clean :3000,:8080,:5432  # Clean multiple ports at once
+proc clean :3000 --wait 5     # Wait up to 5s for port to free
+```
+
+**Use cases:**
+- Dev server restart: kill old process, confirm port is free, start new one
+- CI/CD cleanup: ensure ports are available before test suite runs
+- Post-crash recovery: clean up ports that are stuck in TIME_WAIT
+
+**Philosophy check:** ✅ Fits process management, ✅ one obvious command, ✅ common case effortless, ✅ explicit intent, ✅ deepens domain mastery.
+
+**Why:** `proc kill :3000 --yes` kills but doesn't verify the port is actually free (TIME_WAIT can keep it busy). `proc clean` combines kill + poll-until-free into a single reliable operation. This is the #1 workflow for web developers — the EADDRINUSE fix as a command.
+
+### Signal Choice on Stop (`--signal`)
+
+Allow `proc stop` to send a custom initial signal instead of always SIGTERM.
+
+```
+proc stop nginx --signal HUP     # Reload config (SIGHUP)
+proc stop worker --signal INT    # Graceful interrupt (SIGINT)
+proc stop node --signal USR1     # Trigger debugger (SIGUSR1)
+```
+
+**Use cases:**
+- Reload daemon configs without restart (SIGHUP to nginx, Apache, sshd)
+- Send SIGINT instead of SIGTERM for processes that handle Ctrl+C differently
+- Send USR1/USR2 for application-defined behaviors
+
+**Philosophy check:** ✅ Fits process management, ✅ obvious flag, ✅ explicit intent, ✅ deepens domain mastery.
+
+**Why:** `proc stop` currently hardcodes SIGTERM→SIGKILL. Adding `--signal` makes it a general-purpose signal delivery tool with proc's target resolution (ports, names, filters) and safety features (confirmation, dry-run). Not a new command — just a flag that unlocks the full signal vocabulary.
+
 ## Under Consideration
 
 Features that have valid use cases but are not yet prioritized. Each is evaluated against our [philosophy](PHILOSOPHY.md).
@@ -111,24 +193,6 @@ proc hog --mem     # Sort by memory
 **Philosophy check:** ✅ Fits process management, ✅ one obvious command, ✅ common case effortless, ⚠️ functionality exists via flags.
 
 **Status:** Functionality already exists in `list` via `--min-cpu`, `--min-mem`, and `--sort` flags. Would consider adding `hog` as a shorthand if there's user demand.
-
-### Freeze/Thaw (SIGSTOP/SIGCONT)
-
-Temporarily pause and resume processes without terminating them.
-
-```
-proc freeze :3000     # Pause process on port 3000
-proc thaw :3000       # Resume frozen process
-```
-
-**Use cases:**
-- Pause resource-heavy processes temporarily
-- Freeze long-running transfers (rsync) to free disk space, then resume
-- Pause a process to attach debugger or investigate
-
-**Philosophy check:** ✅ Fits process management, ✅ obvious commands, ✅ explicit intent, ✅ deepens domain mastery (pause/resume completes the process lifecycle).
-
-**Status:** Strong candidate. Completes the process lifecycle alongside kill/stop/unstick.
 
 ### Quiet Mode
 
