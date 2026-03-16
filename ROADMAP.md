@@ -134,14 +134,14 @@ proc orphans --kill        # Find and kill orphans (with confirmation)
 
 **Why:** `proc stuck` finds high-CPU processes. `proc orphans` finds abandoned processes — a different problem with a different heuristic (PPID=1 or reparented, filtering out daemons). Completes the diagnostic toolkit alongside `stuck`.
 
-### Clean (Kill + Verify)
+### Free (Kill + Verify Port)
 
-Kill processes on ports and verify they're gone. The common dev server restart workflow in one command.
+Free a port. Kill whatever's on it and verify it's actually available. The EADDRINUSE fix as a command.
 
 ```
-proc clean :3000              # Kill what's on port 3000, verify it's free
-proc clean :3000,:8080,:5432  # Clean multiple ports at once
-proc clean :3000 --wait 5     # Wait up to 5s for port to free
+proc free :3000              # Kill what's on port 3000, verify it's free
+proc free :3000,:8080,:5432  # Free multiple ports at once
+proc free :3000 --wait 5     # Wait up to 5s for port to free
 ```
 
 **Use cases:**
@@ -151,7 +151,36 @@ proc clean :3000 --wait 5     # Wait up to 5s for port to free
 
 **Philosophy check:** ✅ Fits process management, ✅ one obvious command, ✅ common case effortless, ✅ explicit intent, ✅ deepens domain mastery.
 
-**Why:** `proc kill :3000 --yes` kills but doesn't verify the port is actually free (TIME_WAIT can keep it busy). `proc clean` combines kill + poll-until-free into a single reliable operation. This is the #1 workflow for web developers — the EADDRINUSE fix as a command.
+**Why:** `proc kill :3000 --yes` kills but doesn't verify the port is actually free (TIME_WAIT can keep it busy). `proc free` combines kill + poll-until-free into a single reliable operation. The most tweetable command proc could have: `proc free 3000`.
+
+### Why (Process Ancestry Tracing)
+
+Trace why a port is busy or how a process was started. Walks the process tree upward to show the full ancestry chain.
+
+```
+proc why :3000               # Why is port 3000 busy?
+proc why node                # How was this node process started?
+proc why 48221               # Trace ancestry of a PID
+```
+
+Example output:
+
+```
+Port 3000
+  node (pid 48221)
+  └─ started by: npm run dev (pid 48210)
+     └─ started by: zsh (pid 47001)
+        └─ dir: ~/Sites/web-app
+```
+
+**Use cases:**
+- "What started this process?" — trace the chain from port to origin
+- Debug unexpected processes: see how they were spawned
+- Understand complex process trees: webpack spawned by npm spawned by shell
+
+**Philosophy check:** ✅ Fits process management, ✅ one obvious command, ✅ common case effortless, ✅ explicit intent, ✅ deepens domain mastery (no other tool answers "why is this port busy?" in one command).
+
+**Why:** `proc on` shows *what's* on a port. `proc tree` shows children downward. `proc why` completes the picture — it walks *upward* to show ancestry. Same OS-level data proc already has, just presented in the direction developers actually think: "why is this running?"
 
 ### Signal Choice on Stop (`--signal`)
 
@@ -213,6 +242,38 @@ proc on :3000 -q      # Output PID only, no formatting
 **Status:** Natural complement to `--json`. Would consider if there's user demand.
 
 **Competitive context:** fkill offers `--silent` for similar use cases.
+
+### Doctor (Diagnostic Health Check)
+
+A meta-diagnostic command that checks for common process problems.
+
+```
+proc doctor
+```
+
+Example output:
+
+```
+PROCESS HEALTH CHECK
+
+✓ no port conflicts
+✗ 2 orphaned node processes
+✗ 1 stuck process (webpack, 98% CPU)
+✓ no zombies
+
+Suggested:
+  proc orphans --kill
+  proc unstick
+```
+
+**Use cases:**
+- Quick health check after a crash or messy dev session
+- CI/CD pre-flight: verify clean environment before test run
+- "Something feels slow" — one command to diagnose
+
+**Philosophy check:** ✅ Fits process management, ✅ one obvious command, ✅ common case effortless, ⚠️ aggregates existing commands rather than adding new capability.
+
+**Status:** Useful but depends on `orphans` and `stuck` being solid first. Would be a natural addition once the diagnostic commands are mature.
 
 ### Not Planned
 
