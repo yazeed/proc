@@ -30,6 +30,10 @@ proc info :3000,1234            # info for port + PID
 |------|------|-------------|
 | What's on port 3000? | `proc on :3000` | `lsof -i :3000 -P -n` |
 | Kill it | `proc kill :3000` | `lsof -i :3000 -t \| xargs kill -9` |
+| Free port 3000 | `proc free :3000` | `lsof -i :3000 -t \| xargs kill && sleep 1 && lsof -i :3000` |
+| Why is port busy? | `proc why :3000` | `lsof -i :3000` + `ps -o ppid=` chain |
+| Pause a process | `proc freeze node` | `kill -STOP $(pgrep node)` |
+| Find orphans | `proc orphans --in .` | No standard tool |
 | Ports used by node | `proc on node` | `lsof -i -P -n \| grep node` |
 | Node processes in cwd | `proc by node --in .` | `ps aux \| grep node` + manual check |
 | Kill mixed targets | `proc kill :3000,:8080,node` | Three separate commands |
@@ -143,14 +147,19 @@ All commands accept the same target syntax:
 | `ports` | `p` | List all listening ports |
 | `tree` | `t` | Process hierarchy |
 | `watch` | `w`, `top` | Real-time process monitoring |
+| `why <target>` | | Trace process ancestry (why is this port busy?) |
+| `orphans` | `o` | Find orphaned processes |
+| `stuck` | `x` | Find hung processes |
 
 ### Lifecycle
 
 | Command | Alias | Description |
 |---------|-------|-------------|
 | `kill <target>` | `k` | Force kill (SIGKILL) |
-| `stop <target>` | `s` | Graceful stop (SIGTERM) |
-| `stuck` | `x` | Find hung processes |
+| `stop <target>` | `s` | Graceful stop (SIGTERM, `--signal` for custom) |
+| `freeze <target>` | | Pause process (SIGSTOP) |
+| `thaw <target>` | | Resume frozen process (SIGCONT) |
+| `free <:port>` | | Kill process and verify port freed |
 | `unstick` | `u` | Recover stuck processes |
 
 ### Filters
@@ -187,7 +196,9 @@ Filters can be combined with discovery and lifecycle commands:
 | `--dry-run` | | Preview without executing |
 | `--force` | `-f` | Force termination if recovery fails (`unstick`) |
 | `--graceful` | `-g` | Send SIGTERM instead of SIGKILL (`kill`) |
-| `--kill` | `-k` | Kill found stuck processes (`stuck`) |
+| `--signal` | `-S` | Custom signal: HUP, INT, USR1, etc. (`stop`) |
+| `--kill` | `-k` | Kill found processes (`stuck`, `orphans`) |
+| `--wait` | | Max seconds to wait for port to free (`free`) |
 | `--interval` | `-n` | Refresh interval for watch (seconds) |
 
 ## Examples
@@ -231,6 +242,24 @@ proc watch :3000
 
 # Watch processes in cwd sorted by memory
 proc watch --in . --sort mem
+
+# Freeze/thaw (pause and resume)
+proc freeze node               # Pause all node processes
+proc thaw node                 # Resume them
+
+# Free a port (kill + verify available)
+proc free :3000                # Kill and confirm port 3000 is free
+proc free :3000,:8080 --yes    # Free multiple ports
+
+# Why is port 3000 busy?
+proc why :3000                 # Show ancestry chain with port context
+
+# Find orphaned processes
+proc orphans                   # List orphans
+proc orphans --in . --kill     # Kill orphans in current directory
+
+# Send custom signal
+proc stop nginx --signal HUP   # Reload config (SIGHUP)
 
 # Find and recover stuck processes
 proc stuck

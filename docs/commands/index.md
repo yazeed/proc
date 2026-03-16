@@ -10,6 +10,7 @@ permalink: /commands
 | command | aliases | description |
 |---------|---------|-------------|
 | [on](on) | `:` | port/process lookup (bidirectional) |
+| [why](why) | | trace why a port is busy or show process ancestry |
 | [for](for) | `f` | find processes by file path |
 | [by](by) | `b` | filter processes by name |
 | [in](in) | | filter processes by working directory |
@@ -19,13 +20,17 @@ permalink: /commands
 | [tree](tree) | `t` | show process tree |
 | [watch](watch) | `w`, `top` | real-time process monitoring |
 | [stuck](stuck) | `x` | find stuck/hung processes |
+| [orphans](orphans) | `o` | find orphaned processes |
 
 ## lifecycle
 
 | command | aliases | description |
 |---------|---------|-------------|
 | [kill](kill) | `k` | force kill processes (SIGKILL) |
-| [stop](stop) | `s` | graceful stop (SIGTERM, then SIGKILL) |
+| [stop](stop) | `s` | graceful stop with --signal support (SIGTERM, then SIGKILL) |
+| [freeze](freeze) | | pause processes (SIGSTOP) |
+| [thaw](thaw) | | resume frozen processes (SIGCONT) |
+| [free](free) | | free ports by killing the occupying process |
 | [unstick](unstick) | `u` | attempt to recover stuck processes |
 
 ## common options

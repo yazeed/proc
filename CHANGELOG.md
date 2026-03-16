@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-03-16
+
+### Added
+
+- **`proc freeze`**: Pause processes with SIGSTOP
+  - `proc freeze node` — freeze all node processes
+  - `proc freeze :3000 --yes` — freeze by port, skip confirmation
+  - Supports `--in`, `--by`, `--dry-run`, `--json`, `--verbose`
+- **`proc thaw`**: Resume frozen processes with SIGCONT
+  - `proc thaw node` — resume all frozen node processes
+  - `proc thaw :3000` — resume process on port 3000
+  - Supports `--in`, `--by`, `--dry-run`, `--json`, `--verbose`
+- **`proc orphans`**: Find orphaned processes (parent exited, reparented to init/launchd)
+  - `proc orphans` — list orphaned processes
+  - `proc orphans --in .` — orphans in current directory
+  - `proc orphans --kill --yes` — find and kill orphans
+  - Filters out system daemons on both macOS and Linux
+- **`proc why`**: Trace why a port is busy or show process ancestry
+  - `proc why :3000` — ancestry chain with port context
+  - `proc why node` — how was this node process started?
+  - Shows working directory and command for the target process
+  - Full JSON output support
+- **`proc free`**: Free ports by killing the process and verifying availability
+  - `proc free :3000` — kill process, verify port freed
+  - `proc free :3000,:8080 --yes` — free multiple ports
+  - `proc free :3000 --wait 30` — wait up to 30s for port to free
+  - Reports per-port success/failure (handles TIME_WAIT)
+  - Port-only targets; rejects PIDs/names with clear error message
+- **`--signal` flag on `proc stop`**: Send custom initial signal instead of SIGTERM
+  - `proc stop nginx --signal HUP` — reload config (SIGHUP)
+  - `proc stop worker --signal USR1` — application-defined signal
+  - Accepts signal names: HUP, INT, QUIT, ABRT, KILL, TERM, STOP, CONT, USR1, USR2
+
+### Changed
+
+- **Core**: Added `Process::send_signal()` for arbitrary Unix signal delivery
+- **Core**: Added `Process::find_orphans()` for orphan detection with system process filtering
+
+### Updated
+
+- Updated dependencies (`clap`, `sysinfo`, `libc`, `tempfile`, and others)
+
 ## [1.8.1] - 2026-03-06
 
 ### Fixed
@@ -403,7 +445,8 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 
 ---
 
-[Unreleased]: https://github.com/yazeed/proc/compare/v1.8.1...HEAD
+[Unreleased]: https://github.com/yazeed/proc/compare/v1.9.0...HEAD
+[1.9.0]: https://github.com/yazeed/proc/compare/v1.8.1...v1.9.0
 [1.8.1]: https://github.com/yazeed/proc/compare/v1.8.0...v1.8.1
 [1.8.0]: https://github.com/yazeed/proc/compare/v1.7.4...v1.8.0
 [1.7.4]: https://github.com/yazeed/proc/compare/v1.7.3...v1.7.4

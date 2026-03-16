@@ -12,6 +12,10 @@
 //! - **Terminal-Adaptive Tables**: Tables adjust to terminal width automatically
 //! - **Consistent Filters**: `--in`, `--by`, `--min-uptime`, `--parent`, `--range`, `--sort`, `--limit`
 //! - **Real-Time Monitoring**: `proc watch` / `proc top` - live process table with auto-refresh
+//! - **Freeze/Thaw**: `proc freeze` / `proc thaw` - pause and resume by port, PID, or name
+//! - **Port Freeing**: `proc free :3000` - kill and verify port is available
+//! - **Ancestry Tracing**: `proc why :3000` - trace why a port is busy
+//! - **Orphan Detection**: `proc orphans` - find abandoned child processes
 //! - **File Lookup**: `proc for ./script.py` - find by file path
 //! - **Cross-Platform**: macOS, Linux, and Windows
 //! - **Shell Completions**: bash, zsh, fish via `proc completions`
@@ -47,9 +51,9 @@
 //!
 //! ## Commands
 //!
-//! **Discovery**: `on`, `for`, `by`, `in`, `list`, `info`, `ports`, `tree`, `stuck`, `watch`
+//! **Discovery**: `on`, `for`, `by`, `in`, `list`, `info`, `ports`, `tree`, `stuck`, `watch`, `why`, `orphans`
 //!
-//! **Lifecycle**: `kill`, `stop`, `unstick`
+//! **Lifecycle**: `kill`, `stop`, `unstick`, `freeze`, `thaw`, `free`
 //!
 //! **Tooling**: `completions`, `manpage`
 

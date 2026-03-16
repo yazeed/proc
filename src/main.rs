@@ -5,8 +5,9 @@
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Shell};
 use proc_cli::commands::{
-    ByCommand, ForCommand, InCommand, InfoCommand, KillCommand, ListCommand, OnCommand,
-    PortsCommand, StopCommand, StuckCommand, TreeCommand, UnstickCommand, WatchCommand,
+    ByCommand, ForCommand, FreeCommand, FreezeCommand, InCommand, InfoCommand, KillCommand,
+    ListCommand, OnCommand, OrphansCommand, PortsCommand, StopCommand, StuckCommand, ThawCommand,
+    TreeCommand, UnstickCommand, WatchCommand, WhyCommand,
 };
 use proc_cli::error::ExitCode;
 use std::io;
@@ -64,11 +65,26 @@ Run 'proc --help' for examples or visit https://github.com/yazeed/proc"
     proc watch -n 1 --sort mem     1s refresh, sorted by memory
     proc watch --in . --by node    Node processes in current directory
 
+  Freeze/Thaw:
+    proc freeze node               Pause node processes (SIGSTOP)
+    proc freeze :3000 --yes        Freeze by port, skip confirm
+    proc thaw node                 Resume frozen processes (SIGCONT)
+
+  Free Ports:
+    proc free :3000                Kill process, verify port freed
+    proc free :3000,:8080 --yes    Free multiple ports
+
+  Diagnostics:
+    proc why :3000                 Why is port 3000 busy? (ancestry)
+    proc orphans                   Find orphaned processes
+    proc orphans --kill            Find and kill orphans
+
   Other:
     proc ports                     List all listening ports
     proc tree --min-cpu 5          Process tree filtered by CPU
     proc stuck                     Find hung processes
     proc unstick --force           Recover or terminate stuck processes
+    proc stop nginx --signal HUP   Send custom signal (config reload)
 
 Targets: :port, PID, or process name. Comma-separate for multiple.
 For more information, visit: https://github.com/yazeed/proc")]
@@ -129,6 +145,22 @@ enum Commands {
     /// Attempt to recover stuck processes
     #[command(visible_alias = "u")]
     Unstick(UnstickCommand),
+
+    /// Freeze (pause) process(es) with SIGSTOP
+    Freeze(FreezeCommand),
+
+    /// Resume frozen process(es) with SIGCONT
+    Thaw(ThawCommand),
+
+    /// Find orphaned processes
+    #[command(visible_alias = "o")]
+    Orphans(OrphansCommand),
+
+    /// Trace why a port is busy or show process ancestry
+    Why(WhyCommand),
+
+    /// Free port(s) by killing process and verifying availability
+    Free(FreeCommand),
 
     /// Generate shell completions
     #[command(hide = true)]
@@ -263,6 +295,11 @@ fn main() {
         Commands::Watch(cmd) => cmd.execute(),
         Commands::Stuck(cmd) => cmd.execute(),
         Commands::Unstick(cmd) => cmd.execute(),
+        Commands::Freeze(cmd) => cmd.execute(),
+        Commands::Thaw(cmd) => cmd.execute(),
+        Commands::Orphans(cmd) => cmd.execute(),
+        Commands::Why(cmd) => cmd.execute(),
+        Commands::Free(cmd) => cmd.execute(),
         Commands::Completions { shell } => {
             generate(shell, &mut Cli::command(), "proc", &mut io::stdout());
             Ok(())

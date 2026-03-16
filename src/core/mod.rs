@@ -10,6 +10,8 @@ pub mod target;
 
 pub use filters::{resolve_in_dir, sort_processes, PortSortKey, SortKey};
 pub use port::{parse_port, PortInfo, Protocol};
+#[cfg(unix)]
+pub use process::parse_signal_name;
 pub use process::{Process, ProcessStatus};
 pub use target::{
     find_ports_for_pid, parse_target, parse_targets, resolve_target, resolve_target_single,

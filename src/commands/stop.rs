@@ -7,6 +7,8 @@
 //!   proc stop :3000,:8080       # Stop multiple targets
 //!   proc stop :3000,1234,node   # Mixed targets (port + PID + name)
 
+#[cfg(unix)]
+use crate::core::parse_signal_name;
 use crate::core::{parse_targets, resolve_in_dir, resolve_targets_excluding_self, Process};
 use crate::error::{ProcError, Result};
 use crate::ui::{OutputFormat, Printer};
@@ -48,6 +50,10 @@ pub struct StopCommand {
     /// Filter by process name
     #[arg(long = "by", short = 'b')]
     pub by_name: Option<String>,
+
+    /// Initial signal to send instead of SIGTERM (e.g. HUP, USR1, INT)
+    #[arg(long, short = 'S')]
+    pub signal: Option<String>,
 }
 
 impl StopCommand {
@@ -125,12 +131,29 @@ impl StopCommand {
             }
         }
 
+        // Parse custom signal if provided
+        #[cfg(unix)]
+        let custom_signal = if let Some(ref sig_name) = self.signal {
+            Some(parse_signal_name(sig_name)?)
+        } else {
+            None
+        };
+
         // Stop processes
         let mut stopped = Vec::new();
         let mut failed = Vec::new();
 
         for proc in &processes {
-            match proc.terminate() {
+            #[cfg(unix)]
+            let send_result = if let Some(signal) = custom_signal {
+                proc.send_signal(signal)
+            } else {
+                proc.terminate()
+            };
+            #[cfg(not(unix))]
+            let send_result = proc.terminate();
+
+            match send_result {
                 Ok(()) => {
                     // Wait for process to exit
                     let stopped_gracefully = self.wait_for_exit(proc);

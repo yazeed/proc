@@ -20,6 +20,7 @@ proc stop node --timeout 5 # 5s before force kill
 | `--yes` | `-y` | skip confirmation |
 | `--dry-run` | | show what would be stopped |
 | `--timeout <secs>` | `-t` | seconds before force kill (default: 10) |
+| `--signal <name>` | `-S` | send a specific signal instead of SIGTERM |
 | `--in [<dir>]` | `-i` | filter by directory |
 | `--by <name>` | `-b` | filter by process name |
 | `--json` | `-j` | output as JSON |
@@ -39,8 +40,14 @@ proc stop node --in .
 
 # stop without confirmation
 proc stop :3000 --yes
+
+# send SIGHUP to reload nginx config
+proc stop nginx --signal HUP
+
+# send SIGUSR1 to a worker process
+proc stop worker --signal USR1
 ```
 
 ## see also
 
-[kill](kill) for immediate SIGKILL, [unstick](unstick) for stuck processes.
+[kill](kill) for immediate SIGKILL, [unstick](unstick) for stuck processes, [freeze](freeze)/[thaw](thaw) to pause and resume.

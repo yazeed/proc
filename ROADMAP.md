@@ -6,16 +6,36 @@ The goal is not to accumulate features, but to cover the process and port manage
 
 See [PHILOSOPHY.md](PHILOSOPHY.md) for our full manifesto.
 
-## Current Release (v1.8.0)
+## Current Release (v1.9.0)
 
-The core commands are complete, with real-time monitoring, the Proc Query Language, shell completions, file lookup, consistent filtering, terminal-adaptive tables, and full CI/CD automation:
+The core commands are complete, with process lifecycle control, diagnostics, real-time monitoring, the Proc Query Language, shell completions, file lookup, consistent filtering, terminal-adaptive tables, and full CI/CD automation:
 
 | Area | Commands | Status |
 |------|----------|--------|
-| Discovery | `on`, `for`, `by`, `in`, `ports`, `list`, `info`, `tree`, `stuck` | ✅ |
+| Discovery | `on`, `for`, `by`, `in`, `ports`, `list`, `info`, `tree`, `stuck`, `why`, `orphans` | ✅ |
 | Monitoring | `watch` (alias: `top`) — real-time process monitoring | ✅ |
-| Lifecycle | `kill`, `stop`, `unstick` (all support multi-target + filters) | ✅ |
+| Lifecycle | `kill`, `stop`, `unstick`, `freeze`, `thaw`, `free` (all support multi-target + filters) | ✅ |
 | Tooling | `completions`, `manpage` | ✅ |
+
+### v1.9.0 Highlights
+
+- **`proc freeze` / `proc thaw`**: Pause and resume processes by port, PID, or name (SIGSTOP/SIGCONT)
+  - `proc freeze :3000` — pause the process on port 3000
+  - `proc thaw :3000` — resume it
+  - Supports `--in`, `--by`, `--dry-run`, `--yes`, `--json`
+- **`proc orphans`**: Find orphaned processes whose parent has exited
+  - `proc orphans --in .` — orphans in current project
+  - `proc orphans --kill` — find and kill them
+  - Smart filtering excludes system daemons on macOS and Linux
+- **`proc why`**: Trace process ancestry with port context
+  - `proc why :3000` — "why is port 3000 busy?" with full ancestry chain
+  - Shows working directory and command for the target
+- **`proc free`**: Kill + verify port freed (the EADDRINUSE fix as a command)
+  - `proc free :3000,:8080` — free multiple ports, verify availability
+  - Polls until port is actually free (handles TIME_WAIT)
+- **`--signal` on `proc stop`**: Send custom signals
+  - `proc stop nginx --signal HUP` — reload config without restart
+  - Accepts: HUP, INT, QUIT, ABRT, KILL, TERM, STOP, CONT, USR1, USR2
 
 ### v1.8.0 Highlights
 
@@ -92,114 +112,7 @@ The core commands are complete, with real-time monitoring, the Proc Query Langua
 
 ## Planned
 
-Features accepted for implementation. Each passes our [philosophy](PHILOSOPHY.md) test.
-
-### Freeze/Thaw (SIGSTOP/SIGCONT)
-
-Temporarily pause and resume processes without terminating them.
-
-```
-proc freeze :3000          # Pause process on port 3000
-proc freeze node --in .    # Pause node processes in cwd
-proc thaw :3000            # Resume frozen process
-proc thaw node             # Resume all frozen node processes
-```
-
-**Use cases:**
-- Pause resource-heavy processes temporarily (free CPU without killing)
-- Freeze a process to attach debugger or investigate
-- Pause long-running transfers to free bandwidth, then resume
-
-**Philosophy check:** ✅ Fits process management, ✅ obvious commands, ✅ explicit intent, ✅ deepens domain mastery.
-
-**Why:** Completes the process lifecycle. proc has kill (SIGKILL), stop (SIGTERM→SIGKILL), unstick (SIGCONT→SIGINT), but no way to pause and resume. Every developer knows `Ctrl+Z` but has no semantic way to do it by port or name. Supports `--in`, `--by`, `--yes`, `--dry-run`, `--json` like other lifecycle commands.
-
-### Orphans (Orphaned Process Discovery)
-
-Find orphaned processes — children whose parent has exited.
-
-```
-proc orphans               # All orphaned processes
-proc orphans --in .        # Orphans in current project directory
-proc orphans --by node     # Orphaned node processes
-proc orphans --kill        # Find and kill orphans (with confirmation)
-```
-
-**Use cases:**
-- Find "ghost" Node/webpack/Python processes left behind after a crashed dev server
-- Clean up leaked child processes that are eating CPU in the background
-- Identify processes reparented to PID 1 (init/launchd) after their parent was killed
-
-**Philosophy check:** ✅ Fits process management, ✅ one obvious command, ✅ common case effortless, ✅ explicit intent, ✅ deepens domain mastery (no other tool makes this easy).
-
-**Why:** `proc stuck` finds high-CPU processes. `proc orphans` finds abandoned processes — a different problem with a different heuristic (PPID=1 or reparented, filtering out daemons). Completes the diagnostic toolkit alongside `stuck`.
-
-### Free (Kill + Verify Port)
-
-Free a port. Kill whatever's on it and verify it's actually available. The EADDRINUSE fix as a command.
-
-```
-proc free :3000              # Kill what's on port 3000, verify it's free
-proc free :3000,:8080,:5432  # Free multiple ports at once
-proc free :3000 --wait 5     # Wait up to 5s for port to free
-```
-
-**Use cases:**
-- Dev server restart: kill old process, confirm port is free, start new one
-- CI/CD cleanup: ensure ports are available before test suite runs
-- Post-crash recovery: clean up ports that are stuck in TIME_WAIT
-
-**Philosophy check:** ✅ Fits process management, ✅ one obvious command, ✅ common case effortless, ✅ explicit intent, ✅ deepens domain mastery.
-
-**Why:** `proc kill :3000 --yes` kills but doesn't verify the port is actually free (TIME_WAIT can keep it busy). `proc free` combines kill + poll-until-free into a single reliable operation. The most tweetable command proc could have: `proc free 3000`.
-
-### Why (Process Ancestry Tracing)
-
-Trace why a port is busy or how a process was started. Walks the process tree upward to show the full ancestry chain.
-
-```
-proc why :3000               # Why is port 3000 busy?
-proc why node                # How was this node process started?
-proc why 48221               # Trace ancestry of a PID
-```
-
-Example output:
-
-```
-Port 3000
-  node (pid 48221)
-  └─ started by: npm run dev (pid 48210)
-     └─ started by: zsh (pid 47001)
-        └─ dir: ~/Sites/web-app
-```
-
-**Use cases:**
-- "What started this process?" — trace the chain from port to origin
-- Debug unexpected processes: see how they were spawned
-- Understand complex process trees: webpack spawned by npm spawned by shell
-
-**Philosophy check:** ✅ Fits process management, ✅ one obvious command, ✅ common case effortless, ✅ explicit intent, ✅ deepens domain mastery (no other tool answers "why is this port busy?" in one command).
-
-**Why:** `proc on` shows *what's* on a port. `proc tree` shows children downward. `proc why` completes the picture — it walks *upward* to show ancestry. Same OS-level data proc already has, just presented in the direction developers actually think: "why is this running?"
-
-### Signal Choice on Stop (`--signal`)
-
-Allow `proc stop` to send a custom initial signal instead of always SIGTERM.
-
-```
-proc stop nginx --signal HUP     # Reload config (SIGHUP)
-proc stop worker --signal INT    # Graceful interrupt (SIGINT)
-proc stop node --signal USR1     # Trigger debugger (SIGUSR1)
-```
-
-**Use cases:**
-- Reload daemon configs without restart (SIGHUP to nginx, Apache, sshd)
-- Send SIGINT instead of SIGTERM for processes that handle Ctrl+C differently
-- Send USR1/USR2 for application-defined behaviors
-
-**Philosophy check:** ✅ Fits process management, ✅ obvious flag, ✅ explicit intent, ✅ deepens domain mastery.
-
-**Why:** `proc stop` currently hardcodes SIGTERM→SIGKILL. Adding `--signal` makes it a general-purpose signal delivery tool with proc's target resolution (ports, names, filters) and safety features (confirmation, dry-run). Not a new command — just a flag that unlocks the full signal vocabulary.
+No features are currently planned. All previously planned features (freeze/thaw, orphans, free, why, --signal) have been shipped in v1.9.0.
 
 ## Under Consideration
 

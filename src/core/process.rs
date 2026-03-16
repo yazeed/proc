@@ -297,6 +297,65 @@ impl Process {
         Ok(())
     }
 
+    /// Send an arbitrary signal to the process (Unix only)
+    #[cfg(unix)]
+    pub fn send_signal(&self, signal: nix::sys::signal::Signal) -> Result<()> {
+        use nix::sys::signal::kill;
+        use nix::unistd::Pid as NixPid;
+        kill(NixPid::from_raw(self.pid as i32), signal)
+            .map_err(|e| ProcError::SignalError(format!("{}: {}", signal, e)))
+    }
+
+    // Note: On Windows, send_signal is not available. Commands that use it
+    // (freeze, thaw) have their own #[cfg(not(unix))] stubs that return NotSupported.
+
+    /// Find orphaned processes (parent is PID 1 / init / launchd, excluding system daemons)
+    pub fn find_orphans() -> Result<Vec<Process>> {
+        let all = Self::find_all()?;
+
+        Ok(all
+            .into_iter()
+            .filter(|p| {
+                if let Some(ppid) = p.parent_pid {
+                    ppid == 1 && p.pid != 1 && !Self::is_system_process(p)
+                } else {
+                    false
+                }
+            })
+            .collect())
+    }
+
+    /// Check if a process is a system daemon (naturally has PPID 1)
+    ///
+    /// Filters out processes that legitimately have PPID 1 — system daemons,
+    /// kernel threads, and services managed by init/systemd/launchd.
+    /// Heuristic: no cwd or cwd is "/" with exe in system paths.
+    fn is_system_process(p: &Process) -> bool {
+        if p.cwd.is_none() || p.cwd.as_deref() == Some("/") {
+            if let Some(ref exe) = p.exe_path {
+                // macOS system paths
+                if exe.starts_with("/System/") || exe.starts_with("/usr/libexec/") {
+                    return true;
+                }
+                // Shared Unix system paths (macOS + Linux)
+                if exe.starts_with("/usr/sbin/")
+                    || exe.starts_with("/sbin/")
+                    || exe.starts_with("/usr/bin/")
+                    || exe.starts_with("/usr/lib/")
+                    || exe.starts_with("/usr/lib64/")
+                    || exe.starts_with("/lib/")
+                    || exe.starts_with("/lib64/")
+                    || exe.starts_with("/opt/")
+                    || exe.starts_with("/snap/")
+                {
+                    return true;
+                }
+            }
+            return true; // No exe path = likely kernel thread
+        }
+        false
+    }
+
     /// Check if the process still exists
     pub fn exists(&self) -> bool {
         let mut sys = System::new();
@@ -359,6 +418,34 @@ impl Process {
     }
 }
 
+/// Parse a signal name to a nix Signal (Unix only)
+///
+/// Accepts: "HUP", "SIGHUP", "hup" (signal names only, not numbers —
+/// numeric signal values differ between macOS and Linux)
+#[cfg(unix)]
+pub fn parse_signal_name(name: &str) -> Result<nix::sys::signal::Signal> {
+    use nix::sys::signal::Signal;
+
+    let upper = name.to_uppercase();
+    let upper = upper.trim_start_matches("SIG");
+    match upper {
+        "HUP" => Ok(Signal::SIGHUP),
+        "INT" => Ok(Signal::SIGINT),
+        "QUIT" => Ok(Signal::SIGQUIT),
+        "ABRT" => Ok(Signal::SIGABRT),
+        "KILL" => Ok(Signal::SIGKILL),
+        "TERM" => Ok(Signal::SIGTERM),
+        "STOP" => Ok(Signal::SIGSTOP),
+        "CONT" => Ok(Signal::SIGCONT),
+        "USR1" => Ok(Signal::SIGUSR1),
+        "USR2" => Ok(Signal::SIGUSR2),
+        _ => Err(ProcError::InvalidInput(format!(
+            "Unknown signal: '{}'. Valid signals: HUP, INT, QUIT, ABRT, KILL, TERM, STOP, CONT, USR1, USR2",
+            name
+        ))),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -379,6 +466,152 @@ mod tests {
     #[test]
     fn test_find_nonexistent_process() {
         let result = Process::find_by_name("nonexistent_process_12345");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_find_orphans_returns_ok() {
+        // Should not error — may or may not find orphans depending on system state
+        let result = Process::find_orphans();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_find_orphans_excludes_system_processes() {
+        let orphans = Process::find_orphans().unwrap();
+        for orphan in &orphans {
+            // No orphan should have a system exe path with cwd "/"
+            if orphan.cwd.as_deref() == Some("/") {
+                if let Some(ref exe) = orphan.exe_path {
+                    assert!(
+                        !exe.starts_with("/usr/sbin/")
+                            && !exe.starts_with("/sbin/")
+                            && !exe.starts_with("/System/")
+                            && !exe.starts_with("/usr/libexec/"),
+                        "System process should have been filtered: {} ({})",
+                        orphan.name,
+                        exe
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_is_system_process_system_paths() {
+        let make_proc = |exe: Option<&str>, cwd: Option<&str>| Process {
+            pid: 100,
+            name: "test".to_string(),
+            exe_path: exe.map(String::from),
+            cwd: cwd.map(String::from),
+            command: None,
+            cpu_percent: 0.0,
+            memory_mb: 0.0,
+            status: ProcessStatus::Running,
+            user: None,
+            parent_pid: Some(1),
+            start_time: None,
+        };
+
+        // System daemons with cwd "/" and system exe paths
+        assert!(Process::is_system_process(&make_proc(
+            Some("/usr/sbin/sshd"),
+            Some("/")
+        )));
+        assert!(Process::is_system_process(&make_proc(
+            Some("/System/Library/foo"),
+            Some("/")
+        )));
+        assert!(Process::is_system_process(&make_proc(
+            Some("/usr/bin/systemd"),
+            Some("/")
+        )));
+        assert!(Process::is_system_process(&make_proc(
+            Some("/usr/lib/snapd/snapd"),
+            Some("/")
+        )));
+
+        // No exe path with cwd "/" = kernel thread
+        assert!(Process::is_system_process(&make_proc(None, Some("/"))));
+
+        // No cwd at all = likely kernel thread
+        assert!(Process::is_system_process(&make_proc(
+            Some("/usr/bin/foo"),
+            None
+        )));
+
+        // User process with user cwd = NOT system
+        assert!(!Process::is_system_process(&make_proc(
+            Some("/usr/bin/node"),
+            Some("/home/user/project")
+        )));
+        assert!(!Process::is_system_process(&make_proc(
+            Some("/home/user/.local/bin/app"),
+            Some("/home/user")
+        )));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_parse_signal_name_valid() {
+        use nix::sys::signal::Signal;
+
+        assert_eq!(parse_signal_name("HUP").unwrap(), Signal::SIGHUP);
+        assert_eq!(parse_signal_name("hup").unwrap(), Signal::SIGHUP);
+        assert_eq!(parse_signal_name("SIGHUP").unwrap(), Signal::SIGHUP);
+        assert_eq!(parse_signal_name("sighup").unwrap(), Signal::SIGHUP);
+        assert_eq!(parse_signal_name("INT").unwrap(), Signal::SIGINT);
+        assert_eq!(parse_signal_name("QUIT").unwrap(), Signal::SIGQUIT);
+        assert_eq!(parse_signal_name("ABRT").unwrap(), Signal::SIGABRT);
+        assert_eq!(parse_signal_name("KILL").unwrap(), Signal::SIGKILL);
+        assert_eq!(parse_signal_name("TERM").unwrap(), Signal::SIGTERM);
+        assert_eq!(parse_signal_name("STOP").unwrap(), Signal::SIGSTOP);
+        assert_eq!(parse_signal_name("CONT").unwrap(), Signal::SIGCONT);
+        assert_eq!(parse_signal_name("USR1").unwrap(), Signal::SIGUSR1);
+        assert_eq!(parse_signal_name("USR2").unwrap(), Signal::SIGUSR2);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_parse_signal_name_invalid() {
+        assert!(parse_signal_name("INVALID").is_err());
+        assert!(parse_signal_name("FOO").is_err());
+        assert!(parse_signal_name("").is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_parse_signal_name_case_insensitive() {
+        use nix::sys::signal::Signal;
+
+        assert_eq!(parse_signal_name("term").unwrap(), Signal::SIGTERM);
+        assert_eq!(parse_signal_name("Term").unwrap(), Signal::SIGTERM);
+        assert_eq!(parse_signal_name("TERM").unwrap(), Signal::SIGTERM);
+        assert_eq!(parse_signal_name("sigterm").unwrap(), Signal::SIGTERM);
+        assert_eq!(parse_signal_name("SigTerm").unwrap(), Signal::SIGTERM);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_send_signal_nonexistent_process() {
+        use nix::sys::signal::Signal;
+
+        // PID 99999999 almost certainly doesn't exist
+        let proc = Process {
+            pid: 99999999,
+            name: "ghost".to_string(),
+            exe_path: None,
+            cwd: None,
+            command: None,
+            cpu_percent: 0.0,
+            memory_mb: 0.0,
+            status: ProcessStatus::Running,
+            user: None,
+            parent_pid: None,
+            start_time: None,
+        };
+
+        let result = proc.send_signal(Signal::SIGCONT);
         assert!(result.is_err());
     }
 }
