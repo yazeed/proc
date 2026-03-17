@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-03-16
+
+### Fixed
+
+- **Windows build**: Gate unix-only imports behind `#[cfg(unix)]` in `freeze.rs` and `thaw.rs` — fixes unused import errors with `-D warnings` on Windows CI
+
 ## [1.9.0] - 2026-03-16
 
 ### Added
@@ -445,7 +451,8 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 
 ---
 
-[Unreleased]: https://github.com/yazeed/proc/compare/v1.9.0...HEAD
+[Unreleased]: https://github.com/yazeed/proc/compare/v1.9.1...HEAD
+[1.9.1]: https://github.com/yazeed/proc/compare/v1.9.0...v1.9.1
 [1.9.0]: https://github.com/yazeed/proc/compare/v1.8.1...v1.9.0
 [1.8.1]: https://github.com/yazeed/proc/compare/v1.8.0...v1.8.1
 [1.8.0]: https://github.com/yazeed/proc/compare/v1.7.4...v1.8.0

@@ -1,6 +1,6 @@
 {
   "name": "proc-cli",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "description": "Semantic CLI tool for process management. Target by port, process id (PID), name or path.",
   "keywords": [
     "process",
