@@ -7,11 +7,15 @@
 //!   proc freeze node --yes        # Skip confirmation
 //!   proc freeze node --dry-run    # Show what would be frozen
 
+#[cfg(unix)]
 use crate::core::{parse_targets, resolve_in_dir, resolve_targets_excluding_self};
 use crate::error::{ProcError, Result};
+#[cfg(unix)]
 use crate::ui::{OutputFormat, Printer};
 use clap::Args;
+#[cfg(unix)]
 use dialoguer::Confirm;
+#[cfg(unix)]
 use std::path::PathBuf;
 
 /// Freeze (pause) process(es) with SIGSTOP

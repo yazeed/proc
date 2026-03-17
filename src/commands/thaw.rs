@@ -6,11 +6,15 @@
 //!   proc thaw :3000,:8080       # Resume multiple targets
 //!   proc thaw node --yes        # Skip confirmation
 
+#[cfg(unix)]
 use crate::core::{parse_targets, resolve_in_dir, resolve_targets_excluding_self};
 use crate::error::{ProcError, Result};
+#[cfg(unix)]
 use crate::ui::{OutputFormat, Printer};
 use clap::Args;
+#[cfg(unix)]
 use dialoguer::Confirm;
+#[cfg(unix)]
 use std::path::PathBuf;
 
 /// Resume frozen process(es) with SIGCONT
