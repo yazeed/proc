@@ -119,13 +119,19 @@ impl TreeCommand {
                         .collect()
                 }
                 TargetType::Name(ref pattern) => {
-                    // For name, do pattern matching (exclude self to avoid false positive)
+                    // For name, do pattern matching (exclude self and parent to avoid
+                    // false positives from proc's own args in the shell command line)
                     let pattern_lower = pattern.to_lowercase();
                     let self_pid = std::process::id();
+                    let parent_pid = all_processes
+                        .iter()
+                        .find(|p| p.pid == self_pid)
+                        .and_then(|p| p.parent_pid);
                     all_processes
                         .iter()
                         .filter(|p| {
                             p.pid != self_pid
+                                && Some(p.pid) != parent_pid
                                 && (p.name.to_lowercase().contains(&pattern_lower)
                                     || p.command
                                         .as_ref()
@@ -408,10 +414,12 @@ impl TreeCommand {
             TargetType::Name(ref pattern) => {
                 let pattern_lower = pattern.to_lowercase();
                 let self_pid = std::process::id();
+                let parent_pid = pid_map.get(&self_pid).and_then(|p| p.parent_pid);
                 pid_map
                     .values()
                     .filter(|p| {
                         p.pid != self_pid
+                            && Some(p.pid) != parent_pid
                             && (p.name.to_lowercase().contains(&pattern_lower)
                                 || p.command
                                     .as_ref()

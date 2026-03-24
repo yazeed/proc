@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.10.1] - 2026-03-23
+
+### Fixed
+
+- **Parent shell self-matching**: Name-based searches (`proc by`, `proc on <name>`, `proc tree <name>`) no longer match the parent shell process whose command line contains proc's own arguments. Previously, `proc on :99999 --json` would match the shell running proc instead of returning "not found". Now correctly returns exit code 2 with a JSON error
+
 ## [1.10.0] - 2026-03-23
 
 ### Added
@@ -458,7 +464,8 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 
 ---
 
-[Unreleased]: https://github.com/yazeed/proc/compare/v1.10.0...HEAD
+[Unreleased]: https://github.com/yazeed/proc/compare/v1.10.1...HEAD
+[1.10.1]: https://github.com/yazeed/proc/compare/v1.10.0...v1.10.1
 [1.10.0]: https://github.com/yazeed/proc/compare/v1.9.1...v1.10.0
 [1.9.1]: https://github.com/yazeed/proc/compare/v1.9.0...v1.9.1
 [1.9.0]: https://github.com/yazeed/proc/compare/v1.8.1...v1.9.0
