@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-03-23
+
+### Changed
+
+- **CLAUDE.md**: Added explicit rules requiring user approval before every push, tag, and release. Added mandatory RELEASE.md checklist compliance for all versions including patches
+
+### Updated
+
+- Updated dependencies (`itoa`, `unicode-segmentation`)
+
 ## [1.10.1] - 2026-03-23
 
 ### Fixed
@@ -464,7 +474,8 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 
 ---
 
-[Unreleased]: https://github.com/yazeed/proc/compare/v1.10.1...HEAD
+[Unreleased]: https://github.com/yazeed/proc/compare/v1.11.0...HEAD
+[1.11.0]: https://github.com/yazeed/proc/compare/v1.10.1...v1.11.0
 [1.10.1]: https://github.com/yazeed/proc/compare/v1.10.0...v1.10.1
 [1.10.0]: https://github.com/yazeed/proc/compare/v1.9.1...v1.10.0
 [1.9.1]: https://github.com/yazeed/proc/compare/v1.9.0...v1.9.1
