@@ -314,8 +314,25 @@ fn main() {
     };
 
     if let Err(e) = result {
-        eprintln!("{}", e);
         let exit_code = ExitCode::from(&e);
+
+        // If --json was requested, output error as JSON to stdout
+        if wants_json() {
+            let error_json = serde_json::json!({
+                "success": false,
+                "error": format!("{}", e),
+                "exit_code": exit_code as i32
+            });
+            println!("{}", serde_json::to_string_pretty(&error_json).unwrap());
+        } else {
+            eprintln!("{}", e);
+        }
+
         process::exit(exit_code as i32);
     }
+}
+
+/// Check if --json or -j was passed in the command line arguments
+fn wants_json() -> bool {
+    std::env::args().any(|a| a == "--json" || a == "-j")
 }

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-03-23
+
+### Added
+
+- **JSON error envelope**: With `--json`, errors now output `{"success":false, "error":"...", "exit_code":N}` to stdout instead of plain text to stderr — enables reliable machine parsing by LLMs and scripts
+- **Agent Skills**: `skills/proc-cli/SKILL.md` — Claude Code skill for process management with proc. Includes structured command reference, JSON output schemas, and LLM usage guidelines. Compatible with the [Agent Skills](https://agentskills.io) open standard
+
 ## [1.9.1] - 2026-03-16
 
 ### Fixed
@@ -451,7 +458,8 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 
 ---
 
-[Unreleased]: https://github.com/yazeed/proc/compare/v1.9.1...HEAD
+[Unreleased]: https://github.com/yazeed/proc/compare/v1.10.0...HEAD
+[1.10.0]: https://github.com/yazeed/proc/compare/v1.9.1...v1.10.0
 [1.9.1]: https://github.com/yazeed/proc/compare/v1.9.0...v1.9.1
 [1.9.0]: https://github.com/yazeed/proc/compare/v1.8.1...v1.9.0
 [1.8.1]: https://github.com/yazeed/proc/compare/v1.8.0...v1.8.1
