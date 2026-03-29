@@ -34,6 +34,7 @@ proc info :3000,1234            # info for port + PID
 | Why is port busy? | `proc why :3000` | `lsof -i :3000` + `ps -o ppid=` chain |
 | Pause a process | `proc freeze node` | `kill -STOP $(pgrep node)` |
 | Find orphans | `proc orphans --in .` | No standard tool |
+| Wait for process | `proc wait node` | `while ps aux \| grep node \| grep -v grep; do sleep 5; done` |
 | Ports used by node | `proc on node` | `lsof -i -P -n \| grep node` |
 | Node processes in cwd | `proc by node --in .` | `ps aux \| grep node` + manual check |
 | Kill mixed targets | `proc kill :3000,:8080,node` | Three separate commands |
@@ -160,6 +161,7 @@ All commands accept the same target syntax:
 | `freeze <target>` | | Pause process (SIGSTOP) |
 | `thaw <target>` | | Resume frozen process (SIGCONT) |
 | `free <:port>` | | Kill process and verify port freed |
+| `wait <target>` | | Block until process(es) exit |
 | `unstick` | `u` | Recover stuck processes |
 
 ### Filters
@@ -199,7 +201,9 @@ Filters can be combined with discovery and lifecycle commands:
 | `--signal` | `-S` | Custom signal: HUP, INT, USR1, etc. (`stop`) |
 | `--kill` | `-k` | Kill found processes (`stuck`, `orphans`) |
 | `--wait` | | Max seconds to wait for port to free (`free`) |
-| `--interval` | `-n` | Refresh interval for watch (seconds) |
+| `--interval` | `-n` | Poll/refresh interval in seconds (`wait`, `watch`) |
+| `--timeout` | `-t` | Max seconds to wait before giving up (`wait`, `stop`) |
+| `--quiet` | `-q` | Suppress periodic status messages (`wait`) |
 
 ## Examples
 
@@ -257,6 +261,11 @@ proc why :3000                 # Show ancestry chain with port context
 # Find orphaned processes
 proc orphans                   # List orphans
 proc orphans --in . --kill     # Kill orphans in current directory
+
+# Wait for processes to exit
+proc wait node                 # Block until all node processes exit
+proc wait :3000 --timeout 60   # Wait up to 60s for port process to exit
+proc wait node -n 10 -q        # Check every 10s, quiet mode
 
 # Send custom signal
 proc stop nginx --signal HUP   # Reload config (SIGHUP)

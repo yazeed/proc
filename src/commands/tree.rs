@@ -9,10 +9,11 @@
 //!   proc tree 1234 -a      # Show ancestry (path UP to root)
 
 use crate::core::{
-    parse_target, resolve_in_dir, resolve_target, Process, ProcessStatus, TargetType,
+    matches_by_filter, parse_target, resolve_in_dir, resolve_target, Process, ProcessStatus,
+    TargetType,
 };
 use crate::error::Result;
-use crate::ui::{format_memory, OutputFormat, Printer};
+use crate::ui::{format_memory, plural, Printer};
 use clap::Args;
 use colored::*;
 use serde::Serialize;
@@ -71,14 +72,33 @@ pub struct TreeCommand {
 }
 
 impl TreeCommand {
+    /// Build the set of ancestor PIDs to exclude from name matching.
+    ///
+    /// Walks up the process tree from the current process to avoid matching
+    /// shells whose command lines contain proc's own arguments.
+    fn ancestor_pids(all_processes: &[Process]) -> std::collections::HashSet<u32> {
+        let mut pids = std::collections::HashSet::new();
+        let self_pid = std::process::id();
+        pids.insert(self_pid);
+        let mut current = self_pid;
+        for _ in 0..10 {
+            if let Some(parent_pid) = all_processes
+                .iter()
+                .find(|p| p.pid == current)
+                .and_then(|p| p.parent_pid)
+            {
+                pids.insert(parent_pid);
+                current = parent_pid;
+            } else {
+                break;
+            }
+        }
+        pids
+    }
+
     /// Executes the tree command, displaying the process hierarchy.
     pub fn execute(&self) -> Result<()> {
-        let format = if self.json {
-            OutputFormat::Json
-        } else {
-            OutputFormat::Human
-        };
-        let printer = Printer::new(format, self.verbose);
+        let printer = Printer::from_flags(self.json, self.verbose);
 
         // Get all processes
         let all_processes = Process::find_all()?;
@@ -121,22 +141,11 @@ impl TreeCommand {
                 TargetType::Name(ref pattern) => {
                     // For name, do pattern matching (exclude self and parent to avoid
                     // false positives from proc's own args in the shell command line)
-                    let pattern_lower = pattern.to_lowercase();
-                    let self_pid = std::process::id();
-                    let parent_pid = all_processes
-                        .iter()
-                        .find(|p| p.pid == self_pid)
-                        .and_then(|p| p.parent_pid);
+                    let ancestor_pids = Self::ancestor_pids(&all_processes);
                     all_processes
                         .iter()
                         .filter(|p| {
-                            p.pid != self_pid
-                                && Some(p.pid) != parent_pid
-                                && (p.name.to_lowercase().contains(&pattern_lower)
-                                    || p.command
-                                        .as_ref()
-                                        .map(|c| c.to_lowercase().contains(&pattern_lower))
-                                        .unwrap_or(false))
+                            !ancestor_pids.contains(&p.pid) && matches_by_filter(p, pattern)
                         })
                         .collect()
                 }
@@ -161,7 +170,7 @@ impl TreeCommand {
                         }
                     }
                     if let Some(ref name) = self.by_name {
-                        if !p.name.to_lowercase().contains(&name.to_lowercase()) {
+                        if !matches_by_filter(p, name) {
                             return false;
                         }
                     }
@@ -283,7 +292,7 @@ impl TreeCommand {
                 "{} {} process{} matching filters:\n",
                 "✓".green().bold(),
                 filtered.len().to_string().cyan().bold(),
-                if filtered.len() == 1 { "" } else { "es" }
+                plural(filtered.len())
             );
 
             for (i, proc) in filtered.iter().enumerate() {
@@ -412,20 +421,11 @@ impl TreeCommand {
         let target_processes = match parse_target(target) {
             TargetType::Port(_) | TargetType::Pid(_) => resolve_target(target)?,
             TargetType::Name(ref pattern) => {
-                let pattern_lower = pattern.to_lowercase();
-                let self_pid = std::process::id();
-                let parent_pid = pid_map.get(&self_pid).and_then(|p| p.parent_pid);
+                let all_procs: Vec<Process> = pid_map.values().map(|p| (*p).clone()).collect();
+                let ancestor_pids = Self::ancestor_pids(&all_procs);
                 pid_map
                     .values()
-                    .filter(|p| {
-                        p.pid != self_pid
-                            && Some(p.pid) != parent_pid
-                            && (p.name.to_lowercase().contains(&pattern_lower)
-                                || p.command
-                                    .as_ref()
-                                    .map(|c| c.to_lowercase().contains(&pattern_lower))
-                                    .unwrap_or(false))
-                    })
+                    .filter(|p| !ancestor_pids.contains(&p.pid) && matches_by_filter(p, pattern))
                     .map(|p| (*p).clone())
                     .collect()
             }
@@ -442,7 +442,7 @@ impl TreeCommand {
                 .map(|proc| self.build_ancestry_node(proc, pid_map))
                 .collect();
             printer.print_json(&AncestryOutput {
-                action: "ancestry",
+                action: "tree",
                 success: true,
                 ancestry: ancestry_output,
             });

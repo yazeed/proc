@@ -31,6 +31,7 @@ permalink: /commands
 | [freeze](freeze) | | pause processes (SIGSTOP) |
 | [thaw](thaw) | | resume frozen processes (SIGCONT) |
 | [free](free) | | free ports by killing the occupying process |
+| [wait](wait) | | block until process(es) exit |
 | [unstick](unstick) | `u` | attempt to recover stuck processes |
 
 ## common options

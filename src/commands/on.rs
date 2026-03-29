@@ -12,7 +12,7 @@ use crate::core::{
     Process, TargetType,
 };
 use crate::error::{ProcError, Result};
-use crate::ui::{format_duration, format_memory};
+use crate::ui::{format_duration, format_memory, Printer};
 use clap::Args;
 use colored::*;
 use serde::Serialize;
@@ -107,7 +107,7 @@ impl OnCommand {
     /// Check if process matches --by filter
     fn matches_by_filter(&self, proc: &Process) -> bool {
         if let Some(ref name) = self.by_name {
-            proc.name.to_lowercase().contains(&name.to_lowercase())
+            crate::core::matches_by_filter(proc, name)
         } else {
             true
         }
@@ -138,6 +138,7 @@ impl OnCommand {
         }
 
         if self.json {
+            let printer = Printer::from_flags(true, self.verbose);
             let output = PortLookupOutput {
                 action: "on",
                 query_type: "port_to_process",
@@ -148,7 +149,7 @@ impl OnCommand {
                 process: process.as_ref(),
                 ports: None,
             };
-            println!("{}", serde_json::to_string_pretty(&output)?);
+            printer.print_json(&output);
         } else {
             self.print_process_on_port(&port_info, process.as_ref());
         }
@@ -172,6 +173,7 @@ impl OnCommand {
         let ports = find_ports_for_pid(pid)?;
 
         if self.json {
+            let printer = Printer::from_flags(true, self.verbose);
             let output = PortLookupOutput {
                 action: "on",
                 query_type: "process_to_ports",
@@ -182,7 +184,7 @@ impl OnCommand {
                 process: Some(&process),
                 ports: Some(&ports),
             };
-            println!("{}", serde_json::to_string_pretty(&output)?);
+            printer.print_json(&output);
         } else {
             self.print_ports_for_process(&process, &ports);
         }
@@ -217,14 +219,21 @@ impl OnCommand {
         }
 
         if self.json {
-            let output: Vec<_> = all_results
+            let printer = Printer::from_flags(true, self.verbose);
+            let results: Vec<_> = all_results
                 .iter()
                 .map(|(proc, ports)| ProcessPortsJson {
                     process: proc,
                     ports,
                 })
                 .collect();
-            println!("{}", serde_json::to_string_pretty(&output)?);
+            let output = MultiProcessPortsOutput {
+                action: "on",
+                success: true,
+                count: results.len(),
+                results: &results,
+            };
+            printer.print_json(&output);
         } else {
             for (proc, ports) in &all_results {
                 self.print_ports_for_process(proc, ports);
@@ -355,4 +364,12 @@ struct PortLookupOutput<'a> {
 struct ProcessPortsJson<'a> {
     process: &'a Process,
     ports: &'a [PortInfo],
+}
+
+#[derive(Serialize)]
+struct MultiProcessPortsOutput<'a> {
+    action: &'static str,
+    success: bool,
+    count: usize,
+    results: &'a Vec<ProcessPortsJson<'a>>,
 }

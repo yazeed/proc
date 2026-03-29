@@ -8,7 +8,7 @@
 
 use crate::core::{resolve_in_dir, sort_processes, Process, ProcessStatus, SortKey};
 use crate::error::Result;
-use crate::ui::{OutputFormat, Printer};
+use crate::ui::Printer;
 use clap::Args;
 use std::path::PathBuf;
 
@@ -62,12 +62,7 @@ pub struct ByCommand {
 impl ByCommand {
     /// Executes the by command, listing processes matching the name filter.
     pub fn execute(&self) -> Result<()> {
-        let format = if self.json {
-            OutputFormat::Json
-        } else {
-            OutputFormat::Human
-        };
-        let printer = Printer::new(format, self.verbose);
+        let printer = Printer::from_flags(self.json, self.verbose);
 
         // Get processes by name
         let mut processes = Process::find_by_name(&self.name)?;
@@ -157,7 +152,7 @@ impl ByCommand {
         }
         let context = Some(context_parts.join(" "));
 
-        printer.print_processes_with_context(&processes, context.as_deref());
+        printer.print_processes_as("by", &processes, context.as_deref());
         Ok(())
     }
 }

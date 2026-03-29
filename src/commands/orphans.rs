@@ -6,12 +6,11 @@
 //!   proc orphans --kill       # Find and kill orphans
 //!   proc orphans --kill --yes # Kill orphans without confirmation
 
-use crate::core::{resolve_in_dir, Process};
+use crate::core::{apply_filters, Process};
 use crate::error::Result;
-use crate::ui::{OutputFormat, Printer};
+use crate::ui::{plural, Printer};
 use clap::Args;
 use dialoguer::Confirm;
-use std::path::PathBuf;
 
 /// Find orphaned processes (parent has exited)
 #[derive(Args, Debug)]
@@ -48,53 +47,31 @@ pub struct OrphansCommand {
 impl OrphansCommand {
     /// Executes the orphans command, finding processes whose parent has exited.
     pub fn execute(&self) -> Result<()> {
-        let format = if self.json {
-            OutputFormat::Json
-        } else {
-            OutputFormat::Human
-        };
-        let printer = Printer::new(format, self.verbose);
+        let printer = Printer::from_flags(self.json, self.verbose);
 
         let mut processes = Process::find_orphans()?;
 
         // Apply --in and --by filters
-        let in_dir_filter = resolve_in_dir(&self.in_dir);
-        processes.retain(|p| {
-            if let Some(ref dir_path) = in_dir_filter {
-                if let Some(ref cwd) = p.cwd {
-                    if !PathBuf::from(cwd).starts_with(dir_path) {
-                        return false;
-                    }
-                } else {
-                    return false;
-                }
-            }
-            if let Some(ref name) = self.by_name {
-                if !p.name.to_lowercase().contains(&name.to_lowercase()) {
-                    return false;
-                }
-            }
-            true
-        });
+        apply_filters(&mut processes, &self.in_dir, &self.by_name);
 
         if processes.is_empty() {
-            printer.success("No orphaned processes found");
+            printer.print_empty_result("orphans", "No orphaned processes found");
             return Ok(());
         }
 
         printer.warning(&format!(
             "Found {} orphaned process{}",
             processes.len(),
-            if processes.len() == 1 { "" } else { "es" }
+            plural(processes.len())
         ));
-        printer.print_processes(&processes);
+        printer.print_processes_as("orphans", &processes, None);
 
         // Dry run: show what would be killed
         if self.kill && self.dry_run {
             printer.warning(&format!(
                 "Dry run: would kill {} orphaned process{}",
                 processes.len(),
-                if processes.len() == 1 { "" } else { "es" }
+                plural(processes.len())
             ));
             return Ok(());
         }
@@ -106,11 +83,10 @@ impl OrphansCommand {
                     .with_prompt(format!(
                         "Kill {} orphaned process{}?",
                         processes.len(),
-                        if processes.len() == 1 { "" } else { "es" }
+                        plural(processes.len())
                     ))
                     .default(false)
-                    .interact()
-                    .unwrap_or(false);
+                    .interact()?;
 
                 if !confirmed {
                     printer.warning("Cancelled");

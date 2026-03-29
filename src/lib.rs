@@ -11,7 +11,8 @@
 //! - **Working Directory**: See which project folder a process is running from
 //! - **Terminal-Adaptive Tables**: Tables adjust to terminal width automatically
 //! - **Consistent Filters**: `--in`, `--by`, `--min-uptime`, `--parent`, `--range`, `--sort`, `--limit`
-//! - **Real-Time Monitoring**: `proc watch` / `proc top` - live process table with auto-refresh
+//! - **Real-Time Monitoring**: `proc watch` / `proc top` - live process table (interactive, TTY only)
+//! - **Process Waiting**: `proc wait node` - block until process(es) exit (pipe-friendly)
 //! - **Freeze/Thaw**: `proc freeze` / `proc thaw` - pause and resume by port, PID, or name
 //! - **Port Freeing**: `proc free :3000` - kill and verify port is available
 //! - **Ancestry Tracing**: `proc why :3000` - trace why a port is busy
@@ -51,9 +52,11 @@
 //!
 //! ## Commands
 //!
-//! **Discovery**: `on`, `for`, `by`, `in`, `list`, `info`, `ports`, `tree`, `stuck`, `watch`, `why`, `orphans`
+//! **Discovery**: `on`, `for`, `by`, `in`, `list`, `info`, `ports`, `tree`, `stuck`, `why`, `orphans`
 //!
 //! **Lifecycle**: `kill`, `stop`, `unstick`, `freeze`, `thaw`, `free`
+//!
+//! **Monitoring**: `watch` (interactive TUI), `wait` (blocking, pipe-friendly)
 //!
 //! **Tooling**: `completions`, `manpage`
 

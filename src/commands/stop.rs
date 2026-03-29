@@ -9,12 +9,10 @@
 
 #[cfg(unix)]
 use crate::core::parse_signal_name;
-use crate::core::{parse_targets, resolve_in_dir, resolve_targets_excluding_self, Process};
+use crate::core::{apply_filters, parse_targets, resolve_targets_excluding_self, Process};
 use crate::error::{ProcError, Result};
-use crate::ui::{OutputFormat, Printer};
+use crate::ui::Printer;
 use clap::Args;
-use dialoguer::Confirm;
-use std::path::PathBuf;
 
 /// Stop process(es) gracefully with SIGTERM
 #[derive(Args, Debug)]
@@ -59,12 +57,7 @@ pub struct StopCommand {
 impl StopCommand {
     /// Executes the stop command, gracefully terminating matched processes.
     pub fn execute(&self) -> Result<()> {
-        let format = if self.json {
-            OutputFormat::Json
-        } else {
-            OutputFormat::Human
-        };
-        let printer = Printer::new(format, self.verbose);
+        let printer = Printer::from_flags(self.json, self.verbose);
 
         // Parse comma-separated targets and resolve to processes
         // Use resolve_targets_excluding_self to avoid stopping ourselves
@@ -77,24 +70,7 @@ impl StopCommand {
         }
 
         // Apply --in and --by filters
-        let in_dir_filter = resolve_in_dir(&self.in_dir);
-        processes.retain(|p| {
-            if let Some(ref dir_path) = in_dir_filter {
-                if let Some(ref cwd) = p.cwd {
-                    if !PathBuf::from(cwd).starts_with(dir_path) {
-                        return false;
-                    }
-                } else {
-                    return false;
-                }
-            }
-            if let Some(ref name) = self.by_name {
-                if !p.name.to_lowercase().contains(&name.to_lowercase()) {
-                    return false;
-                }
-            }
-            true
-        });
+        apply_filters(&mut processes, &self.in_dir, &self.by_name);
 
         if processes.is_empty() {
             return Err(ProcError::ProcessNotFound(self.target.clone()));
@@ -102,33 +78,13 @@ impl StopCommand {
 
         // Dry run: just show what would be stopped
         if self.dry_run {
-            printer.print_processes(&processes);
-            printer.warning(&format!(
-                "Dry run: would stop {} process{}",
-                processes.len(),
-                if processes.len() == 1 { "" } else { "es" }
-            ));
+            printer.print_dry_run("stop", &processes);
             return Ok(());
         }
 
         // Confirm if not --yes
-        if !self.yes && !self.json {
-            printer.print_confirmation("stop", &processes);
-
-            let prompt = format!(
-                "Stop {} process{}?",
-                processes.len(),
-                if processes.len() == 1 { "" } else { "es" }
-            );
-
-            if !Confirm::new()
-                .with_prompt(prompt)
-                .default(false)
-                .interact()?
-            {
-                printer.warning("Aborted");
-                return Ok(());
-            }
+        if !printer.ask_confirm("stop", &processes, self.yes)? {
+            return Ok(());
         }
 
         // Parse custom signal if provided
@@ -172,7 +128,7 @@ impl StopCommand {
         }
 
         // Output results
-        printer.print_action_result("Stopped", &stopped, &failed);
+        printer.print_action_result("stop", &stopped, &failed);
 
         Ok(())
     }

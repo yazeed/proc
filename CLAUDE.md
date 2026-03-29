@@ -48,7 +48,8 @@ src/
 │   ├── thaw.rs       # proc thaw (SIGCONT)
 │   ├── orphans.rs    # proc orphans
 │   ├── why.rs        # proc why (ancestry tracing)
-│   └── free.rs       # proc free (kill + verify port freed)
+│   ├── free.rs       # proc free (kill + verify port freed)
+│   └── wait.rs       # proc wait (block until exit)
 ├── core/             # Shared logic
 │   ├── mod.rs        # Exports
 │   ├── filters.rs    # Shared filter utilities (resolve_in_dir)

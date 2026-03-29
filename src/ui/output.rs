@@ -3,10 +3,12 @@
 //! Provides colored terminal output and JSON formatting.
 
 use crate::core::{PortInfo, Process};
-use crate::ui::format::{colorize_status, format_memory, truncate_string};
+use crate::error::Result;
+use crate::ui::format::{colorize_status, format_memory, plural, truncate_string};
 use colored::*;
 use comfy_table::presets::NOTHING;
 use comfy_table::{Attribute, Cell, CellAlignment, Color, ContentArrangement, Table};
+use dialoguer::Confirm;
 use serde::Serialize;
 
 /// Output format selection
@@ -36,7 +38,19 @@ impl Printer {
         Self { format, verbose }
     }
 
-    /// Print a success message
+    /// Create a printer from common CLI flags.
+    pub fn from_flags(json: bool, verbose: bool) -> Self {
+        Self::new(
+            if json {
+                OutputFormat::Json
+            } else {
+                OutputFormat::Human
+            },
+            verbose,
+        )
+    }
+
+    /// Print a success message (human only — use `print_empty_result` for JSON-safe success)
     pub fn success(&self, message: &str) {
         match self.format {
             OutputFormat::Human => {
@@ -45,6 +59,22 @@ impl Printer {
             OutputFormat::Json => {
                 // JSON output handled separately
             }
+        }
+    }
+
+    /// Print a "nothing found" success result with JSON support.
+    ///
+    /// In human mode, prints a green success message. In JSON mode, outputs
+    /// structured JSON so scripts/LLMs always get parseable output.
+    pub fn print_empty_result(&self, action: &str, message: &str) {
+        match self.format {
+            OutputFormat::Human => self.success(message),
+            OutputFormat::Json => self.print_json(&EmptyResult {
+                action,
+                success: true,
+                count: 0,
+                message,
+            }),
         }
     }
 
@@ -72,12 +102,14 @@ impl Printer {
         }
     }
 
-    /// Print a list of processes with optional context (e.g., "in /path/to/dir")
-    pub fn print_processes_with_context(&self, processes: &[Process], context: Option<&str>) {
+    /// Print a list of processes with action name and optional context.
+    ///
+    /// The `action` parameter sets the JSON `action` field (e.g. "list", "by", "stuck").
+    pub fn print_processes_as(&self, action: &str, processes: &[Process], context: Option<&str>) {
         match self.format {
             OutputFormat::Human => self.print_processes_human(processes, context),
             OutputFormat::Json => self.print_json(&ProcessListOutput {
-                action: "list",
+                action,
                 success: true,
                 count: processes.len(),
                 processes,
@@ -85,7 +117,13 @@ impl Printer {
         }
     }
 
-    /// Print a list of processes
+    /// Print a list of processes with optional context (e.g., "in /path/to/dir").
+    /// Uses "list" as the JSON action name.
+    pub fn print_processes_with_context(&self, processes: &[Process], context: Option<&str>) {
+        self.print_processes_as("list", processes, context)
+    }
+
+    /// Print a list of processes. Uses "list" as the JSON action name.
     pub fn print_processes(&self, processes: &[Process]) {
         self.print_processes_with_context(processes, None)
     }
@@ -420,22 +458,33 @@ impl Printer {
         }
     }
 
-    /// Print action result (generalized for kill/stop/unstick)
+    /// Print action result (generalized for kill/stop/unstick).
+    ///
+    /// The `action` parameter should be a lowercase verb (e.g. "kill", "stop", "freeze").
+    /// It is used as-is in JSON output and capitalized for human display.
     pub fn print_action_result(
         &self,
         action: &str,
         succeeded: &[Process],
         failed: &[(Process, String)],
     ) {
+        // Capitalize for human display: "kill" → "Killed", "freeze" → "Frozen"
+        let past_tense = match action {
+            "kill" => "Killed".to_string(),
+            "freeze" => "Frozen".to_string(),
+            "resume" => "Resumed".to_string(),
+            _ => format!("{}{}ed", action[..1].to_uppercase(), &action[1..]),
+        };
+
         match self.format {
             OutputFormat::Human => {
                 if !succeeded.is_empty() {
                     println!(
                         "{} {} {} process{}",
                         "✓".green().bold(),
-                        action,
+                        past_tense,
                         succeeded.len().to_string().cyan().bold(),
-                        if succeeded.len() == 1 { "" } else { "es" }
+                        plural(succeeded.len())
                     );
                     for proc in succeeded {
                         println!(
@@ -450,9 +499,9 @@ impl Printer {
                     println!(
                         "{} Failed to {} {} process{}",
                         "✗".red().bold(),
-                        action.to_lowercase(),
+                        action,
                         failed.len(),
-                        if failed.len() == 1 { "" } else { "es" }
+                        plural(failed.len())
                     );
                     for (proc, err) in failed {
                         println!(
@@ -484,9 +533,53 @@ impl Printer {
         }
     }
 
-    /// Print kill result (delegates to print_action_result for backwards compatibility)
+    /// Print kill result (delegates to print_action_result)
     pub fn print_kill_result(&self, killed: &[Process], failed: &[(Process, String)]) {
-        self.print_action_result("Killed", killed, failed);
+        self.print_action_result("kill", killed, failed);
+    }
+
+    /// Print dry-run summary and return early.
+    ///
+    /// Used by destructive commands (kill, stop, freeze, thaw) for consistent dry-run output.
+    pub fn print_dry_run(&self, verb: &str, processes: &[Process]) {
+        self.print_processes(processes);
+        self.warning(&format!(
+            "Dry run: would {} {} process{}",
+            verb,
+            processes.len(),
+            plural(processes.len())
+        ));
+    }
+
+    /// Show confirmation prompt and return whether the user confirmed.
+    ///
+    /// Returns `Ok(true)` if confirmed or skipped (--yes / --json).
+    /// Returns `Ok(false)` if the user declined (prints "Cancelled").
+    pub fn ask_confirm(&self, action: &str, processes: &[Process], yes: bool) -> Result<bool> {
+        if yes {
+            return Ok(true);
+        }
+        match self.format {
+            OutputFormat::Json => Ok(true),
+            OutputFormat::Human => {
+                self.print_confirmation(action, processes);
+                let prompt = format!(
+                    "{}{} {} process{}?",
+                    action[..1].to_uppercase(),
+                    &action[1..],
+                    processes.len(),
+                    plural(processes.len())
+                );
+                let confirmed = Confirm::new()
+                    .with_prompt(prompt)
+                    .default(false)
+                    .interact()?;
+                if !confirmed {
+                    self.warning("Cancelled");
+                }
+                Ok(confirmed)
+            }
+        }
     }
 
     /// Print a confirmation prompt showing processes about to be acted on
@@ -515,8 +608,16 @@ impl Printer {
 
 // JSON output structures
 #[derive(Serialize)]
+struct EmptyResult<'a> {
+    action: &'a str,
+    success: bool,
+    count: usize,
+    message: &'a str,
+}
+
+#[derive(Serialize)]
 struct ProcessListOutput<'a> {
-    action: &'static str,
+    action: &'a str,
     success: bool,
     count: usize,
     processes: &'a [Process],

@@ -98,6 +98,7 @@ impl From<WatchSortKey> for SortKey {
 #[derive(Serialize)]
 struct WatchJsonOutput {
     action: &'static str,
+    success: bool,
     count: usize,
     processes: Vec<Process>,
 }
@@ -197,14 +198,7 @@ impl WatchCommand {
 
         // Apply --by filter
         if let Some(ref by_name) = self.by_name {
-            let pattern = by_name.to_lowercase();
-            processes.retain(|p| {
-                p.name.to_lowercase().contains(&pattern)
-                    || p.command
-                        .as_ref()
-                        .map(|c| c.to_lowercase().contains(&pattern))
-                        .unwrap_or(false)
-            });
+            processes.retain(|p| crate::core::matches_by_filter(p, by_name));
         }
 
         // Apply --in filter
@@ -559,6 +553,7 @@ impl WatchCommand {
 
             let output = WatchJsonOutput {
                 action: "watch",
+                success: true,
                 count: processes.len(),
                 processes,
             };
@@ -594,6 +589,7 @@ impl WatchCommand {
         if self.json {
             let output = WatchJsonOutput {
                 action: "watch",
+                success: true,
                 count: processes.len(),
                 processes,
             };
@@ -601,7 +597,7 @@ impl WatchCommand {
                 println!("{}", json);
             }
         } else {
-            let printer = crate::ui::Printer::new(crate::ui::OutputFormat::Human, self.verbose);
+            let printer = crate::ui::Printer::from_flags(false, self.verbose);
             printer.print_processes(&processes);
         }
 

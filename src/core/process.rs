@@ -80,15 +80,29 @@ impl Process {
 
         let pattern_lower = pattern.to_lowercase();
         let self_pid = sysinfo::Pid::from_u32(std::process::id());
-        // Also exclude parent process — its command line contains proc's
-        // arguments (e.g. "zsh -c proc by node"), causing false positives
-        let parent_pid = sys.process(self_pid).and_then(|p| p.parent());
+        // Exclude the entire ancestor chain — their command lines contain proc's
+        // arguments (e.g. "zsh -c proc by node"), causing false positives.
+        // Walk up to 10 levels (covers: proc → shell → shell wrapper → IDE → ...)
+        let ancestor_pids = {
+            let mut pids = std::collections::HashSet::new();
+            pids.insert(self_pid);
+            let mut current = self_pid;
+            for _ in 0..10 {
+                if let Some(parent) = sys.process(current).and_then(|p| p.parent()) {
+                    pids.insert(parent);
+                    current = parent;
+                } else {
+                    break;
+                }
+            }
+            pids
+        };
         let processes: Vec<Process> = sys
             .processes()
             .iter()
             .filter_map(|(pid, proc)| {
-                // Exclude self and parent shell
-                if *pid == self_pid || Some(*pid) == parent_pid {
+                // Exclude self and ancestor shells
+                if ancestor_pids.contains(pid) {
                     return None;
                 }
 

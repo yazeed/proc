@@ -16,14 +16,13 @@
 //!   proc unstick 1234      # Unstick PID 1234
 //!   proc unstick node      # Unstick stuck node processes
 
-use crate::core::{parse_targets, resolve_in_dir, resolve_targets_excluding_self, Process};
+use crate::core::{apply_filters, parse_targets, resolve_targets_excluding_self, Process};
 use crate::error::{ProcError, Result};
-use crate::ui::{format_duration, OutputFormat, Printer};
+use crate::ui::{format_duration, plural, Printer};
 use clap::Args;
 use colored::*;
 use dialoguer::Confirm;
 use serde::Serialize;
-use std::path::PathBuf;
 use std::time::Duration;
 
 #[cfg(unix)]
@@ -82,12 +81,7 @@ enum Outcome {
 impl UnstickCommand {
     /// Executes the unstick command, attempting to recover hung processes.
     pub fn execute(&self) -> Result<()> {
-        let format = if self.json {
-            OutputFormat::Json
-        } else {
-            OutputFormat::Human
-        };
-        let printer = Printer::new(format, self.verbose);
+        let printer = Printer::from_flags(self.json, self.verbose);
 
         // Get processes to unstick
         let mut stuck = if let Some(ref target) = self.target {
@@ -100,24 +94,7 @@ impl UnstickCommand {
         };
 
         // Apply --in and --by filters
-        let in_dir_filter = resolve_in_dir(&self.in_dir);
-        stuck.retain(|p| {
-            if let Some(ref dir_path) = in_dir_filter {
-                if let Some(ref cwd) = p.cwd {
-                    if !PathBuf::from(cwd).starts_with(dir_path) {
-                        return false;
-                    }
-                } else {
-                    return false;
-                }
-            }
-            if let Some(ref name) = self.by_name {
-                if !p.name.to_lowercase().contains(&name.to_lowercase()) {
-                    return false;
-                }
-            }
-            true
-        });
+        apply_filters(&mut stuck, &self.in_dir, &self.by_name);
 
         if stuck.is_empty() {
             if self.json {
@@ -175,7 +152,7 @@ impl UnstickCommand {
                     "\n{} Dry run: Would attempt to unstick {} process{}",
                     "ℹ".blue().bold(),
                     stuck.len().to_string().cyan().bold(),
-                    if stuck.len() == 1 { "" } else { "es" }
+                    plural(stuck.len())
                 );
                 if self.force {
                     println!("  With --force: will terminate if recovery fails");
@@ -201,11 +178,7 @@ impl UnstickCommand {
                 );
             }
 
-            let prompt = format!(
-                "Unstick {} process{}?",
-                stuck.len(),
-                if stuck.len() == 1 { "" } else { "es" }
-            );
+            let prompt = format!("Unstick {} process{}?", stuck.len(), plural(stuck.len()));
 
             if !Confirm::new()
                 .with_prompt(prompt)
@@ -302,7 +275,7 @@ impl UnstickCommand {
                     "{} {} process{} recovered",
                     "✓".green().bold(),
                     recovered.to_string().cyan().bold(),
-                    if recovered == 1 { "" } else { "es" }
+                    plural(recovered)
                 );
             }
             if not_stuck > 0 {
@@ -318,7 +291,7 @@ impl UnstickCommand {
                     "{} {} process{} terminated",
                     "!".yellow().bold(),
                     terminated.to_string().cyan().bold(),
-                    if terminated == 1 { "" } else { "es" }
+                    plural(terminated)
                 );
             }
             if still_stuck > 0 {
@@ -326,7 +299,7 @@ impl UnstickCommand {
                     "{} {} process{} still stuck (use --force to terminate)",
                     "✗".red().bold(),
                     still_stuck.to_string().cyan().bold(),
-                    if still_stuck == 1 { "" } else { "es" }
+                    plural(still_stuck)
                 );
             }
             if failed > 0 {
@@ -334,7 +307,7 @@ impl UnstickCommand {
                     "{} {} process{} failed",
                     "✗".red().bold(),
                     failed.to_string().cyan().bold(),
-                    if failed == 1 { "" } else { "es" }
+                    plural(failed)
                 );
             }
         }
@@ -464,7 +437,7 @@ impl UnstickCommand {
             "!".yellow().bold(),
             label,
             processes.len().to_string().cyan().bold(),
-            if processes.len() == 1 { "" } else { "es" }
+            plural(processes.len())
         );
 
         for proc in processes {

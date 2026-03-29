@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-03-27
+
+### Added
+
+- **`proc wait`**: Block until process(es) exit — the pipe-friendly replacement for `while ps aux | grep ... | grep -v grep; do sleep; done`
+  - `proc wait node` — wait until all node processes exit
+  - `proc wait :3000 --timeout 60` — wait up to 60s for port process to exit
+  - `proc wait node -n 10 -q` — check every 10s, quiet mode for scripting
+  - Supports `--in`, `--by`, `--json`, `--verbose` like other commands
+  - Reports each process as it exits, with elapsed time
+  - JSON output includes per-process exit timing and timeout status
+
+### Fixed
+
+- **`--by` now matches full command line**: The `--by` filter across all commands now matches against both process name AND command line arguments (consistent with how positional targets and `proc by` work). Previously `proc wait node --by KXBTCD` would not match a process whose args contained "KXBTCD" — now it does. Affects: kill, stop, freeze, thaw, info, tree, stuck, unstick, orphans, wait, on, watch, for
+- **JSON output for empty results**: Commands that find nothing (`stuck`, `orphans`, `free` when ports already free) now output `{"action":"...", "success":true, "count":0, "message":"..."}` in JSON mode instead of empty stdout
+- **Consistent JSON envelopes**: `on` (name target), `for`, `why` now wrap results in `{"action":"...", "success":true, "count":N, "results":[...]}` instead of outputting bare arrays
+- **Consistent JSON action field**: All commands now use lowercase action names (`"kill"`, `"stop"`, `"freeze"`, `"resume"`) instead of mixed-case past-tense verbs (`"Killed"`, `"Stopped"`)
+- **Command-specific action names**: `by`, `in`, `stuck`, `orphans` now report their own command name as the JSON `action` field instead of generic `"list"`
+- **`wait` timeout no longer double-outputs JSON**: Previously emitted both a WaitOutput and an error envelope; now emits a single `{"success":false, "timed_out":true, ...}` object
+- **Error envelope includes `action` field**: JSON error responses now include the command name (e.g. `{"action":"kill", "success":false, "error":"...", "exit_code":2}`)
+- **`watch` JSON includes `success` field**: Consistent with all other commands
+- **`tree --ancestors` uses `action: "tree"`**: Consistent regardless of `--ancestors` flag
+- **Ancestor chain exclusion**: Name matching now excludes the entire ancestor process chain (up to 10 levels) instead of just the immediate parent. Prevents false matches in deep shell environments (IDE → terminal → shell → shell wrapper → proc)
+
+### Changed
+
+- **Shared `matches_by_filter`**: Extracted the `--by` matching logic into `core::filters::matches_by_filter()`, replacing 14 inline copies with a single consistent implementation
+- **Agent Skills**: Added `proc wait` to skill reference, added "Agent/Pipe Readiness" section documenting which commands are safe for agents vs interactive-only
+- **`src/lib.rs`**: Clarified `watch` as interactive TUI, `wait` as pipe-friendly blocking
+
+### Updated
+
+- Updated dependencies (`mio`, `roff`, `unicode-segmentation`, `wasm-bindgen`)
+
 ## [1.11.0] - 2026-03-23
 
 ### Changed
@@ -474,7 +509,8 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 
 ---
 
-[Unreleased]: https://github.com/yazeed/proc/compare/v1.11.0...HEAD
+[Unreleased]: https://github.com/yazeed/proc/compare/v1.12.0...HEAD
+[1.12.0]: https://github.com/yazeed/proc/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/yazeed/proc/compare/v1.10.1...v1.11.0
 [1.10.1]: https://github.com/yazeed/proc/compare/v1.10.0...v1.10.1
 [1.10.0]: https://github.com/yazeed/proc/compare/v1.9.1...v1.10.0

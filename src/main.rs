@@ -7,7 +7,7 @@ use clap_complete::{generate, Shell};
 use proc_cli::commands::{
     ByCommand, ForCommand, FreeCommand, FreezeCommand, InCommand, InfoCommand, KillCommand,
     ListCommand, OnCommand, OrphansCommand, PortsCommand, StopCommand, StuckCommand, ThawCommand,
-    TreeCommand, UnstickCommand, WatchCommand, WhyCommand,
+    TreeCommand, UnstickCommand, WaitCommand, WatchCommand, WhyCommand,
 };
 use proc_cli::error::ExitCode;
 use std::io;
@@ -78,6 +78,11 @@ Run 'proc --help' for examples or visit https://github.com/yazeed/proc"
     proc why :3000                 Why is port 3000 busy? (ancestry)
     proc orphans                   Find orphaned processes
     proc orphans --kill            Find and kill orphans
+
+  Wait:
+    proc wait node                 Wait until node processes exit
+    proc wait :3000 --timeout 60   Wait up to 60s for port to free
+    proc wait node -n 10 -q        Check every 10s, quiet mode
 
   Other:
     proc ports                     List all listening ports
@@ -161,6 +166,9 @@ enum Commands {
 
     /// Free port(s) by killing process and verifying availability
     Free(FreeCommand),
+
+    /// Wait for process(es) to exit
+    Wait(WaitCommand),
 
     /// Generate shell completions
     #[command(hide = true)]
@@ -300,6 +308,7 @@ fn main() {
         Commands::Orphans(cmd) => cmd.execute(),
         Commands::Why(cmd) => cmd.execute(),
         Commands::Free(cmd) => cmd.execute(),
+        Commands::Wait(cmd) => cmd.execute(),
         Commands::Completions { shell } => {
             generate(shell, &mut Cli::command(), "proc", &mut io::stdout());
             Ok(())
@@ -318,7 +327,9 @@ fn main() {
 
         // If --json was requested, output error as JSON to stdout
         if wants_json() {
+            let action = std::env::args().nth(1).unwrap_or_default();
             let error_json = serde_json::json!({
+                "action": action,
                 "success": false,
                 "error": format!("{}", e),
                 "exit_code": exit_code as i32

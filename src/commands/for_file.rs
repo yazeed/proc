@@ -10,7 +10,7 @@ use crate::core::{
     find_ports_for_pid, resolve_in_dir, sort_processes, PortInfo, Process, ProcessStatus, SortKey,
 };
 use crate::error::{ProcError, Result};
-use crate::ui::{format_memory, truncate_string};
+use crate::ui::{format_memory, truncate_string, Printer};
 use clap::Args;
 use colored::*;
 use serde::Serialize;
@@ -173,8 +173,7 @@ impl ForCommand {
 
             // Name filter (--by)
             if let Some(ref name) = self.by_name {
-                let name_lower = name.to_lowercase();
-                if !p.name.to_lowercase().contains(&name_lower) {
+                if !crate::core::matches_by_filter(p, name) {
                     return false;
                 }
             }
@@ -332,7 +331,8 @@ impl ForCommand {
     }
 
     fn print_json(&self, results: &[(Process, Vec<PortInfo>)]) -> Result<()> {
-        let output: Vec<ProcessForJson> = results
+        let printer = Printer::from_flags(true, self.verbose);
+        let items: Vec<ProcessForJson> = results
             .iter()
             .map(|(proc, ports)| ProcessForJson {
                 process: proc,
@@ -340,7 +340,12 @@ impl ForCommand {
             })
             .collect();
 
-        println!("{}", serde_json::to_string_pretty(&output)?);
+        printer.print_json(&ForOutput {
+            action: "for",
+            success: true,
+            count: items.len(),
+            results: &items,
+        });
         Ok(())
     }
 }
@@ -349,4 +354,12 @@ impl ForCommand {
 struct ProcessForJson<'a> {
     process: &'a Process,
     ports: &'a [PortInfo],
+}
+
+#[derive(Serialize)]
+struct ForOutput<'a> {
+    action: &'static str,
+    success: bool,
+    count: usize,
+    results: &'a [ProcessForJson<'a>],
 }

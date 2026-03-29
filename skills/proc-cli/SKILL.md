@@ -14,7 +14,8 @@ proc is a semantic CLI for process management. It provides structured JSON outpu
 2. **Always pass `--yes`** on destructive commands to skip interactive prompts
 3. **Use `--dry-run`** before destructive actions to preview what would happen
 4. **Check exit code** first: 0=success, 2=not found, 3=permission denied, 4=invalid input
-5. **Errors with `--json`** produce `{"success":false, "error":"...", "exit_code":N}` on stdout
+5. **Errors with `--json`** produce `{"action":"<cmd>", "success":false, "error":"...", "exit_code":N}` on stdout
+6. **Every JSON response** has `action` (command name, lowercase) and `success` (boolean) fields
 
 ## Target Syntax
 
@@ -56,6 +57,14 @@ proc free :3000 --yes --json            # kill + verify port freed
 proc free :3000,:8080 --yes --json      # free multiple ports
 ```
 
+### Monitoring (blocking, no --yes needed)
+
+```bash
+proc wait node --json                    # block until all node processes exit
+proc wait :3000 --json --timeout 60      # wait up to 60s for port process to exit
+proc wait node -n 10 -q --json          # check every 10s, quiet mode
+```
+
 ### Preview before acting
 
 ```bash
@@ -80,10 +89,20 @@ Combine with most commands:
 
 For complete JSON output schemas and field definitions, see [reference.md](reference.md).
 
+## Agent/Pipe Readiness
+
+All commands except `proc watch` are non-interactive and pipe-friendly with `--json`. Summary:
+
+- **One-shot queries**: `proc by`, `proc on`, `proc list`, `proc info`, `proc ports`, `proc why`, `proc orphans`, `proc stuck` — return immediately
+- **Blocking wait**: `proc wait` — blocks until processes exit, pipe-friendly, use `--timeout` to avoid hanging
+- **Destructive actions**: `proc kill`, `proc stop`, `proc freeze`, `proc thaw`, `proc free` — always pass `--yes --json`
+- **NEVER use from agents**: `proc watch` — interactive TUI, requires a terminal
+
 ## Gotchas
 
 - `proc free` only accepts port targets (`:3000`). Use `proc kill` for name/PID targets.
-- `proc watch` is interactive — never use it from an agent. Use `proc list` or `proc by` instead.
+- `proc watch` is interactive TUI — never use from an agent or pipe. Use `proc list`/`proc by` for one-shot, `proc wait` for blocking.
+- `proc wait` blocks — always use `--timeout` from agents to avoid hanging indefinitely.
 - Name matching is substring-based: `proc by node` matches "node", "nodejs", "nodemon".
 - Port targets must start with `:` — `proc on 3000` treats 3000 as a PID, not a port.
 - `--signal` is only on `proc stop`. Valid signals: HUP, INT, QUIT, ABRT, KILL, TERM, STOP, CONT, USR1, USR2.

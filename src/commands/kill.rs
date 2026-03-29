@@ -8,12 +8,10 @@
 //!   proc kill :3000,1234,node   # Mixed targets (port + PID + name)
 //!   proc kill node --yes        # Skip confirmation
 
-use crate::core::{parse_targets, resolve_in_dir, resolve_targets_excluding_self};
+use crate::core::{apply_filters, parse_targets, resolve_targets_excluding_self};
 use crate::error::{ProcError, Result};
-use crate::ui::{OutputFormat, Printer};
+use crate::ui::Printer;
 use clap::Args;
-use dialoguer::Confirm;
-use std::path::PathBuf;
 
 /// Kill process(es)
 #[derive(Args, Debug)]
@@ -53,12 +51,7 @@ pub struct KillCommand {
 impl KillCommand {
     /// Executes the kill command, forcefully terminating matched processes.
     pub fn execute(&self) -> Result<()> {
-        let format = if self.json {
-            OutputFormat::Json
-        } else {
-            OutputFormat::Human
-        };
-        let printer = Printer::new(format, self.verbose);
+        let printer = Printer::from_flags(self.json, self.verbose);
 
         // Parse comma-separated targets and resolve to processes
         // Use resolve_targets_excluding_self to avoid killing ourselves
@@ -71,24 +64,7 @@ impl KillCommand {
         }
 
         // Apply --in and --by filters
-        let in_dir_filter = resolve_in_dir(&self.in_dir);
-        processes.retain(|p| {
-            if let Some(ref dir_path) = in_dir_filter {
-                if let Some(ref cwd) = p.cwd {
-                    if !PathBuf::from(cwd).starts_with(dir_path) {
-                        return false;
-                    }
-                } else {
-                    return false;
-                }
-            }
-            if let Some(ref name) = self.by_name {
-                if !p.name.to_lowercase().contains(&name.to_lowercase()) {
-                    return false;
-                }
-            }
-            true
-        });
+        apply_filters(&mut processes, &self.in_dir, &self.by_name);
 
         if processes.is_empty() {
             return Err(ProcError::ProcessNotFound(self.target.clone()));
@@ -96,33 +72,13 @@ impl KillCommand {
 
         // Dry run: just show what would be killed
         if self.dry_run {
-            printer.print_processes(&processes);
-            printer.warning(&format!(
-                "Dry run: would kill {} process{}",
-                processes.len(),
-                if processes.len() == 1 { "" } else { "es" }
-            ));
+            printer.print_dry_run("kill", &processes);
             return Ok(());
         }
 
         // Confirm before killing (unless --yes)
-        if !self.yes && !self.json {
-            printer.print_confirmation("kill", &processes);
-
-            let confirmed = Confirm::new()
-                .with_prompt(format!(
-                    "Kill {} process{}?",
-                    processes.len(),
-                    if processes.len() == 1 { "" } else { "es" }
-                ))
-                .default(false)
-                .interact()
-                .unwrap_or(false);
-
-            if !confirmed {
-                printer.warning("Cancelled");
-                return Ok(());
-            }
+        if !printer.ask_confirm("kill", &processes, self.yes)? {
+            return Ok(());
         }
 
         // Kill the processes

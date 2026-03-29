@@ -9,7 +9,7 @@
 
 use crate::core::{resolve_in_dir, sort_processes, Process, ProcessStatus, SortKey};
 use crate::error::Result;
-use crate::ui::{OutputFormat, Printer};
+use crate::ui::Printer;
 use clap::Args;
 use std::path::PathBuf;
 
@@ -67,12 +67,7 @@ pub struct ListCommand {
 impl ListCommand {
     /// Executes the list command, displaying processes matching the filters.
     pub fn execute(&self) -> Result<()> {
-        let format = if self.json {
-            OutputFormat::Json
-        } else {
-            OutputFormat::Human
-        };
-        let printer = Printer::new(format, self.verbose);
+        let printer = Printer::from_flags(self.json, self.verbose);
 
         // Get base process list (supports comma-separated names)
         let mut processes = if let Some(ref name) = self.name {

@@ -8,7 +8,10 @@ pub mod port;
 pub mod process;
 pub mod target;
 
-pub use filters::{resolve_in_dir, sort_processes, PortSortKey, SortKey};
+pub use filters::{
+    apply_filters, matches_by_filter, matches_in_filter, resolve_in_dir, sort_processes,
+    PortSortKey, SortKey,
+};
 pub use port::{parse_port, PortInfo, Protocol};
 #[cfg(unix)]
 pub use process::parse_signal_name;

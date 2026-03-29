@@ -14,6 +14,7 @@
 
 ```json
 {
+  "action": "kill",
   "success": false,
   "error": "No process found matching '99999999'\n  Try: proc list to list all processes",
   "exit_code": 2
@@ -57,7 +58,9 @@ Status is one of: `running`, `sleeping`, `stopped`, `zombie`, `dead`, `unknown`.
 
 ## Command Output Shapes
 
-### proc list / proc by / proc in / proc orphans --json
+### proc list / proc by / proc in / proc stuck / proc orphans --json
+
+Each command uses its own name as the `action` field: `"list"`, `"by"`, `"in"`, `"stuck"`, `"orphans"`.
 
 ```json
 {
@@ -108,22 +111,25 @@ Status is one of: `running`, `sleeping`, `stopped`, `zombie`, `dead`, `unknown`.
 
 ### proc on name --json (process-to-ports lookup)
 
-Returns an array:
-
 ```json
-[
-  {
-    "process": <Process>,
-    "ports": [<Port>, ...]
-  }
-]
+{
+  "action": "on",
+  "success": true,
+  "count": 2,
+  "results": [
+    {
+      "process": <Process>,
+      "ports": [<Port>, ...]
+    }
+  ]
+}
 ```
 
 ### proc kill / stop / freeze / thaw --json
 
 ```json
 {
-  "action": "Killed",
+  "action": "kill",
   "success": true,
   "succeeded_count": 1,
   "failed_count": 0,
@@ -137,7 +143,7 @@ Returns an array:
 }
 ```
 
-Action values: `"Killed"`, `"Stopped"`, `"Frozen"`, `"Resumed"`.
+Action values: `"kill"`, `"stop"`, `"freeze"`, `"resume"`.
 
 ### proc free --json
 
@@ -152,12 +158,35 @@ Action values: `"Killed"`, `"Stopped"`, `"Frozen"`, `"Resumed"`.
 }
 ```
 
-### proc why --json
-
-Returns an array:
+### proc wait --json
 
 ```json
-[
+{
+  "action": "wait",
+  "success": true,
+  "timed_out": false,
+  "elapsed_seconds": 945,
+  "elapsed_human": "15m 45s",
+  "target": "node",
+  "initial_count": 2,
+  "exited": [
+    {"pid": 12346, "name": "node", "exited_after_seconds": 512},
+    {"pid": 12345, "name": "node", "exited_after_seconds": 945}
+  ],
+  "still_running": []
+}
+```
+
+On timeout: `success` is `false`, `timed_out` is `true`, `still_running` lists remaining processes.
+
+### proc why --json
+
+```json
+{
+  "action": "why",
+  "success": true,
+  "count": 1,
+  "results": [
   {
     "target": ":3000",
     "port": 3000,
@@ -176,7 +205,8 @@ Returns an array:
       {"pid": 1234, "name": "node", "command": "node server.js", "cwd": "/home/user/project", "status": "Running", "is_target": true}
     ]
   }
-]
+  ]
+}
 ```
 
 ### proc tree --json

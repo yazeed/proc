@@ -9,7 +9,7 @@
 use crate::core::port::PortInfo;
 use crate::core::{parse_target, parse_targets, Process, TargetType};
 use crate::error::{ProcError, Result};
-use crate::ui::{OutputFormat, Printer};
+use crate::ui::{plural, Printer};
 use clap::Args;
 use colored::*;
 use dialoguer::Confirm;
@@ -46,12 +46,7 @@ pub struct FreeCommand {
 impl FreeCommand {
     /// Executes the free command, killing processes and verifying ports are freed.
     pub fn execute(&self) -> Result<()> {
-        let format = if self.json {
-            OutputFormat::Json
-        } else {
-            OutputFormat::Human
-        };
-        let printer = Printer::new(format, self.verbose);
+        let printer = Printer::from_flags(self.json, self.verbose);
 
         let targets = parse_targets(&self.target);
 
@@ -93,7 +88,7 @@ impl FreeCommand {
                     "No port targets specified".to_string(),
                 ));
             }
-            printer.success("All specified ports are already free");
+            printer.print_empty_result("free", "All specified ports are already free");
             return Ok(());
         }
 
@@ -112,7 +107,7 @@ impl FreeCommand {
             printer.warning(&format!(
                 "Dry run: would kill {} process{} to free {} port{}",
                 processes.len(),
-                if processes.len() == 1 { "" } else { "es" },
+                plural(processes.len()),
                 port_processes.len(),
                 if port_processes.len() == 1 { "" } else { "s" }
             ));
@@ -125,7 +120,7 @@ impl FreeCommand {
             let prompt = format!(
                 "Kill {} process{} to free {} port{}?",
                 processes.len(),
-                if processes.len() == 1 { "" } else { "es" },
+                plural(processes.len()),
                 port_processes.len(),
                 if port_processes.len() == 1 { "" } else { "s" }
             );

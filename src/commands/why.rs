@@ -11,7 +11,7 @@ use crate::core::{
     ProcessStatus, TargetType,
 };
 use crate::error::Result;
-use crate::ui::{OutputFormat, Printer};
+use crate::ui::Printer;
 use clap::Args;
 use colored::*;
 use serde::Serialize;
@@ -36,12 +36,7 @@ pub struct WhyCommand {
 impl WhyCommand {
     /// Executes the why command, showing ancestry and port context.
     pub fn execute(&self) -> Result<()> {
-        let format = if self.json {
-            OutputFormat::Json
-        } else {
-            OutputFormat::Human
-        };
-        let printer = Printer::new(format, self.verbose);
+        let printer = Printer::from_flags(self.json, self.verbose);
 
         let all_processes = Process::find_all()?;
         let pid_map: HashMap<u32, &Process> = all_processes.iter().map(|p| (p.pid, p)).collect();
@@ -79,7 +74,7 @@ impl WhyCommand {
             }
 
             if self.json {
-                let output: Vec<WhyOutput> = target_processes
+                let results: Vec<WhyOutput> = target_processes
                     .iter()
                     .map(|proc| {
                         let chain = self.build_ancestry_chain(proc, &pid_map);
@@ -102,7 +97,12 @@ impl WhyCommand {
                         }
                     })
                     .collect();
-                printer.print_json(&output);
+                printer.print_json(&WhyEnvelope {
+                    action: "why",
+                    success: true,
+                    count: results.len(),
+                    results,
+                });
             } else {
                 // Print port header if applicable
                 if let Some(ref port_info) = port_context {
@@ -254,6 +254,14 @@ impl WhyCommand {
             }
         }
     }
+}
+
+#[derive(Serialize)]
+struct WhyEnvelope {
+    action: &'static str,
+    success: bool,
+    count: usize,
+    results: Vec<WhyOutput>,
 }
 
 #[derive(Serialize)]

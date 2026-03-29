@@ -7,13 +7,12 @@
 //!   proc info :3000,:8080       # Info for multiple targets
 //!   proc info :3000,1234,node   # Mixed targets (port + PID + name)
 
-use crate::core::{parse_targets, resolve_in_dir, resolve_target, Process};
+use crate::core::{apply_filters, parse_targets, resolve_target, Process};
 use crate::error::Result;
-use crate::ui::{colorize_status, format_duration, format_memory, OutputFormat, Printer};
+use crate::ui::{colorize_status, format_duration, format_memory, Printer};
 use clap::Args;
 use colored::*;
 use serde::Serialize;
-use std::path::PathBuf;
 
 /// Show detailed process information
 #[derive(Args, Debug)]
@@ -42,12 +41,7 @@ pub struct InfoCommand {
 impl InfoCommand {
     /// Executes the info command, displaying detailed process information.
     pub fn execute(&self) -> Result<()> {
-        let format = if self.json {
-            OutputFormat::Json
-        } else {
-            OutputFormat::Human
-        };
-        let printer = Printer::new(format, self.verbose);
+        let printer = Printer::from_flags(self.json, self.verbose);
 
         // Flatten targets - support both space-separated and comma-separated
         let all_targets: Vec<String> = self.targets.iter().flat_map(|t| parse_targets(t)).collect();
@@ -75,24 +69,7 @@ impl InfoCommand {
         }
 
         // Apply --in and --by filters
-        let in_dir_filter = resolve_in_dir(&self.in_dir);
-        found.retain(|p| {
-            if let Some(ref dir_path) = in_dir_filter {
-                if let Some(ref cwd) = p.cwd {
-                    if !PathBuf::from(cwd).starts_with(dir_path) {
-                        return false;
-                    }
-                } else {
-                    return false;
-                }
-            }
-            if let Some(ref name) = self.by_name {
-                if !p.name.to_lowercase().contains(&name.to_lowercase()) {
-                    return false;
-                }
-            }
-            true
-        });
+        apply_filters(&mut found, &self.in_dir, &self.by_name);
 
         if self.json {
             printer.print_json(&InfoOutput {

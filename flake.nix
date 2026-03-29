@@ -13,7 +13,7 @@
       in {
         packages.default = pkgs.rustPlatform.buildRustPackage {
           pname = "proc";
-          version = "1.11.0";
+          version = "1.12.0";
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
           

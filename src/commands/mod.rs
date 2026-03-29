@@ -21,6 +21,7 @@ pub mod stuck;
 pub mod thaw;
 pub mod tree;
 pub mod unstick;
+pub mod wait;
 pub mod watch;
 pub mod why;
 
@@ -40,5 +41,6 @@ pub use stuck::StuckCommand;
 pub use thaw::ThawCommand;
 pub use tree::TreeCommand;
 pub use unstick::UnstickCommand;
+pub use wait::WaitCommand;
 pub use watch::WatchCommand;
 pub use why::WhyCommand;

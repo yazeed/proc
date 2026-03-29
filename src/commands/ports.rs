@@ -9,7 +9,7 @@
 
 use crate::core::{resolve_in_dir, PortInfo, PortSortKey, Process};
 use crate::error::Result;
-use crate::ui::{truncate_string, OutputFormat, Printer};
+use crate::ui::{truncate_string, Printer};
 use clap::Args;
 use colored::*;
 use serde::Serialize;
@@ -207,15 +207,7 @@ impl PortsCommand {
     }
 
     fn print_json(&self, ports: &[PortInfo], process_map: &HashMap<u32, Process>) {
-        let printer = Printer::new(OutputFormat::Json, self.verbose);
-
-        #[derive(Serialize)]
-        struct PortWithProcess<'a> {
-            #[serde(flatten)]
-            port: &'a PortInfo,
-            #[serde(skip_serializing_if = "Option::is_none")]
-            exe_path: Option<&'a str>,
-        }
+        let printer = Printer::from_flags(true, self.verbose);
 
         let enriched: Vec<PortWithProcess> = ports
             .iter()
@@ -227,19 +219,27 @@ impl PortsCommand {
             })
             .collect();
 
-        #[derive(Serialize)]
-        struct Output<'a> {
-            action: &'static str,
-            success: bool,
-            count: usize,
-            ports: Vec<PortWithProcess<'a>>,
-        }
-
-        printer.print_json(&Output {
+        printer.print_json(&PortsOutput {
             action: "ports",
             success: true,
             count: ports.len(),
             ports: enriched,
         });
     }
+}
+
+#[derive(Serialize)]
+struct PortWithProcess<'a> {
+    #[serde(flatten)]
+    port: &'a PortInfo,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    exe_path: Option<&'a str>,
+}
+
+#[derive(Serialize)]
+struct PortsOutput<'a> {
+    action: &'static str,
+    success: bool,
+    count: usize,
+    ports: Vec<PortWithProcess<'a>>,
 }

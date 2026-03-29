@@ -20,6 +20,17 @@ pub fn format_duration(secs: u64) -> String {
     }
 }
 
+/// Return "es" for plural process counts, "" for singular.
+///
+/// Usage: `format!("{} process{}", n, plural(n))` → "1 process" or "3 processes"
+pub fn plural(n: usize) -> &'static str {
+    if n == 1 {
+        ""
+    } else {
+        "es"
+    }
+}
+
 /// Truncate a string to a maximum length, appending "..." if truncated.
 pub fn truncate_string(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {

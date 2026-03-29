@@ -7,15 +7,11 @@
 //!   proc thaw node --yes        # Skip confirmation
 
 #[cfg(unix)]
-use crate::core::{parse_targets, resolve_in_dir, resolve_targets_excluding_self};
+use crate::core::{apply_filters, parse_targets, resolve_targets_excluding_self};
 use crate::error::{ProcError, Result};
 #[cfg(unix)]
-use crate::ui::{OutputFormat, Printer};
+use crate::ui::Printer;
 use clap::Args;
-#[cfg(unix)]
-use dialoguer::Confirm;
-#[cfg(unix)]
-use std::path::PathBuf;
 
 /// Resume frozen process(es) with SIGCONT
 #[derive(Args, Debug)]
@@ -55,12 +51,7 @@ impl ThawCommand {
     pub fn execute(&self) -> Result<()> {
         use nix::sys::signal::Signal;
 
-        let format = if self.json {
-            OutputFormat::Json
-        } else {
-            OutputFormat::Human
-        };
-        let printer = Printer::new(format, self.verbose);
+        let printer = Printer::from_flags(self.json, self.verbose);
 
         let targets = parse_targets(&self.target);
         let (mut processes, not_found) = resolve_targets_excluding_self(&targets);
@@ -70,56 +61,19 @@ impl ThawCommand {
         }
 
         // Apply --in and --by filters
-        let in_dir_filter = resolve_in_dir(&self.in_dir);
-        processes.retain(|p| {
-            if let Some(ref dir_path) = in_dir_filter {
-                if let Some(ref cwd) = p.cwd {
-                    if !PathBuf::from(cwd).starts_with(dir_path) {
-                        return false;
-                    }
-                } else {
-                    return false;
-                }
-            }
-            if let Some(ref name) = self.by_name {
-                if !p.name.to_lowercase().contains(&name.to_lowercase()) {
-                    return false;
-                }
-            }
-            true
-        });
+        apply_filters(&mut processes, &self.in_dir, &self.by_name);
 
         if processes.is_empty() {
             return Err(ProcError::ProcessNotFound(self.target.clone()));
         }
 
         if self.dry_run {
-            printer.print_processes(&processes);
-            printer.warning(&format!(
-                "Dry run: would resume {} process{}",
-                processes.len(),
-                if processes.len() == 1 { "" } else { "es" }
-            ));
+            printer.print_dry_run("resume", &processes);
             return Ok(());
         }
 
-        if !self.yes && !self.json {
-            printer.print_confirmation("resume", &processes);
-
-            let prompt = format!(
-                "Resume {} process{}?",
-                processes.len(),
-                if processes.len() == 1 { "" } else { "es" }
-            );
-
-            if !Confirm::new()
-                .with_prompt(prompt)
-                .default(false)
-                .interact()?
-            {
-                printer.warning("Aborted");
-                return Ok(());
-            }
+        if !printer.ask_confirm("resume", &processes, self.yes)? {
+            return Ok(());
         }
 
         let mut succeeded = Vec::new();
@@ -132,7 +86,7 @@ impl ThawCommand {
             }
         }
 
-        printer.print_action_result("Resumed", &succeeded, &failed);
+        printer.print_action_result("resume", &succeeded, &failed);
 
         Ok(())
     }

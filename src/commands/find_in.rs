@@ -184,7 +184,7 @@ impl InCommand {
         }
         let context = Some(context_parts.join(" "));
 
-        printer.print_processes_with_context(&processes, context.as_deref());
+        printer.print_processes_as("in", &processes, context.as_deref());
         Ok(())
     }
 }
