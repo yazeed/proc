@@ -1,7 +1,7 @@
 ---
 name: proc-cli
 description: |
-  Manage system processes and ports using the proc CLI tool. Find, inspect, kill, stop, freeze, thaw, and free processes by port, PID, or name. Use when the user asks to check what's running on a port, kill a process, find orphaned processes, free a port, pause/resume processes, trace why a port is busy, or any process/port management task. Also use when the user mentions proc, ports, PIDs, SIGKILL, SIGTERM, SIGSTOP, or process management.
+  Manage system processes and ports using the proc CLI tool. Find, inspect, kill, stop, freeze, thaw, free, and wait for processes by port, PID, or name. Use when the user asks to check what's running on a port, kill a process, find orphaned processes, free a port, pause/resume processes, trace why a port is busy, wait for a process to finish, find what's running a file, or any process/port management task. Also use when the user mentions proc, ports, PIDs, SIGKILL, SIGTERM, SIGSTOP, or process management.
 ---
 
 # proc CLI — Process Management Tool

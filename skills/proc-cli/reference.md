@@ -228,10 +228,34 @@ On timeout: `success` is `false`, `timed_out` is `true`, `still_running` lists r
 }
 ```
 
-### proc stuck --json
+### proc for --json
 
-Same as `proc list` output shape — `{"action":"list", "success":true, "count":N, "processes":[...]}`.
-When no stuck processes found, `count` is 0 and `processes` is empty.
+```json
+{
+  "action": "for",
+  "success": true,
+  "count": 2,
+  "results": [
+    {
+      "process": <Process>,
+      "ports": [<Port>, ...]
+    }
+  ]
+}
+```
+
+### Empty results (stuck, orphans, free when nothing found)
+
+```json
+{
+  "action": "stuck",
+  "success": true,
+  "count": 0,
+  "message": "No stuck processes found (threshold: 300s)"
+}
+```
+
+The `action` field matches the command (`"stuck"`, `"orphans"`, `"free"`).
 
 ## Signal Names (for --signal flag on proc stop)
 
