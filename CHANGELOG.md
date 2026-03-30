@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.12.2] - 2026-03-30
+
+### Security
+
+- **npm install script hardened**: SHA-256 checksum verification, redirect host pinning, `execFileSync` (no shell injection), dead code removed
+
+### Fixed
+
+- **README**: SafeSkill badge, correct badge ordering
+- **Skills**: Added `proc for` and empty result JSON schemas to reference
+- **Rust docs**: Added `wait`, `free`, `why`, `freeze/thaw`, `--signal`, `--json` to Quick Start and Features
+
 ## [1.12.1] - 2026-03-27
 
 ### Fixed
@@ -515,7 +527,8 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 
 ---
 
-[Unreleased]: https://github.com/yazeed/proc/compare/v1.12.1...HEAD
+[Unreleased]: https://github.com/yazeed/proc/compare/v1.12.2...HEAD
+[1.12.2]: https://github.com/yazeed/proc/compare/v1.12.1...v1.12.2
 [1.12.1]: https://github.com/yazeed/proc/compare/v1.12.0...v1.12.1
 [1.12.0]: https://github.com/yazeed/proc/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/yazeed/proc/compare/v1.10.1...v1.11.0
