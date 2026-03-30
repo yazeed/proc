@@ -11,6 +11,8 @@
 //! - **Working Directory**: See which project folder a process is running from
 //! - **Terminal-Adaptive Tables**: Tables adjust to terminal width automatically
 //! - **Consistent Filters**: `--in`, `--by`, `--min-uptime`, `--parent`, `--range`, `--sort`, `--limit`
+//! - **JSON Output**: `--json` on every command with consistent `{action, success, ...}` envelopes
+//! - **Custom Signals**: `proc stop nginx --signal HUP` - send any signal via `--signal`
 //! - **Real-Time Monitoring**: `proc watch` / `proc top` - live process table (interactive, TTY only)
 //! - **Process Waiting**: `proc wait node` - block until process(es) exit (pipe-friendly)
 //! - **Freeze/Thaw**: `proc freeze` / `proc thaw` - pause and resume by port, PID, or name
@@ -45,6 +47,24 @@
 //!
 //! # Watch processes in real-time
 //! proc watch node --in .
+//!
+//! # Wait for a process to finish
+//! proc wait node --timeout 3600
+//!
+//! # Free a port (kill + verify available)
+//! proc free :3000
+//!
+//! # Why is this port busy?
+//! proc why :3000
+//!
+//! # Pause and resume
+//! proc freeze node && proc thaw node
+//!
+//! # Send custom signal
+//! proc stop nginx --signal HUP
+//!
+//! # JSON output for scripting/LLMs
+//! proc by node --json
 //!
 //! # Generate shell completions
 //! proc completions zsh > ~/.zsh/completions/_proc
