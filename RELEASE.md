@@ -47,7 +47,10 @@ Update and verify all docs are complete:
 - [ ] `CHANGELOG.md` — Add new version section with changes
 - [ ] `README.md` — Review thoroughly: hero examples, Quick Start, Commands table, Filters table, Examples section all reflect new features
 - [ ] `ROADMAP.md` — Mark completed items, update current release section
-- [ ] `src/lib.rs` — Review Rust docs: Features list, Quick Start, Commands list all reflect new features (shows on docs.rs)
+- [ ] `src/lib.rs` — Review Rust docs: Features list, Quick Start examples, Commands list all reflect new features. Run `cargo doc --no-deps --open` to preview. This is what shows on docs.rs.
+- [ ] `skills/proc-cli/SKILL.md` — Agent Skills: new commands, flags, schemas
+- [ ] `skills/proc-cli/reference.md` — JSON output schemas match actual output
+- [ ] `docs/commands/` — GitHub Pages: new command pages, index.md updated
 - [ ] Verify `proc manpage` output includes new commands
 - [ ] Verify `proc completions` includes new commands
 
