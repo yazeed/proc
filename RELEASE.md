@@ -13,6 +13,15 @@ cargo update             # Update dependencies
 cargo audit              # No security vulnerabilities
 ```
 
+### Cross-Platform Check
+
+`freeze` and `thaw` use `#[cfg(unix)]` — imports gated behind `cfg(unix)` cause unused-import errors on Windows with `-D warnings`. Always verify:
+
+```bash
+rustup target add x86_64-pc-windows-msvc  # One-time setup
+cargo check --target x86_64-pc-windows-msvc
+```
+
 ## 2. Manual Testing
 
 Test new features manually with the release binary:
