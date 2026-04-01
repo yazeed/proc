@@ -1,0 +1,22 @@
+{
+  "name": "proc-cli",
+  "owner": {
+    "name": "Yazeed Al Oyoun",
+    "email": "me@yazeed.com"
+  },
+  "metadata": {
+    "description": "Semantic CLI tool for process management. Target by port, PID, name or path.",
+    "version": "1.12.2"
+  },
+  "plugins": [
+    {
+      "name": "proc-cli",
+      "description": "Process and port management skill — find, kill, stop, freeze, thaw, free, wait, and trace processes by port, PID, or name",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/proc-cli"
+      ]
+    }
+  ]
+}
