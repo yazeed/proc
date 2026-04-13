@@ -90,6 +90,12 @@ Also verify:
 - [ ] `proc manpage` — Includes new commands
 - [ ] `proc completions bash` — Includes new commands
 
+## 8. Cleanup
+
+```bash
+cargo clean    # Remove build artifacts (~10GB+ after a release session)
+```
+
 ---
 
 ## Automated Publishing
