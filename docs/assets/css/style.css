@@ -528,10 +528,11 @@ blockquote p:last-child { margin-bottom: 0; }
 
 /* --- Homepage Demo Video --- */
 .hero-demo {
-  margin: 2rem auto 0;
+  margin: 2rem 0 0;
 }
 
 .hero-demo video {
+  display: block;
   width: 100%;
   border-radius: 8px;
   border: 1px solid var(--border);
