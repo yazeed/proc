@@ -481,11 +481,155 @@ blockquote p:last-child { margin-bottom: 0; }
 }
 .footer-links a:hover { color: var(--text-bright); }
 
+/* --- Homepage Hero --- */
+.hero {
+  text-align: center;
+  padding: 4rem 0 2rem;
+}
+
+.hero-title {
+  font-family: var(--font-mono);
+  font-size: 3rem;
+  font-weight: 500;
+  color: var(--accent);
+  letter-spacing: -0.03em;
+  margin-bottom: 0.5rem;
+}
+
+.hero-tagline {
+  font-family: var(--font-serif);
+  font-size: 1.35rem;
+  color: var(--text-bright);
+  margin-bottom: 0.25rem;
+}
+
+.hero-sub {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-bottom: 0;
+}
+
+/* --- Homepage Examples --- */
+.hero-example {
+  margin: 2.5rem 0 3rem;
+}
+
+.example-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.example-pair {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.85rem 1rem;
+  transition: border-color 0.2s ease;
+}
+
+.example-pair:hover {
+  border-color: var(--accent);
+}
+
+.example-label {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-bottom: 0.4rem;
+}
+
+.example-pair pre {
+  margin: 0;
+  border: none;
+  background: none;
+  padding: 0;
+}
+
+.example-pair code {
+  font-size: 0.82rem;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+}
+
+/* --- Homepage Sections --- */
+.section {
+  margin-bottom: 3rem;
+}
+
+.section > h2 {
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+/* --- Command Groups --- */
+.cmd-group {
+  margin-bottom: 1.5rem;
+}
+
+.cmd-group h3 {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-weight: 400;
+  margin-bottom: 0.75rem;
+  text-transform: lowercase;
+}
+
+.cmd-list {
+  display: grid;
+  gap: 0;
+}
+
+.cmd {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+.cmd:last-child {
+  border-bottom: none;
+}
+
+.cmd code {
+  font-size: 0.82rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.cmd span {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.cmd-note {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+}
+
+/* --- Nav update for homepage link --- */
+
 /* --- Responsive --- */
 @media (max-width: 680px) {
   html { font-size: 15px; }
 
   h1 { font-size: 1.5rem; }
+
+  .hero { padding: 2.5rem 0 1.5rem; }
+  .hero-title { font-size: 2.25rem; }
+  .hero-tagline { font-size: 1.15rem; }
+
+  .example-grid { grid-template-columns: 1fr; }
+
+  .cmd { flex-direction: column; gap: 0.15rem; }
 
   .nav-inner { padding: 0.75rem 1rem; }
   .nav-links { gap: 1.25rem; }

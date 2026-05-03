@@ -1,20 +1,156 @@
 ---
 layout: default
-title: posts
+title: proc
+description: "Semantic CLI tool for process management. Target by port, PID, name or path."
 ---
-<div class="blog-header">
-  <h1>posts</h1>
+
+<div class="hero">
+  <h1 class="hero-title">proc</h1>
+  <p class="hero-tagline">process management that makes sense.</p>
+  <p class="hero-sub">target by port, pid, name or path. one syntax everywhere.</p>
 </div>
-<ul class="post-list">
-  {% for post in site.posts %}
-  <li class="post-item">
-    <a href="{{ post.url | prepend: site.baseurl }}" class="post-link">
-      <span class="post-title">{{ post.title }}</span>
-      <span class="post-meta">{{ post.date | date: "%B %d, %Y" }}</span>
-      {% if post.description %}
-      <span class="post-desc">{{ post.description }}</span>
-      {% endif %}
-    </a>
-  </li>
-  {% endfor %}
-</ul>
+
+<div class="hero-example">
+  <div class="example-grid">
+    <div class="example-pair">
+      <div class="example-label">what's on port 3000?</div>
+      <pre><code>proc on :3000</code></pre>
+    </div>
+    <div class="example-pair">
+      <div class="example-label">kill it</div>
+      <pre><code>proc kill :3000</code></pre>
+    </div>
+    <div class="example-pair">
+      <div class="example-label">free the port (kill + verify)</div>
+      <pre><code>proc free :3000</code></pre>
+    </div>
+    <div class="example-pair">
+      <div class="example-label">why is this port busy?</div>
+      <pre><code>proc why :3000</code></pre>
+    </div>
+    <div class="example-pair">
+      <div class="example-label">node processes in this directory</div>
+      <pre><code>proc by node --in .</code></pre>
+    </div>
+    <div class="example-pair">
+      <div class="example-label">wait for it to finish</div>
+      <pre><code>proc wait node</code></pre>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>before / after</h2>
+  <table>
+    <thead>
+      <tr><th>task</th><th>without proc</th><th>with proc</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>what's on port 3000?</td>
+        <td><code>lsof -i :3000 -P -n</code></td>
+        <td><code>proc on :3000</code></td>
+      </tr>
+      <tr>
+        <td>kill it</td>
+        <td><code>lsof -i :3000 -t | xargs kill -9</code></td>
+        <td><code>proc kill :3000</code></td>
+      </tr>
+      <tr>
+        <td>free the port</td>
+        <td><code>lsof -t -i:3000 | xargs kill && sleep 1 && lsof -i:3000</code></td>
+        <td><code>proc free :3000</code></td>
+      </tr>
+      <tr>
+        <td>wait for process</td>
+        <td><code>while ps aux | grep node | grep -v grep; do sleep 5; done</code></td>
+        <td><code>proc wait node</code></td>
+      </tr>
+      <tr>
+        <td>find orphans</td>
+        <td>no standard tool</td>
+        <td><code>proc orphans</code></td>
+      </tr>
+      <tr>
+        <td>pause a process</td>
+        <td><code>kill -STOP $(pgrep node)</code></td>
+        <td><code>proc freeze node</code></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="section">
+  <h2>commands</h2>
+
+  <div class="cmd-group">
+    <h3>discovery</h3>
+    <div class="cmd-list">
+      <div class="cmd"><code>proc on :3000</code> <span>what's on this port?</span></div>
+      <div class="cmd"><code>proc by node</code> <span>find by name</span></div>
+      <div class="cmd"><code>proc for ./app.js</code> <span>what's running this file?</span></div>
+      <div class="cmd"><code>proc in .</code> <span>processes in this directory</span></div>
+      <div class="cmd"><code>proc why :3000</code> <span>trace ancestry</span></div>
+      <div class="cmd"><code>proc orphans</code> <span>find abandoned processes</span></div>
+      <div class="cmd"><code>proc ports</code> <span>all listening ports</span></div>
+      <div class="cmd"><code>proc tree</code> <span>process hierarchy</span></div>
+    </div>
+  </div>
+
+  <div class="cmd-group">
+    <h3>lifecycle</h3>
+    <div class="cmd-list">
+      <div class="cmd"><code>proc kill :3000</code> <span>force kill</span></div>
+      <div class="cmd"><code>proc stop node</code> <span>graceful shutdown</span></div>
+      <div class="cmd"><code>proc free :3000</code> <span>kill + verify port freed</span></div>
+      <div class="cmd"><code>proc freeze node</code> <span>pause (SIGSTOP)</span></div>
+      <div class="cmd"><code>proc thaw node</code> <span>resume (SIGCONT)</span></div>
+      <div class="cmd"><code>proc wait node</code> <span>block until exit</span></div>
+    </div>
+  </div>
+
+  <div class="cmd-group">
+    <h3>composable</h3>
+    <p class="cmd-note">targets work everywhere: <code>:port</code>, <code>PID</code>, <code>name</code>. comma-separate for multiple. add <code>--in .</code> to scope to current directory. add <code>--json</code> for structured output.</p>
+    <pre><code>proc kill :3000,:8080,node --in . --json --yes</code></pre>
+  </div>
+
+  <p><a href="{{ site.baseurl }}/commands">full command reference &rarr;</a></p>
+</div>
+
+<div class="section">
+  <h2>install</h2>
+  <div class="install-grid">
+    <div class="install-method">
+      <div class="method-label">macOS</div>
+      <pre><code>brew install yazeed/proc/proc</code></pre>
+    </div>
+    <div class="install-method">
+      <div class="method-label">npm / bun</div>
+      <pre><code>npm install -g proc-cli</code></pre>
+    </div>
+    <div class="install-method">
+      <div class="method-label">rust</div>
+      <pre><code>cargo install proc-cli</code></pre>
+    </div>
+    <div class="install-method">
+      <div class="method-label">shell</div>
+      <pre><code>curl -fsSL https://raw.githubusercontent.com/yazeed/proc/main/install.sh | bash</code></pre>
+    </div>
+  </div>
+  <p><a href="{{ site.baseurl }}/install">all platforms &rarr;</a></p>
+</div>
+
+<div class="section">
+  <h2>posts</h2>
+  <ul class="post-list">
+    {% for post in site.posts limit:5 %}
+    <li class="post-item">
+      <a href="{{ post.url | prepend: site.baseurl }}" class="post-link">
+        <span class="post-title">{{ post.title }}</span>
+        <span class="post-meta">{{ post.date | date: "%B %d, %Y" }}</span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+</div>

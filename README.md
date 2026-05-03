@@ -12,7 +12,7 @@
 [![Changelog](https://img.shields.io/crates/v/proc-cli?label=changelog&color=blue)](CHANGELOG.md)
 [![Downloads](https://img.shields.io/crates/d/proc-cli.svg)](https://crates.io/crates/proc-cli)
 [![Open Collective](https://img.shields.io/opencollective/all/proc-cli?label=backers)](https://opencollective.com/proc-cli)
-[![SafeSkill 92/100](https://img.shields.io/badge/SafeSkill-92%2F100-green)](https://safeskill.dev/scan/proc-cli)
+[![SafeSkill](https://safeskill.dev/api/badge/proc-cli)](https://safeskill.dev/scan/proc-cli)
 [![Website](https://img.shields.io/website?url=https%3A%2F%2Fyazeed.github.io%2Fproc%2F&label=website)](https://yazeed.github.io/proc/)
 
 Semantic CLI tool for process management. Target by port, process id (PID), name or path.
