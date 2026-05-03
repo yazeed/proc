@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.12.3] - 2026-05-03
+
+### Fixed
+
+- **Clippy**: Use `sort_by_key` instead of `sort_by` for name sorting (Rust 1.95+ lint)
+
 ## [1.12.2] - 2026-03-30
 
 ### Security
@@ -527,7 +533,8 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 
 ---
 
-[Unreleased]: https://github.com/yazeed/proc/compare/v1.12.2...HEAD
+[Unreleased]: https://github.com/yazeed/proc/compare/v1.12.3...HEAD
+[1.12.3]: https://github.com/yazeed/proc/compare/v1.12.2...v1.12.3
 [1.12.2]: https://github.com/yazeed/proc/compare/v1.12.1...v1.12.2
 [1.12.1]: https://github.com/yazeed/proc/compare/v1.12.0...v1.12.1
 [1.12.0]: https://github.com/yazeed/proc/compare/v1.11.0...v1.12.0

@@ -44,9 +44,7 @@ pub fn sort_processes(processes: &mut [Process], key: SortKey) {
                 .unwrap_or(std::cmp::Ordering::Equal)
         }),
         SortKey::Pid => processes.sort_by_key(|p| p.pid),
-        SortKey::Name => {
-            processes.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
-        }
+        SortKey::Name => processes.sort_by_key(|p| p.name.to_lowercase()),
     }
 }
 
