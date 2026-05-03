@@ -155,6 +155,22 @@ hr {
 .nav-links a:hover { color: var(--text-bright); }
 .nav-links a.active { color: var(--text-bright); }
 
+.nav-github {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.nav-github:hover {
+  border-color: var(--accent);
+  color: var(--text-bright);
+}
+.nav-github svg { vertical-align: middle; }
+.nav-github span { font-size: 0.78rem; }
+
 /* --- Blog Index --- */
 .blog-header {
   margin-bottom: 3rem;
