@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-10-25
+
 ### Added
 
 - **Uptime in process output**: every process in JSON has `uptime_secs`; tables from `list`, `by`, `in` and the other process lists show an `UPTIME` column on terminals at least 100 columns wide, and `--verbose` prints it
@@ -616,7 +618,8 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 
 ---
 
-[Unreleased]: https://github.com/yazeed/proc/compare/v1.13.4...HEAD
+[Unreleased]: https://github.com/yazeed/proc/compare/v1.14.0...HEAD
+[1.14.0]: https://github.com/yazeed/proc/compare/v1.13.4...v1.14.0
 [1.13.4]: https://github.com/yazeed/proc/compare/v1.13.3...v1.13.4
 [1.13.3]: https://github.com/yazeed/proc/compare/v1.13.2...v1.13.3
 [1.13.2]: https://github.com/yazeed/proc/compare/v1.13.1...v1.13.2

@@ -6,7 +6,7 @@ The goal is not to accumulate features, but to cover the process and port manage
 
 See [PHILOSOPHY.md](PHILOSOPHY.md) for our full manifesto.
 
-## Current Release (v1.13.4)
+## Current Release (v1.14.0)
 
 The core commands are complete, with process lifecycle control, diagnostics, real-time monitoring, the Proc Query Language, shell completions, file lookup, consistent filtering, terminal-adaptive tables, a consistent JSON and exit-code contract, an agent skill, and full CI/CD automation:
 
@@ -16,6 +16,11 @@ The core commands are complete, with process lifecycle control, diagnostics, rea
 | Monitoring | `watch` (alias: `top`) — real-time process monitoring; `wait` — block until exit | ✅ |
 | Lifecycle | `kill`, `stop`, `unstick`, `freeze`, `thaw`, `free` (all support multi-target + filters) | ✅ |
 | Tooling | `completions`, `manpage`, agent skill (`npx skills add yazeed/proc`) | ✅ |
+
+### v1.14.0 Highlights
+
+- **Uptime everywhere**: `uptime_secs` in every process's JSON, an `UPTIME` column in process tables on wide terminals, and an `uptime:` line with `--verbose`
+- **`proc inspect`**: alias of `proc info`
 
 ### v1.13.4 Highlights
 
