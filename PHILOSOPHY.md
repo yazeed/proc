@@ -11,40 +11,46 @@ The best tool is the one you don't have to think about. When you reach for proc,
 ## Principles
 
 ### Semantic
-Commands mean what they say. `kill` kills. `stop` stops gracefully. `on` tells you what's on a port. There are no surprises, no hidden behaviors, no flags that fundamentally change what a command does.
+Commands mean what they say. `kill` kills. `stop` stops gracefully. `freeze` pauses and `thaw` resumes. `free` frees a port and checks that it's free. `on` tells you what's on a port, and `why` tells you why it's there. There are no surprises and no hidden behaviors. Flags refine a command rather than replace it; the two that add an action, `--kill` on `orphans` and `stuck`, follow the same confirmation rules as `kill` itself.
 
 ### Explicit
-User intent must be clear. Destructive actions require confirmation or explicit flags. We never assume what you meant—if there's ambiguity, we ask. Silent failures are bugs.
+User intent must be clear. Destructive actions ask for confirmation (`--yes` skips it) and can be previewed with `--dry-run`. proc never guesses what a target means: a leading `:` is a port, a number is a PID, anything else is a name. Every failure has a non-zero exit code and a message that says what went wrong. Silent failures are bugs.
 
 ### Complete
-Cover the full workflow, nothing more. proc handles process and port management completely. It doesn't creep into service management, container orchestration, or monitoring dashboards. Scope discipline is a feature.
+Cover the full workflow, nothing more. proc handles process and port management completely: finding, inspecting, tracing, pausing, stopping, freeing and waiting. It doesn't creep into service management, container orchestration, or monitoring dashboards. Scope discipline is a feature.
 
 ### Fast
-Sub-100ms for all operations. Speed isn't a nice-to-have—it's table stakes. A slow CLI tool trains users to avoid it. proc should feel instantaneous.
+Speed isn't a nice-to-have; a slow CLI trains users to avoid it. proc answers in about a tenth of a second, process startup included, with no daemon and no index to keep warm.
 
 ### Obvious
-If you have to read the docs, we failed. The command structure should be discoverable through tab completion and `--help`. Examples should cover real use cases, not contrived demos.
+If you have to read the docs, we failed. The command structure should be discoverable through tab completion, `--help` and the man page. Examples should cover real use cases, not contrived demos.
 
 ## Values
 
 ### Unified Targets
-`:port`, `PID`, and `name` work the same way everywhere. Learn the pattern once, use it everywhere. No command-specific syntax, no special cases.
+`:port`, `PID`, and `name` work the same way everywhere, and so do comma-separated lists of them. Learn the pattern once, use it everywhere.
 
 ```bash
-proc on :3000      # port
-proc on 1234       # PID
-proc on node       # name
-proc kill :3000    # same pattern
-proc info node     # same pattern
+proc on :3000          # port
+proc on 1234           # PID
+proc on node           # name
+proc kill :3000,node   # same pattern, several targets
+proc info node         # same pattern
 ```
+
+The few commands that take something else say so in their name: `free` takes ports, `for` takes a file, `in` takes a directory. The `--in <dir>` and `--by <name>` filters narrow nearly every command the same way.
 
 ### Natural Grammar
 Nouns observe state. Verbs change state.
 
-**Nouns** (discovery): `ports`, `list`, `info`, `tree`, `on`, `by`, `in`
-**Verbs** (action): `kill`, `stop`, `unstick`
+**Discovery**: `on`, `for`, `by`, `in`, `list`, `info`, `ports`, `tree`, `why`, `orphans`, `stuck`
+**Action**: `kill`, `stop`, `freeze`, `thaw`, `free`, `unstick`
+**Monitoring**: `watch`, `wait`
 
 You don't "run ports"—you look at ports. You don't "observe kill"—you kill.
+
+### One Contract for People, Scripts and Agents
+Every process and port command speaks JSON with `--json`: one document (`watch` streams one per refresh), with `action` and `success`, and exit codes that always mean the same thing (0 success, 1 error, 2 not found, 3 permission denied, 4 invalid input). A shell script, a CI job and an AI agent read proc the same way a person does, without parsing tables.
 
 ### Practical Simplicity
 Every feature solves a real, repeated problem. We don't add features because they're technically interesting or because a competitor has them. We add features when users hit the same friction repeatedly.
@@ -81,8 +87,8 @@ If the answer to any question is no, the feature doesn't belong in proc.
 - **Not a service manager** — Use systemd, launchd, or supervisord
 - **Not a container tool** — Use docker or podman
 - **Not for remote processes** — Use ssh + proc
-- **Not a monitoring system** — Use proper observability tools
-- **Not a GUI** — proc is a CLI, intentionally
+- **Not a monitoring system** — Use proper observability tools; `proc watch` shows the present, not history
+- **Not a GUI or interactive TUI** — proc is a CLI, intentionally: you say what you want, it does it
 
 ## The Goal
 
