@@ -2,6 +2,7 @@
 
 const https = require("https");
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const crypto = require("crypto");
 const { execFileSync } = require("child_process");
@@ -9,9 +10,12 @@ const { execFileSync } = require("child_process");
 const VERSION = require("./package.json").version;
 const REPO = "yazeed/proc";
 
-// Only follow redirects to trusted GitHub domains
+// Only follow redirects to trusted GitHub domains.
+// GitHub serves release downloads from release-assets.githubusercontent.com;
+// the older hosts are kept for any redirect that still uses them.
 const ALLOWED_HOSTS = [
   "github.com",
+  "release-assets.githubusercontent.com",
   "objects.githubusercontent.com",
   "github-releases.githubusercontent.com",
 ];
@@ -55,6 +59,23 @@ function getPlatformInfo() {
   const archiveName = `proc-${os}-${archName}${archiveExt}`;
 
   return { os, archName, binaryName, archiveName, platform };
+}
+
+/** Path of the installed binary inside `dir` */
+function binaryPath(dir) {
+  return path.join(dir, process.platform === "win32" ? "proc.exe" : "proc");
+}
+
+/**
+ * Per-user, per-version fallback location, for when the package directory
+ * is not writable (e.g. a global install owned by root).
+ */
+function cacheDir() {
+  const base =
+    process.platform === "win32"
+      ? process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local")
+      : process.env.XDG_CACHE_HOME || path.join(os.homedir(), ".cache");
+  return path.join(base, "proc-cli", VERSION);
 }
 
 function download(url, redirectDepth = 0) {
@@ -117,79 +138,84 @@ function parseChecksums(raw, archiveName) {
   );
 }
 
-async function main() {
+/**
+ * Download, verify, and install the proc binary into `binDir`.
+ * Progress goes to stderr so `proc --json` output on stdout stays clean
+ * when this runs on first use. Returns the installed binary path.
+ */
+async function install(binDir) {
   const { binaryName, archiveName, platform } = getPlatformInfo();
   const url = `https://github.com/${REPO}/releases/download/v${VERSION}/${archiveName}`;
   const checksumsUrl = `https://github.com/${REPO}/releases/download/v${VERSION}/checksums.txt`;
-  const binDir = __dirname;
-  const binPath = path.join(binDir, platform === "win32" ? "proc.exe" : "proc");
+  const binPath = binaryPath(binDir);
 
-  console.log(`Downloading proc v${VERSION}...`);
-  console.log(`  URL: ${url}`);
+  console.error(`Downloading proc v${VERSION}...`);
+  console.error(`  URL: ${url}`);
 
+  // Download checksums and archive in parallel
+  const [checksumsRaw, buffer] = await Promise.all([
+    download(checksumsUrl),
+    download(url),
+  ]);
+
+  // Verify integrity before extracting
+  const expectedHash = parseChecksums(checksumsRaw, archiveName);
+  verifyChecksum(buffer, expectedHash, archiveName);
+  console.error(`  Checksum verified: ${expectedHash.slice(0, 16)}...`);
+
+  // Extract into a private temp directory, then move the binary into place,
+  // so two first runs at the same time can't corrupt each other's files
+  fs.mkdirSync(binDir, { recursive: true });
+  const workDir = fs.mkdtempSync(path.join(binDir, ".proc-install-"));
   try {
-    // Download checksums and archive in parallel
-    const [checksumsRaw, buffer] = await Promise.all([
-      download(checksumsUrl),
-      download(url),
-    ]);
-
-    // Verify integrity before extracting
-    const expectedHash = parseChecksums(checksumsRaw, archiveName);
-    verifyChecksum(buffer, expectedHash, archiveName);
-    console.log(`  Checksum verified: ${expectedHash.slice(0, 16)}...`);
+    const tmpFile = path.join(workDir, archiveName);
+    fs.writeFileSync(tmpFile, buffer);
 
     if (archiveName.endsWith(".tar.gz")) {
-      const tmpFile = path.join(binDir, "tmp.tar.gz");
-      fs.writeFileSync(tmpFile, buffer);
-
       // Use execFileSync with argument array — no shell injection possible
-      execFileSync("tar", ["-xzf", tmpFile, "-C", binDir], {
+      execFileSync("tar", ["-xzf", tmpFile, "-C", workDir], {
         stdio: "pipe",
       });
-      fs.unlinkSync(tmpFile);
-
-      // Rename extracted binary
-      const extractedBin = path.join(binDir, binaryName);
-      if (fs.existsSync(extractedBin)) {
-        fs.renameSync(extractedBin, binPath);
-      }
     } else if (archiveName.endsWith(".zip")) {
-      const tmpFile = path.join(binDir, "tmp.zip");
-      fs.writeFileSync(tmpFile, buffer);
-
       // Use execFileSync with argument array — no shell injection possible
       execFileSync(
         "powershell",
         [
           "-Command",
-          `Expand-Archive -Force -Path '${tmpFile.replace(/'/g, "''")}' -DestinationPath '${binDir.replace(/'/g, "''")}'`,
+          `Expand-Archive -Force -Path '${tmpFile.replace(/'/g, "''")}' -DestinationPath '${workDir.replace(/'/g, "''")}'`,
         ],
         { stdio: "pipe" }
       );
-      fs.unlinkSync(tmpFile);
+    }
 
-      // Rename extracted binary
-      const extractedBin = path.join(binDir, binaryName);
-      if (fs.existsSync(extractedBin)) {
-        fs.renameSync(extractedBin, binPath);
-      }
+    const extractedBin = path.join(workDir, binaryName);
+    if (!fs.existsSync(extractedBin)) {
+      throw new Error(`${binaryName} not found in ${archiveName}`);
     }
 
     // Make executable
     if (platform !== "win32") {
-      fs.chmodSync(binPath, 0o755);
+      fs.chmodSync(extractedBin, 0o755);
     }
-
-    console.log(`  Installed to: ${binPath}`);
-    console.log("Done!");
-  } catch (err) {
-    console.error(`Failed to install proc: ${err.message}`);
-    console.error(
-      "You can install manually from: https://github.com/yazeed/proc/releases"
-    );
-    process.exit(1);
+    fs.renameSync(extractedBin, binPath);
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
   }
+
+  console.error(`  Installed to: ${binPath}`);
+  return binPath;
 }
 
-main();
+// postinstall entry point (npm 12+ skips install scripts by default;
+// run.js then installs on first use instead). A failure here does not fail
+// `npm install`: run.js retries, and reports any error, on first use.
+if (require.main === module) {
+  install(__dirname)
+    .then(() => console.error("Done!"))
+    .catch((err) => {
+      console.error(`Could not download proc during install: ${err.message}`);
+      console.error("It will be downloaded the first time you run `proc`.");
+    });
+}
+
+module.exports = { install, binaryPath, cacheDir };

@@ -33,6 +33,18 @@ Test new features manually with the release binary:
 
 Test new commands/flags work as expected before releasing.
 
+### Install path check (before tagging)
+
+Version numbers alone don't prove a channel works. Install the npm package from a local tarball. Run this **before the version bump in step 3**: the installer downloads the binary for the version in `pkg/npm/package.json`, which at this point is the previous, already-published release, so this tests the installer itself:
+
+```bash
+cd pkg/npm && npm pack --pack-destination /tmp/proc-npm && cd -
+mkdir -p /tmp/proc-npm/install && cd /tmp/proc-npm/install
+npm install /tmp/proc-npm/proc-cli-*.tgz && ./node_modules/.bin/proc --version
+```
+
+If anything here fails, fix it in this release, before the tag.
+
 ## 3. Version Bump
 
 Update version in ALL of these files:
@@ -81,6 +93,7 @@ After tag push, monitor GitHub Actions:
 # Verify packages (after CI completes)
 cargo install proc-cli                    # crates.io
 npm info proc-cli version                 # npm
+npm install --prefix /tmp/proc-npm-check proc-cli && /tmp/proc-npm-check/node_modules/.bin/proc --version  # npm installer works
 brew update && brew info yazeed/proc/proc # Homebrew
 docker pull yazeed/proc                   # Docker
 ```

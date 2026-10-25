@@ -25,7 +25,9 @@ proc by node --in .     # node processes in current directory
 
 ## About
 
-This package downloads the native `proc` binary for your platform. The binary is written in Rust for maximum performance.
+This package downloads the native `proc` binary for your platform from the GitHub release and verifies its SHA-256 checksum. The binary is written in Rust for maximum performance.
+
+The download happens during install, or on the first run of `proc` when install scripts are disabled (the default since npm 12). If the package directory isn't writable, the binary is stored in `~/.cache/proc-cli/<version>` (`%LOCALAPPDATA%\proc-cli\<version>` on Windows).
 
 ## License
 

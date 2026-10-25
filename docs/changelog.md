@@ -5,6 +5,16 @@ description: "release history for proc."
 permalink: /changelog
 ---
 
+## 1.13.3 — 2026-10-24
+
+**Fixed**
+- **`npm install proc-cli`** failed for every version with `Redirect to untrusted host: release-assets.githubusercontent.com`. GitHub now serves release downloads from that host, which the installer's allowlist didn't include. It is now allowed; the existing hosts and the SHA-256 checksum check are unchanged
+- **npm 12**: install scripts no longer run by default, so the binary was never downloaded and `proc` crashed. The `proc` command now downloads and verifies the binary on first run when it is missing, with progress on stderr so `--json` output stays clean. If the package directory isn't writable, the binary goes to `~/.cache/proc-cli/<version>` (`%LOCALAPPDATA%\proc-cli\<version>` on Windows). A failed download during install no longer fails `npm install`; it is retried on first run
+- **npm wrapper**: a `proc` killed by a signal now exits non-zero, and a binary that can't be started reports an error instead of crashing
+
+**Changed**
+- **Release checklist**: installs the npm package from a local tarball before tagging, and runs a real `npm install` after publishing
+
 ## 1.13.2 — 2026-10-24
 
 **Changed**
