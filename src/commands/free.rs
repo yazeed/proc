@@ -8,7 +8,7 @@
 
 use crate::core::port::PortInfo;
 use crate::core::{parse_target, parse_targets, Process, TargetType};
-use crate::error::{ProcError, Result};
+use crate::error::{ExitCode, ProcError, Result};
 use crate::ui::{plural, Printer};
 use clap::Args;
 use colored::*;
@@ -103,14 +103,17 @@ impl FreeCommand {
         };
 
         if self.dry_run {
-            printer.print_processes(&processes);
-            printer.warning(&format!(
-                "Dry run: would kill {} process{} to free {} port{}",
-                processes.len(),
-                plural(processes.len()),
-                port_processes.len(),
-                if port_processes.len() == 1 { "" } else { "s" }
-            ));
+            printer.print_dry_run_with(
+                "free",
+                &processes,
+                &format!(
+                    "Dry run: would kill {} process{} to free {} port{}",
+                    processes.len(),
+                    plural(processes.len()),
+                    port_processes.len(),
+                    if port_processes.len() == 1 { "" } else { "s" }
+                ),
+            );
             return Ok(());
         }
 
@@ -237,7 +240,18 @@ impl FreeCommand {
             }
         }
 
-        Ok(())
+        if still_busy.is_empty() {
+            Ok(())
+        } else {
+            Err(ProcError::reported(
+                ExitCode::GeneralError,
+                format!(
+                    "{} port{} still in use",
+                    still_busy.len(),
+                    if still_busy.len() == 1 { "" } else { "s" }
+                ),
+            ))
+        }
     }
 }
 

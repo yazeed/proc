@@ -400,7 +400,7 @@ impl TreeCommand {
             name: proc.name.clone(),
             cpu_percent: proc.cpu_percent,
             memory_mb: proc.memory_mb,
-            status: format!("{:?}", proc.status),
+            status: proc.status,
             children,
         }
     }
@@ -538,7 +538,7 @@ impl TreeCommand {
                     name: proc.name.clone(),
                     cpu_percent: proc.cpu_percent,
                     memory_mb: proc.memory_mb,
-                    status: format!("{:?}", proc.status),
+                    status: proc.status,
                 });
                 current_pid = proc.parent_pid;
                 if chain.len() > 100 {
@@ -581,7 +581,7 @@ struct ProcessInfo {
     name: String,
     cpu_percent: f32,
     memory_mb: f64,
-    status: String,
+    status: ProcessStatus,
 }
 
 #[derive(Serialize)]
@@ -597,6 +597,6 @@ struct TreeNode {
     name: String,
     cpu_percent: f32,
     memory_mb: f64,
-    status: String,
+    status: ProcessStatus,
     children: Vec<TreeNode>,
 }

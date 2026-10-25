@@ -98,15 +98,6 @@ impl KillCommand {
             }
         }
 
-        printer.print_kill_result(&killed, &failed);
-
-        if failed.is_empty() {
-            Ok(())
-        } else {
-            Err(ProcError::SignalError(format!(
-                "Failed to kill {} process(es)",
-                failed.len()
-            )))
-        }
+        printer.print_action_result("kill", &killed, &failed)
     }
 }

@@ -7,7 +7,7 @@
 //!   proc in ~/projects         # Processes in ~/projects
 
 use crate::core::{sort_processes, Process, ProcessStatus, SortKey};
-use crate::error::Result;
+use crate::error::{ProcError, Result};
 use crate::ui::{OutputFormat, Printer};
 use clap::Args;
 use std::path::PathBuf;
@@ -103,6 +103,14 @@ impl InCommand {
                 expanded
             }
         };
+
+        // A path that doesn't exist is a typo, not an empty directory (same as `proc for`)
+        if !dir_filter.is_dir() {
+            return Err(ProcError::InvalidInput(format!(
+                "Directory not found: {}",
+                self.path
+            )));
+        }
 
         // Apply filters
         processes.retain(|p| {

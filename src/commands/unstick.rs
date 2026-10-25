@@ -17,7 +17,7 @@
 //!   proc unstick node      # Unstick stuck node processes
 
 use crate::core::{apply_filters, parse_targets, resolve_targets_excluding_self, Process};
-use crate::error::{ProcError, Result};
+use crate::error::{ExitCode, ProcError, Result};
 use crate::ui::{format_duration, plural, Printer};
 use clap::Args;
 use colored::*;
@@ -97,6 +97,10 @@ impl UnstickCommand {
         apply_filters(&mut stuck, &self.in_dir, &self.by_name);
 
         if stuck.is_empty() {
+            // An explicit target filtered down to nothing is "not found", like other commands
+            if let Some(ref target) = self.target {
+                return Err(ProcError::ProcessNotFound(target.clone()));
+            }
             if self.json {
                 printer.print_json(&UnstickOutput {
                     action: "unstick",
@@ -111,8 +115,6 @@ impl UnstickCommand {
                     failed: 0,
                     processes: Vec::new(),
                 });
-            } else if self.target.is_some() {
-                printer.warning("Target process not found");
             } else {
                 printer.success("No stuck processes found");
             }
@@ -310,6 +312,18 @@ impl UnstickCommand {
                     plural(failed)
                 );
             }
+        }
+
+        if failed > 0 || still_stuck > 0 {
+            return Err(ProcError::reported(
+                ExitCode::GeneralError,
+                format!(
+                    "{} process{} still stuck, {} failed",
+                    still_stuck,
+                    plural(still_stuck),
+                    failed
+                ),
+            ));
         }
 
         Ok(())

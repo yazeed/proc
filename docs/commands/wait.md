@@ -19,7 +19,7 @@ proc wait node,python          # wait for all to exit
 | flag | short | description |
 |------|-------|-------------|
 | `--interval <secs>` | `-n` | poll interval in seconds (default: 5) |
-| `--timeout <secs>` | `-t` | max wait time, 0 = no timeout (default: 0) |
+| `--timeout <secs>` | `-t` | max wait time, 0 = no timeout (default: 0). exits 1 if processes are still running |
 | `--quiet` | `-q` | suppress periodic status, only print exits and final result |
 | `--in [<dir>]` | `-i` | filter by directory |
 | `--by <name>` | `-b` | filter by process name |
@@ -47,8 +47,8 @@ proc wait node,python --timeout 3600
 # wait for processes in current project
 proc wait node --in .
 
-# json output for scripting
-proc wait node --json --timeout 120
+# json output for scripting (exit 1 and "timed_out": true on timeout)
+proc wait node --json --timeout 120 || echo "still running"
 ```
 
 ## see also

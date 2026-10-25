@@ -8,7 +8,7 @@
 //!   proc info :3000,1234,node   # Mixed targets (port + PID + name)
 
 use crate::core::{apply_filters, parse_targets, resolve_target, Process};
-use crate::error::Result;
+use crate::error::{ExitCode, ProcError, Result};
 use crate::ui::{colorize_status, format_duration, format_memory, Printer};
 use clap::Args;
 use colored::*;
@@ -88,6 +88,13 @@ impl InfoCommand {
             if !not_found.is_empty() {
                 printer.warning(&format!("Not found: {}", not_found.join(", ")));
             }
+        }
+
+        if found.is_empty() {
+            return Err(ProcError::reported(
+                ExitCode::NotFound,
+                format!("No process found matching '{}'", self.targets.join(" ")),
+            ));
         }
 
         Ok(())

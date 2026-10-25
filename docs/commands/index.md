@@ -56,3 +56,17 @@ proc on 1234           # PID
 proc on node           # name
 proc kill :3000,:8080  # multiple (comma-separated)
 ```
+
+## scripting
+
+with `--json`, every command prints one JSON document with `action` (the command name) and `success`. `proc watch --json` streams one per refresh. errors, including invalid flags, are JSON too.
+
+| exit code | meaning |
+|-----------|---------|
+| `0` | success |
+| `1` | error, or not fully successful: a process failed, a port stayed busy, `wait` timed out |
+| `2` | process or port not found |
+| `3` | permission denied |
+| `4` | invalid input (unknown flag, bad argument, invalid signal) |
+
+`"success": false` always comes with a non-zero exit code.

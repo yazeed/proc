@@ -100,6 +100,21 @@ proc on :3000
 proc --help
 ```
 
+## agent skill
+
+Teach your coding agent (Claude Code, Codex, Cursor, Gemini CLI and others) to use proc with structured JSON output.
+
+```bash
+npx skills add yazeed/proc
+```
+
+Or, in Claude Code, as a plugin:
+
+```text
+/plugin marketplace add yazeed/proc
+/plugin install proc-cli@proc-cli
+```
+
 ## shell completions
 
 ```bash

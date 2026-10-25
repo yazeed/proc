@@ -5,12 +5,16 @@
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 1 | General error (system error, signal failed) |
+| 1 | General error, or the command ran but did not fully succeed (a process failed, a port stayed busy, `wait` timed out) |
 | 2 | Not found (process or port doesn't exist) |
 | 3 | Permission denied (need sudo) |
-| 4 | Invalid input (bad arguments, invalid signal name) |
+| 4 | Invalid input (unknown flag, missing argument, invalid signal name) |
+
+`"success": false` always comes with a non-zero exit code. Every command prints exactly one JSON document, except `proc watch --json`, which streams one per refresh.
 
 ## Error Response (all commands with --json, on failure)
+
+Printed when the command cannot produce its normal result (including invalid flags). `action` is the canonical command name, even when an alias such as `proc k` was used.
 
 ```json
 {
@@ -41,8 +45,8 @@ Every process in JSON output follows this shape:
 }
 ```
 
-Fields `exe_path`, `cwd`, `command`, `user`, `parent_pid`, `start_time` may be null.
-Status is one of: `running`, `sleeping`, `stopped`, `zombie`, `dead`, `unknown`.
+Fields `exe_path`, `cwd`, `command`, `user`, `parent_pid`, `start_time` are omitted when unavailable.
+Status is one of: `running`, `sleeping`, `stopped`, `zombie`, `dead`, `unknown` — the same lowercase values everywhere, including `why` and `tree`.
 
 ## Port Object
 
@@ -84,6 +88,8 @@ Each command uses its own name as the `action` field: `"list"`, `"by"`, `"in"`, 
 }
 ```
 
+If no target is found, `success` is `false` and the exit code is 2. If only some are found, `success` is `true` and the rest are listed in `not_found`.
+
 ### proc ports --json
 
 ```json
@@ -109,7 +115,19 @@ Each command uses its own name as the `action` field: `"list"`, `"by"`, `"in"`, 
 }
 ```
 
-### proc on name --json (process-to-ports lookup)
+### proc on PID --json (single process-to-ports lookup)
+
+```json
+{
+  "action": "on",
+  "query_type": "process_to_ports",
+  "success": true,
+  "process": <Process>,
+  "ports": [<Port>, ...]
+}
+```
+
+### proc on name --json (process-to-ports lookup, may match many)
 
 ```json
 {
@@ -125,7 +143,26 @@ Each command uses its own name as the `action` field: `"list"`, `"by"`, `"in"`, 
 }
 ```
 
-### proc kill / stop / freeze / thaw --json
+### proc on :3000,1234,node --json (multiple targets)
+
+One document for all targets. Port targets list only that port; PID and name targets list all of the process's ports:
+
+```json
+{
+  "action": "on",
+  "success": true,
+  "count": 2,
+  "results": [
+    {"target": ":3000", "process": <Process>, "ports": [<Port>]},
+    {"target": "node", "process": <Process>, "ports": [<Port>, ...]}
+  ],
+  "not_found": ["1234"]
+}
+```
+
+If no target is found, the standard error response is printed with exit code 2.
+
+### proc kill / stop / freeze / thaw / orphans --kill / stuck --kill --json
 
 ```json
 {
@@ -143,7 +180,21 @@ Each command uses its own name as the `action` field: `"list"`, `"by"`, `"in"`, 
 }
 ```
 
-Action values: `"kill"`, `"stop"`, `"freeze"`, `"resume"`.
+`action` is the command name: `"kill"`, `"stop"`, `"freeze"`, `"thaw"`, `"orphans"`, `"stuck"`. If `failed` is non-empty, `success` is `false` and the exit code is 1.
+
+### --dry-run --json (kill / stop / freeze / thaw / free / orphans --kill / stuck --kill)
+
+Prints the processes that would be affected; nothing is changed. `action` is the command name:
+
+```json
+{
+  "action": "kill",
+  "success": true,
+  "dry_run": true,
+  "count": 1,
+  "processes": [<Process>, ...]
+}
+```
 
 ### proc free --json
 
@@ -157,6 +208,8 @@ Action values: `"kill"`, `"stop"`, `"freeze"`, `"resume"`.
   ]
 }
 ```
+
+If any port is still in use after `--wait` seconds, `success` is `false` and the exit code is 1.
 
 ### proc wait --json
 
@@ -177,7 +230,37 @@ Action values: `"kill"`, `"stop"`, `"freeze"`, `"resume"`.
 }
 ```
 
-On timeout: `success` is `false`, `timed_out` is `true`, `still_running` lists remaining processes.
+On timeout: `success` is `false`, `timed_out` is `true`, `still_running` lists remaining processes as `{"pid": 12345, "name": "node"}`, and the exit code is 1.
+
+### proc unstick --json
+
+```json
+{
+  "action": "unstick",
+  "success": true,
+  "dry_run": false,
+  "force": false,
+  "found": 1,
+  "recovered": 1,
+  "not_stuck": 0,
+  "still_stuck": 0,
+  "terminated": 0,
+  "failed": 0,
+  "processes": [
+    {"pid": 1234, "name": "node", "outcome": "recovered"}
+  ]
+}
+```
+
+`outcome` is one of `recovered`, `terminated`, `still_stuck`, `not_stuck`, `failed: <reason>`, or `would_attempt` (with `--dry-run`). If any process is `still_stuck` or `failed`, `success` is `false` and the exit code is 1.
+
+### proc watch --json
+
+Newline-delimited JSON, one object per refresh (`-n` seconds, default 2), until interrupted:
+
+```json
+{"action":"watch","success":true,"count":2,"processes":[<Process>, ...]}
+```
 
 ### proc why --json
 
@@ -190,19 +273,19 @@ On timeout: `success` is `false`, `timed_out` is `true`, `still_running` lists r
   {
     "target": ":3000",
     "port": 3000,
-    "protocol": "TCP",
+    "protocol": "tcp",
     "process": {
       "pid": 1234,
       "name": "node",
       "command": "node server.js",
       "cwd": "/home/user/project",
-      "status": "Running"
+      "status": "running"
     },
     "ports": [<Port>, ...],
     "ancestry": [
-      {"pid": 1, "name": "launchd", "status": "Running", "is_target": false},
-      {"pid": 500, "name": "zsh", "status": "Sleeping", "is_target": false},
-      {"pid": 1234, "name": "node", "command": "node server.js", "cwd": "/home/user/project", "status": "Running", "is_target": true}
+      {"pid": 1, "name": "launchd", "status": "running", "is_target": false},
+      {"pid": 500, "name": "zsh", "status": "sleeping", "is_target": false},
+      {"pid": 1234, "name": "node", "command": "node server.js", "cwd": "/home/user/project", "status": "running", "is_target": true}
     ]
   }
   ]
@@ -221,12 +304,35 @@ On timeout: `success` is `false`, `timed_out` is `true`, `still_running` lists r
       "name": "launchd",
       "cpu_percent": 0.0,
       "memory_mb": 10.0,
-      "status": "Running",
+      "status": "running",
       "children": [...]
     }
   ]
 }
 ```
+
+### proc tree --ancestors --json
+
+```json
+{
+  "action": "tree",
+  "success": true,
+  "ancestry": [
+    {
+      "target_pid": 1234,
+      "target_name": "node",
+      "depth": 3,
+      "chain": [
+        {"pid": 1, "name": "launchd", "cpu_percent": 0.0, "memory_mb": 10.0, "status": "running"},
+        {"pid": 500, "name": "zsh", "cpu_percent": 0.0, "memory_mb": 2.0, "status": "sleeping"},
+        {"pid": 1234, "name": "node", "cpu_percent": 1.2, "memory_mb": 80.0, "status": "running"}
+      ]
+    }
+  ]
+}
+```
+
+`chain` runs from the top ancestor down to the target.
 
 ### proc for --json
 

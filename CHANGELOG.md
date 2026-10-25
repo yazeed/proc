@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-10-24
+
+A consistent JSON and exit-code contract: every command prints one JSON document, `action` is always the command name, and `"success": false` always comes with a non-zero exit code. Scripts that relied on the old behaviour should check the **Changed** entries below.
+
+### Changed
+
+- **`--dry-run --json`** now reports the command's own `action` (e.g. `"kill"`) and `"dry_run": true`, instead of a list result with `"action": "list"` (`kill`, `stop`, `freeze`, `thaw`, `free`, `orphans --kill`, `stuck --kill`)
+- **`proc orphans --kill` / `proc stuck --kill` with `--json`** print one action result (`"action": "orphans"`/`"stuck"`, `succeeded`/`failed`) instead of two JSON documents
+- **`proc thaw --json`** reports `"action": "thaw"` instead of `"resume"`
+- **`proc why` / `proc tree` JSON** use lowercase `status` (`"running"`) and `protocol` (`"tcp"`), matching the Process and Port objects
+- **Invalid flags and arguments** exit with code 4 (invalid input) instead of 2, which meant "not found"; with `--json` the error is a JSON object on stdout
+- **`proc wait --json` on timeout** exits 1, as it already did without `--json`
+- **`proc stop`, `freeze`, `thaw`, `orphans --kill`, `stuck --kill`** exit 1 when any process fails, as `proc kill` already did
+- **`proc free`** exits 1 when a port is still in use after `--wait`
+- **`proc unstick`** exits 1 when a process is still stuck or failed; an explicit target removed by `--in`/`--by` is "not found" (exit 2)
+- **`proc info`** exits 2 when no target is found
+- **`proc on` with multiple targets and `--json`** prints one document (`count`, `results` with `target`/`process`/`ports`, `not_found`) instead of one per target; exits 2 when no target is found
+- **`proc in <path>`** exits 4 when the directory does not exist, like `proc for` with a missing file
+
+### Fixed
+
+- **`proc why --json`** prints a JSON error and exits 2 when nothing is found, instead of printing nothing and exiting 0; multiple targets print one document instead of one per target
+- **`proc kill --json`** no longer prints a second JSON error document after a partial failure
+- **Error `action`** uses the canonical command name when an alias is used (`proc k` → `"kill"`)
+- **JSON errors** are detected for short-flag clusters such as `-yj`
+- **Human output**: "Stopped" instead of "Stoped"
+- **Agent skill**: `SKILL.md` covers `proc for`, `proc in`, `proc unstick`, `--ancestors`, `--graceful`, `--exposed`/`--local`/`--range`, `--status`, `--min-uptime`, `--parent`, with a per-command filter table and the bounded `proc watch --json` stream; `reference.md` adds the `on <PID>`, `tree --ancestors`, `--dry-run`, `unstick`, and `watch` shapes
+- **Plugin manifest**: `.claude-plugin/marketplace.json` version kept in sync and added to the release checklist
+
+### Added
+
+- **Docs**: agent skill install instructions (`npx skills add yazeed/proc`, Claude Code plugin) in README and the install page; exit code table in README and the commands page
+- **Tests**: JSON contract integration tests (`tests/cli_json.rs`)
+
 ## [1.12.3] - 2026-05-03
 
 ### Fixed

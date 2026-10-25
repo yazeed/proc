@@ -46,6 +46,27 @@ pub enum ProcError {
     /// Failed to send a signal to the process
     #[error("Signal failed: {0}")]
     SignalError(String),
+
+    /// The command already printed its result, but the operation did not fully
+    /// succeed (some processes failed, a port stayed busy, a wait timed out).
+    /// `main` exits with `exit_code` without printing anything further.
+    #[error("{message}")]
+    Reported {
+        /// Human-readable summary of what did not succeed
+        message: String,
+        /// Exit code to return
+        exit_code: ExitCode,
+    },
+}
+
+impl ProcError {
+    /// Creates a [`ProcError::Reported`] for a result that has already been printed.
+    pub fn reported(exit_code: ExitCode, message: impl Into<String>) -> Self {
+        ProcError::Reported {
+            message: message.into(),
+            exit_code,
+        }
+    }
 }
 
 impl From<std::io::Error> for ProcError {
@@ -80,7 +101,7 @@ impl From<dialoguer::Error> for ProcError {
 pub type Result<T> = std::result::Result<T, ProcError>;
 
 /// Exit codes for CLI
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExitCode {
     /// Operation completed successfully
     Success = 0,
@@ -100,6 +121,7 @@ impl From<&ProcError> for ExitCode {
             ProcError::ProcessNotFound(_) | ProcError::PortNotFound(_) => ExitCode::NotFound,
             ProcError::PermissionDenied(_) => ExitCode::PermissionDenied,
             ProcError::InvalidInput(_) => ExitCode::InvalidInput,
+            ProcError::Reported { exit_code, .. } => *exit_code,
             _ => ExitCode::GeneralError,
         }
     }

@@ -11,9 +11,9 @@
 //! - **Working Directory**: See which project folder a process is running from
 //! - **Terminal-Adaptive Tables**: Tables adjust to terminal width automatically
 //! - **Consistent Filters**: `--in`, `--by`, `--min-uptime`, `--parent`, `--range`, `--sort`, `--limit`
-//! - **JSON Output**: `--json` on every command with consistent `{action, success, ...}` envelopes
+//! - **JSON Output**: `--json` on every command — one `{action, success, ...}` document per command, and `success: false` always exits non-zero
 //! - **Custom Signals**: `proc stop nginx --signal HUP` - send any signal via `--signal`
-//! - **Real-Time Monitoring**: `proc watch` / `proc top` - live process table (interactive, TTY only)
+//! - **Real-Time Monitoring**: `proc watch` / `proc top` - live process table (TUI on a terminal, NDJSON stream with `--json`)
 //! - **Process Waiting**: `proc wait node` - block until process(es) exit (pipe-friendly)
 //! - **Freeze/Thaw**: `proc freeze` / `proc thaw` - pause and resume by port, PID, or name
 //! - **Port Freeing**: `proc free :3000` - kill and verify port is available
@@ -76,9 +76,14 @@
 //!
 //! **Lifecycle**: `kill`, `stop`, `unstick`, `freeze`, `thaw`, `free`
 //!
-//! **Monitoring**: `watch` (interactive TUI), `wait` (blocking, pipe-friendly)
+//! **Monitoring**: `watch` (interactive TUI, or NDJSON with `--json`), `wait` (blocking, pipe-friendly)
 //!
 //! **Tooling**: `completions`, `manpage`
+//!
+//! ## Exit Codes
+//!
+//! `0` success, `1` error or partial failure (including `wait` timeouts),
+//! `2` not found, `3` permission denied, `4` invalid input (including unknown flags).
 
 pub mod commands;
 pub mod core;

@@ -91,6 +91,23 @@ Move-Item proc-windows-x86_64.exe C:\Windows\System32\proc.exe
 
 </details>
 
+### Agent Skill
+
+Teach your coding agent (Claude Code, Codex, Cursor, Gemini CLI and others) to use proc with structured JSON output:
+
+```bash
+npx skills add yazeed/proc
+```
+
+In Claude Code you can also install it as a plugin:
+
+```text
+/plugin marketplace add yazeed/proc
+/plugin install proc-cli@proc-cli
+```
+
+The skill lives in [`skills/proc-cli/`](skills/proc-cli/SKILL.md) and follows the [Agent Skills](https://agentskills.io) standard.
+
 ## Quick Start
 
 **What's using port 3000?**
@@ -205,6 +222,20 @@ Filters can be combined with discovery and lifecycle commands:
 | `--interval` | `-n` | Poll/refresh interval in seconds (`wait`, `watch`) |
 | `--timeout` | `-t` | Max seconds to wait before giving up (`wait`, `stop`) |
 | `--quiet` | `-q` | Suppress periodic status messages (`wait`) |
+
+### Scripting
+
+With `--json`, every command prints one JSON document with `action` (the command name) and `success`. `proc watch --json` streams one per refresh. Errors, including invalid flags, are JSON too: `{"action", "success": false, "error", "exit_code"}`.
+
+| Exit code | Meaning |
+|-----------|---------|
+| `0` | Success |
+| `1` | Error, or not fully successful: a process failed, a port stayed busy, `wait` timed out |
+| `2` | Process or port not found |
+| `3` | Permission denied |
+| `4` | Invalid input (unknown flag, bad argument, invalid signal) |
+
+`"success": false` always comes with a non-zero exit code. Full schemas: [`skills/proc-cli/reference.md`](skills/proc-cli/reference.md).
 
 ## Examples
 

@@ -1,30 +1,33 @@
 ---
 name: proc-cli
 description: |
-  Manage system processes and ports using the proc CLI tool. Find, inspect, kill, stop, freeze, thaw, free, and wait for processes by port, PID, or name. Use when the user asks to check what's running on a port, kill a process, find orphaned processes, free a port, pause/resume processes, trace why a port is busy, wait for a process to finish, find what's running a file, or any process/port management task. Also use when the user mentions proc, ports, PIDs, SIGKILL, SIGTERM, SIGSTOP, or process management.
+  Manage system processes and ports using the proc CLI tool. Find, inspect, kill, stop, freeze, thaw, free, unstick, and wait for processes by port, PID, name, file, or working directory. Use when the user asks to check what's running on a port, kill a process, free a port, find orphaned or stuck processes, pause/resume processes, trace why a port is busy, wait for a process to finish, find what's running a file, list processes started from a project directory, or any process/port management task. Also use when the user mentions proc, ports, PIDs, SIGKILL, SIGTERM, SIGSTOP, or process management.
 ---
 
 # proc CLI — Process Management Tool
 
-proc is a semantic CLI for process management. It provides structured JSON output for all commands.
+proc is a semantic CLI for process management on macOS, Linux, and Windows. Every command supports structured JSON output.
 
 ## Critical Rules
 
 1. **Always pass `--json`** on every command for structured output
 2. **Always pass `--yes`** on destructive commands to skip interactive prompts
 3. **Use `--dry-run`** before destructive actions to preview what would happen
-4. **Check exit code** first: 0=success, 2=not found, 3=permission denied, 4=invalid input
-5. **Errors with `--json`** produce `{"action":"<cmd>", "success":false, "error":"...", "exit_code":N}` on stdout
-6. **Every JSON response** has `action` (command name, lowercase) and `success` (boolean) fields
+4. **Check the exit code**: 0=success, 1=general error (including partial failures and `wait` timeouts), 2=not found, 3=permission denied, 4=invalid input. `"success": false` always comes with a non-zero exit code
+5. **Errors with `--json`** produce `{"action":"<cmd>", "success":false, "error":"...", "exit_code":N}` on stdout — including invalid flags or arguments
+6. **Every JSON response** is a single document (except the `watch` stream) with `action` (the command name, aliases resolved) and `success` fields
+7. **Scope destructive commands** with `--in <dir>` or `--by <name>` when targeting by name, so you only touch the processes you mean
 
 ## Target Syntax
 
-All commands accept the same target format:
+Most commands accept the same target format:
 
 - `:3000` — process listening on port 3000
 - `1234` — process with PID 1234
 - `node` — processes matching name "node" (substring match on name and command line)
-- `:3000,:8080,node` — comma-separated multiple targets
+- `:3000,:8080,node` — comma-separated multiple targets, deduplicated by PID
+
+Exceptions: `proc free` takes ports only, `proc for` takes a file path, `proc in` takes a directory.
 
 ## Commands
 
@@ -32,58 +35,73 @@ All commands accept the same target format:
 
 ```bash
 proc on :3000 --json              # what process is on port 3000?
+proc on 1234 --json               # what ports does PID 1234 use?
 proc on node --json               # what ports are node processes using?
-proc by node --json               # find processes by name (like ps aux | grep)
-proc by node --in . --json        # filter by working directory
+proc for ./server.py --json       # what's running (or holding open) this file?
+proc by node --json               # find processes by name
+proc by node --in . --json        # ...started from the current directory
+proc in . --json                  # all processes whose cwd is under this directory
+proc in ~/project --by node --json
 proc list --json                  # all processes
 proc list --min-cpu 10 --json     # processes using >10% CPU
-proc info :3000 --json            # detailed info for target
+proc list --status stopped --json # frozen/stopped processes
+proc info :3000,1234 --json       # detailed info for one or more targets
 proc ports --json                 # all listening ports
+proc ports --exposed --json       # only ports bound to 0.0.0.0 / ::
+proc ports --range 3000-3999 --json
 proc why :3000 --json             # trace ancestry — why is this port busy?
-proc orphans --json               # find orphaned processes
-proc stuck --json                 # find stuck/hung processes
-proc tree node --json             # process tree
+proc tree node --json             # descendants of node processes
+proc tree 1234 --ancestors --json # path from the top ancestor down to PID 1234
+proc orphans --in . --json        # processes whose parent died (reparented to PID 1)
+proc stuck --json                 # processes >50% CPU running longer than --timeout (default 300s)
 ```
 
 ### Lifecycle (destructive — always use --yes --json)
 
 ```bash
-proc kill :3000 --yes --json            # force kill (SIGKILL)
-proc stop node --yes --json             # graceful stop (SIGTERM then SIGKILL)
-proc stop nginx --signal HUP --yes --json  # send custom signal
-proc freeze node --yes --json           # pause (SIGSTOP)
-proc thaw node --yes --json             # resume (SIGCONT)
-proc free :3000 --yes --json            # kill + verify port freed
-proc free :3000,:8080 --yes --json      # free multiple ports
+proc kill :3000 --yes --json               # force kill (SIGKILL)
+proc kill node --in . --graceful --yes --json  # SIGTERM instead of SIGKILL
+proc stop node --yes --json                # SIGTERM, then SIGKILL after --timeout (default 10s)
+proc stop nginx --signal HUP --yes --json  # send a different initial signal
+proc freeze node --yes --json              # pause (SIGSTOP)
+proc thaw node --yes --json                # resume (SIGCONT)
+proc free :3000 --yes --json               # kill + verify port is free (--wait, default 10s)
+proc free :3000,:8080 --yes --json         # free multiple ports
+proc unstick 1234 --yes --json             # SIGCONT then SIGINT; no kill
+proc unstick 1234 --force --yes --json     # ...then SIGTERM, SIGKILL if still stuck
 ```
 
-### Monitoring (blocking, no --yes needed)
+### Monitoring
 
 ```bash
-proc wait node --json                    # block until all node processes exit
-proc wait :3000 --json --timeout 60      # wait up to 60s for port process to exit
-proc wait node -n 10 -q --json          # check every 10s, quiet mode
+proc wait node --timeout 60 --json       # block until all node processes exit (max 60s)
+proc wait :3000 -n 1 -q --timeout 30 --json  # poll every 1s, quiet
+timeout 10 proc watch node --json        # NDJSON stream, one object per refresh (-n seconds)
 ```
 
 ### Preview before acting
 
 ```bash
-proc kill node --dry-run --json   # show what would be killed
-proc free :3000 --dry-run --json  # show what would be freed
+proc kill node --in . --dry-run --json   # show what would be killed
+proc free :3000 --dry-run --json         # show what would be freed
+proc unstick --dry-run --json            # show what would be attempted
 ```
 
-## Common Filters
+## Filters
 
-Combine with most commands:
+Not every command takes every filter — check `proc <cmd> --help`.
 
-| Filter | Example |
-|--------|---------|
-| `--in <dir>` | `--in .` or `--in /path/to/project` |
-| `--by <name>` | `--by node` |
-| `--min-cpu <n>` | `--min-cpu 10` |
-| `--min-mem <n>` | `--min-mem 100` |
-| `--sort <key>` | `--sort cpu` (keys: cpu, mem, pid, name) |
-| `--limit <n>` | `--limit 10` |
+| Filter | Commands |
+|--------|----------|
+| `--in [dir]` (`-i`, defaults to `.`) | all except `why`, `free`, `in` |
+| `--by <name>` (`-b`) | all except `why`, `free`, `by` and `list` (those two take the name as an argument) |
+| `--min-cpu <pct>`, `--min-mem <MB>` | `list`, `by`, `in`, `for`, `tree`, `watch` |
+| `--status <s>` (running, sleeping, stopped, zombie) | `list`, `by`, `in`, `for`, `tree` |
+| `--min-uptime <secs>` | `list`, `by`, `in`, `for`, `tree` |
+| `--parent <pid>` | `list`, `by`, `in` |
+| `--sort <key>` (cpu, mem, pid, name) | `list`, `by`, `in`, `for`, `watch` |
+| `--sort <key>` (port, pid, name) | `ports` |
+| `--limit <n>` (`-n`; `-l` on `watch`) | `list`, `by`, `in`, `for`, `ports`, `watch` |
 
 ## Output Schemas
 
@@ -91,22 +109,25 @@ For complete JSON output schemas and field definitions, see [reference.md](refer
 
 ## Agent/Pipe Readiness
 
-All commands except `proc watch` are non-interactive and pipe-friendly with `--json`. Summary:
-
-- **One-shot queries**: `proc by`, `proc on`, `proc list`, `proc info`, `proc ports`, `proc why`, `proc orphans`, `proc stuck` — return immediately
-- **Blocking wait**: `proc wait` — blocks until processes exit, pipe-friendly, use `--timeout` to avoid hanging
-- **Destructive actions**: `proc kill`, `proc stop`, `proc freeze`, `proc thaw`, `proc free` — always pass `--yes --json`
-- **NEVER use from agents**: `proc watch` — interactive TUI, requires a terminal
+- **One-shot queries**: `on`, `for`, `by`, `in`, `list`, `info`, `ports`, `why`, `tree`, `orphans`, `stuck` — return immediately
+- **Blocking**: `proc wait` — always pass `--timeout`
+- **Streaming**: `proc watch --json` — NDJSON forever; bound it with `timeout N` or `| head -n N`. Without `--json` and without a TTY it prints one snapshot. Prefer `proc list` for a single snapshot
+- **Destructive**: `kill`, `stop`, `freeze`, `thaw`, `free`, `unstick`, and `orphans`/`stuck` with `--kill` — always pass `--yes --json`
 
 ## Gotchas
 
+- Port targets must start with `:` — `proc on 3000` looks up PID 3000, not port 3000.
 - `proc free` only accepts port targets (`:3000`). Use `proc kill` for name/PID targets.
-- `proc watch` is interactive TUI — never use from an agent or pipe. Use `proc list`/`proc by` for one-shot, `proc wait` for blocking.
-- `proc wait` blocks — always use `--timeout` from agents to avoid hanging indefinitely.
-- Name matching is substring-based: `proc by node` matches "node", "nodejs", "nodemon".
-- Port targets must start with `:` — `proc on 3000` treats 3000 as a PID, not a port.
-- `--signal` is only on `proc stop`. Valid signals: HUP, INT, QUIT, ABRT, KILL, TERM, STOP, CONT, USR1, USR2.
-- `freeze` and `thaw` are Unix only — they return an error on Windows.
+- Name matching is substring-based: `proc by node` matches "node", "nodejs", "nodemon". Narrow with `--in` or use PIDs.
+- `--dry-run --json` prints `"dry_run": true` plus the `processes` that would be affected; nothing is changed.
+- `proc orphans --kill` and `proc stuck --kill` report like `proc kill` (`succeeded`/`failed`), with `action` `"orphans"`/`"stuck"`.
+- If any process fails in `kill`/`stop`/`freeze`/`thaw`/`orphans --kill`/`stuck --kill`, the exit code is 1 and `failed` lists why; the ones in `succeeded` were still acted on.
+- `proc wait` on timeout prints its result with `timed_out: true` and exits 1.
+- `--signal` is only on `proc stop`. Valid signals: HUP, INT, QUIT, ABRT, KILL, TERM, STOP, CONT, USR1, USR2 (with or without `SIG`, any case).
+- `--graceful` is only on `proc kill`.
+- Unknown flags exit 4; with `--json` the error is a JSON object on stdout, otherwise plain text on stderr.
+- `freeze` and `thaw` are Unix only — on Windows they fail with exit 1.
+- `proc stuck` is a heuristic (sustained high CPU), not a hang detector.
 
 ## Example Workflow
 
@@ -114,12 +135,15 @@ All commands except `proc watch` are non-interactive and pipe-friendly with `--j
 # 1. Check what's on port 3000
 proc on :3000 --json
 
-# 2. Preview freeing it
+# 2. Find out why it's there
+proc why :3000 --json
+
+# 3. Preview freeing it
 proc free :3000 --dry-run --json
 
-# 3. Free the port
+# 4. Free the port
 proc free :3000 --yes --json
 
-# 4. Verify it's free (expect exit code 2 = not found)
+# 5. Verify it's free (expect exit code 2 = not found)
 proc on :3000 --json
 ```

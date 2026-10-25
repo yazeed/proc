@@ -3,7 +3,7 @@
 //! Provides colored terminal output and JSON formatting.
 
 use crate::core::{PortInfo, Process};
-use crate::error::Result;
+use crate::error::{ExitCode, ProcError, Result};
 use crate::ui::format::{colorize_status, format_memory, plural, truncate_string};
 use colored::*;
 use comfy_table::presets::NOTHING;
@@ -458,22 +458,38 @@ impl Printer {
         }
     }
 
-    /// Print action result (generalized for kill/stop/unstick).
+    /// Print action result (generalized for kill/stop/freeze/thaw).
     ///
-    /// The `action` parameter should be a lowercase verb (e.g. "kill", "stop", "freeze").
-    /// It is used as-is in JSON output and capitalized for human display.
+    /// The `action` parameter is the command name (e.g. "kill", "stop", "freeze").
+    /// It is used as-is in JSON output and as the verb for human display.
+    ///
+    /// Returns `Err(ProcError::Reported)` when any process failed, so the command
+    /// exits non-zero without printing a second result.
     pub fn print_action_result(
         &self,
         action: &str,
         succeeded: &[Process],
         failed: &[(Process, String)],
-    ) {
-        // Capitalize for human display: "kill" → "Killed", "freeze" → "Frozen"
-        let past_tense = match action {
+    ) -> Result<()> {
+        self.print_action_result_as(action, action, succeeded, failed)
+    }
+
+    /// Print action result where the JSON `action` differs from the verb shown
+    /// to humans (e.g. `proc orphans --kill` reports action "orphans", verb "kill").
+    pub fn print_action_result_as(
+        &self,
+        action: &str,
+        verb: &str,
+        succeeded: &[Process],
+        failed: &[(Process, String)],
+    ) -> Result<()> {
+        // Past tense for human display: "kill" → "Killed", "stop" → "Stopped"
+        let past_tense = match verb {
             "kill" => "Killed".to_string(),
+            "stop" => "Stopped".to_string(),
             "freeze" => "Frozen".to_string(),
-            "resume" => "Resumed".to_string(),
-            _ => format!("{}{}ed", action[..1].to_uppercase(), &action[1..]),
+            "thaw" => "Thawed".to_string(),
+            _ => format!("{}{}ed", verb[..1].to_uppercase(), &verb[1..]),
         };
 
         match self.format {
@@ -499,7 +515,7 @@ impl Printer {
                     println!(
                         "{} Failed to {} {} process{}",
                         "✗".red().bold(),
-                        action,
+                        verb,
                         failed.len(),
                         plural(failed.len())
                     );
@@ -531,24 +547,65 @@ impl Printer {
                 });
             }
         }
+
+        if failed.is_empty() {
+            Ok(())
+        } else {
+            Err(ProcError::reported(
+                ExitCode::GeneralError,
+                format!(
+                    "Failed to {} {} process{}",
+                    verb,
+                    failed.len(),
+                    plural(failed.len())
+                ),
+            ))
+        }
     }
 
     /// Print kill result (delegates to print_action_result)
-    pub fn print_kill_result(&self, killed: &[Process], failed: &[(Process, String)]) {
-        self.print_action_result("kill", killed, failed);
+    pub fn print_kill_result(
+        &self,
+        killed: &[Process],
+        failed: &[(Process, String)],
+    ) -> Result<()> {
+        self.print_action_result("kill", killed, failed)
     }
 
-    /// Print dry-run summary and return early.
+    /// Print dry-run summary for a destructive command.
     ///
-    /// Used by destructive commands (kill, stop, freeze, thaw) for consistent dry-run output.
-    pub fn print_dry_run(&self, verb: &str, processes: &[Process]) {
-        self.print_processes(processes);
-        self.warning(&format!(
-            "Dry run: would {} {} process{}",
-            verb,
-            processes.len(),
-            plural(processes.len())
-        ));
+    /// The `action` is the command name (e.g. "kill", "stop", "freeze", "thaw"),
+    /// used both as the JSON `action` and as the verb in the human summary.
+    pub fn print_dry_run(&self, action: &str, processes: &[Process]) {
+        self.print_dry_run_with(
+            action,
+            processes,
+            &format!(
+                "Dry run: would {} {} process{}",
+                action,
+                processes.len(),
+                plural(processes.len())
+            ),
+        );
+    }
+
+    /// Print dry-run summary with a custom human message.
+    ///
+    /// JSON output is always `{"action", "success", "dry_run": true, "count", "processes"}`.
+    pub fn print_dry_run_with(&self, action: &str, processes: &[Process], message: &str) {
+        match self.format {
+            OutputFormat::Human => {
+                self.print_processes_human(processes, None);
+                self.warning(message);
+            }
+            OutputFormat::Json => self.print_json(&DryRunOutput {
+                action,
+                success: true,
+                dry_run: true,
+                count: processes.len(),
+                processes,
+            }),
+        }
     }
 
     /// Show confirmation prompt and return whether the user confirmed.
@@ -619,6 +676,15 @@ struct EmptyResult<'a> {
 struct ProcessListOutput<'a> {
     action: &'a str,
     success: bool,
+    count: usize,
+    processes: &'a [Process],
+}
+
+#[derive(Serialize)]
+struct DryRunOutput<'a> {
+    action: &'a str,
+    success: bool,
+    dry_run: bool,
     count: usize,
     processes: &'a [Process],
 }

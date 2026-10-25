@@ -11,7 +11,7 @@ use crate::core::{
     find_ports_for_pid, parse_target, parse_targets, resolve_in_dir, resolve_target, PortInfo,
     Process, TargetType,
 };
-use crate::error::{ProcError, Result};
+use crate::error::{ExitCode, ProcError, Result};
 use crate::ui::{format_duration, format_memory, Printer};
 use clap::Args;
 use colored::*;
@@ -55,6 +55,10 @@ impl OnCommand {
             };
         }
 
+        if self.json {
+            return self.show_multi_json(&targets);
+        }
+
         // Multi-target handling
         let mut not_found = Vec::new();
 
@@ -62,30 +66,77 @@ impl OnCommand {
             match parse_target(target) {
                 TargetType::Port(port) => {
                     if let Err(e) = self.show_process_on_port(port) {
-                        if !self.json {
-                            println!("{} Port {}: {}", "⚠".yellow(), port, e);
-                        }
+                        println!("{} Port {}: {}", "⚠".yellow(), port, e);
                         not_found.push(target.clone());
                     }
                 }
                 TargetType::Pid(pid) => {
                     if let Err(e) = self.show_ports_for_pid(pid) {
-                        if !self.json {
-                            println!("{} PID {}: {}", "⚠".yellow(), pid, e);
-                        }
+                        println!("{} PID {}: {}", "⚠".yellow(), pid, e);
                         not_found.push(target.clone());
                     }
                 }
                 TargetType::Name(ref name) => {
                     if let Err(e) = self.show_ports_for_name(name) {
-                        if !self.json {
-                            println!("{} '{}': {}", "⚠".yellow(), name, e);
-                        }
+                        println!("{} '{}': {}", "⚠".yellow(), name, e);
                         not_found.push(target.clone());
                     }
                 }
             }
         }
+
+        if not_found.len() == targets.len() {
+            // Each target already printed its own warning
+            return Err(ProcError::reported(
+                ExitCode::NotFound,
+                format!("No process found matching '{}'", self.target),
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Multi-target JSON: one envelope with a result per matched process
+    fn show_multi_json(&self, targets: &[String]) -> Result<()> {
+        let mut results: Vec<TargetResult> = Vec::new();
+        let mut not_found: Vec<String> = Vec::new();
+
+        for target in targets {
+            let found = match parse_target(target) {
+                TargetType::Port(port) => {
+                    self.lookup_port(port)
+                        .map(|(port_info, process)| match process {
+                            Some(process) => vec![(process, vec![port_info])],
+                            None => Vec::new(),
+                        })
+                }
+                TargetType::Pid(pid) => self.lookup_pid(pid).map(|found| vec![found]),
+                TargetType::Name(ref name) => self.lookup_name(name),
+            };
+
+            match found {
+                Ok(found) if !found.is_empty() => {
+                    results.extend(found.into_iter().map(|(process, ports)| TargetResult {
+                        target: target.clone(),
+                        process,
+                        ports,
+                    }))
+                }
+                _ => not_found.push(target.clone()),
+            }
+        }
+
+        if results.is_empty() {
+            return Err(ProcError::ProcessNotFound(self.target.clone()));
+        }
+
+        Printer::from_flags(true, self.verbose).print_json(&MultiTargetOutput {
+            action: "on",
+            success: true,
+            count: results.len(),
+            results,
+            not_found,
+        });
 
         Ok(())
     }
@@ -118,8 +169,8 @@ impl OnCommand {
         self.matches_in_filter(proc) && self.matches_by_filter(proc)
     }
 
-    /// Show what process is on a specific port
-    fn show_process_on_port(&self, port: u16) -> Result<()> {
+    /// Find the listener on a port and its process, applying --in/--by
+    fn lookup_port(&self, port: u16) -> Result<(PortInfo, Option<Process>)> {
         let port_info = match PortInfo::find_by_port(port)? {
             Some(info) => info,
             None => return Err(ProcError::PortNotFound(port)),
@@ -136,6 +187,13 @@ impl OnCommand {
                 )));
             }
         }
+
+        Ok((port_info, process))
+    }
+
+    /// Show what process is on a specific port
+    fn show_process_on_port(&self, port: u16) -> Result<()> {
+        let (port_info, process) = self.lookup_port(port)?;
 
         if self.json {
             let printer = Printer::from_flags(true, self.verbose);
@@ -157,8 +215,8 @@ impl OnCommand {
         Ok(())
     }
 
-    /// Show what ports a PID is listening on
-    fn show_ports_for_pid(&self, pid: u32) -> Result<()> {
+    /// Find a process by PID and its listening ports, applying --in/--by
+    fn lookup_pid(&self, pid: u32) -> Result<(Process, Vec<PortInfo>)> {
         let process = Process::find_by_pid(pid)?
             .ok_or_else(|| ProcError::ProcessNotFound(pid.to_string()))?;
 
@@ -171,6 +229,12 @@ impl OnCommand {
         }
 
         let ports = find_ports_for_pid(pid)?;
+        Ok((process, ports))
+    }
+
+    /// Show what ports a PID is listening on
+    fn show_ports_for_pid(&self, pid: u32) -> Result<()> {
+        let (process, ports) = self.lookup_pid(pid)?;
 
         if self.json {
             let printer = Printer::from_flags(true, self.verbose);
@@ -192,8 +256,8 @@ impl OnCommand {
         Ok(())
     }
 
-    /// Show what ports processes with a given name are listening on
-    fn show_ports_for_name(&self, name: &str) -> Result<()> {
+    /// Find processes by name and their listening ports, applying --in/--by
+    fn lookup_name(&self, name: &str) -> Result<Vec<(Process, Vec<PortInfo>)>> {
         let mut processes = resolve_target(name)?;
 
         if processes.is_empty() {
@@ -217,6 +281,13 @@ impl OnCommand {
             let ports = find_ports_for_pid(proc.pid)?;
             all_results.push((proc, ports));
         }
+
+        Ok(all_results)
+    }
+
+    /// Show what ports processes with a given name are listening on
+    fn show_ports_for_name(&self, name: &str) -> Result<()> {
+        let all_results = self.lookup_name(name)?;
 
         if self.json {
             let printer = Printer::from_flags(true, self.verbose);
@@ -364,6 +435,22 @@ struct PortLookupOutput<'a> {
 struct ProcessPortsJson<'a> {
     process: &'a Process,
     ports: &'a [PortInfo],
+}
+
+#[derive(Serialize)]
+struct TargetResult {
+    target: String,
+    process: Process,
+    ports: Vec<PortInfo>,
+}
+
+#[derive(Serialize)]
+struct MultiTargetOutput {
+    action: &'static str,
+    success: bool,
+    count: usize,
+    results: Vec<TargetResult>,
+    not_found: Vec<String>,
 }
 
 #[derive(Serialize)]

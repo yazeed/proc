@@ -9,7 +9,7 @@
 //!   proc wait node --interval 10     # Check every 10 seconds
 
 use crate::core::{apply_filters, parse_targets, resolve_targets, Process};
-use crate::error::{ProcError, Result};
+use crate::error::{ExitCode, ProcError, Result};
 use crate::ui::{format_duration, plural, Printer};
 use clap::Args;
 use colored::*;
@@ -130,6 +130,17 @@ impl WaitCommand {
                     })
                     .collect();
 
+                let names: Vec<String> = still_running
+                    .iter()
+                    .map(|p| format!("{} [{}]", p.name, p.pid))
+                    .collect();
+                let message = format!(
+                    "after {} — {} still running: {}",
+                    format_duration(elapsed),
+                    still_running.len(),
+                    names.join(", ")
+                );
+
                 if self.json {
                     printer.print_json(&WaitOutput {
                         action: "wait",
@@ -140,21 +151,16 @@ impl WaitCommand {
                         target: self.target.clone(),
                         initial_count,
                         exited,
-                        still_running: still_running.clone(),
+                        still_running,
                     });
-                    return Ok(());
+                    // Same exit code as the human-mode Timeout error
+                    return Err(ProcError::reported(
+                        ExitCode::GeneralError,
+                        format!("Operation timed out: {}", message),
+                    ));
                 }
 
-                let names: Vec<String> = still_running
-                    .iter()
-                    .map(|p| format!("{} [{}]", p.name, p.pid))
-                    .collect();
-                return Err(ProcError::Timeout(format!(
-                    "after {} — {} still running: {}",
-                    format_duration(elapsed),
-                    still_running.len(),
-                    names.join(", ")
-                )));
+                return Err(ProcError::Timeout(message));
             }
 
             // Check which processes have exited

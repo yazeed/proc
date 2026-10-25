@@ -128,9 +128,7 @@ impl StopCommand {
         }
 
         // Output results
-        printer.print_action_result("stop", &stopped, &failed);
-
-        Ok(())
+        printer.print_action_result("stop", &stopped, &failed)
     }
 
     fn wait_for_exit(&self, proc: &Process) -> bool {

@@ -9,7 +9,7 @@ use proc_cli::commands::{
     ListCommand, OnCommand, OrphansCommand, PortsCommand, StopCommand, StuckCommand, ThawCommand,
     TreeCommand, UnstickCommand, WaitCommand, WatchCommand, WhyCommand,
 };
-use proc_cli::error::ExitCode;
+use proc_cli::error::{ExitCode, ProcError};
 use std::io;
 use std::process;
 
@@ -268,9 +268,9 @@ fn main() {
                 .filter(|line| !line.trim_start().starts_with("tip:"))
                 .collect::<Vec<_>>()
                 .join("\n");
-            eprint!("{}", cleaned);
 
             // Try to suggest a similar flag
+            let mut suggestion = None;
             if matches!(
                 e.kind(),
                 ErrorKind::UnknownArgument | ErrorKind::InvalidValue
@@ -279,13 +279,33 @@ fn main() {
                 let subcmd = args.iter().skip(1).find(|a| !a.starts_with('-'));
                 let unknown = extract_unknown_arg(&msg);
                 if let (Some(subcmd), Some(unknown)) = (subcmd, unknown) {
-                    if let Some(suggestion) = suggest_flag(&unknown, subcmd) {
-                        eprintln!("\n  tip: did you mean '{}'?", suggestion);
-                    }
+                    suggestion = suggest_flag(&unknown, subcmd);
                 }
             }
 
-            process::exit(2);
+            // Usage errors are invalid input, same as runtime validation errors
+            let exit_code = ExitCode::InvalidInput as i32;
+
+            if wants_json() {
+                let mut error = cleaned
+                    .trim()
+                    .trim_start_matches("error: ")
+                    .lines()
+                    .next()
+                    .unwrap_or_default()
+                    .to_string();
+                if let Some(ref suggestion) = suggestion {
+                    error.push_str(&format!("\n  Try: did you mean '{}'?", suggestion));
+                }
+                print_json_error(&error, exit_code);
+            } else {
+                eprint!("{}", cleaned);
+                if let Some(suggestion) = suggestion {
+                    eprintln!("\n  tip: did you mean '{}'?", suggestion);
+                }
+            }
+
+            process::exit(exit_code);
         }
     };
 
@@ -325,16 +345,14 @@ fn main() {
     if let Err(e) = result {
         let exit_code = ExitCode::from(&e);
 
+        // The command already printed its result; only the exit code is left
+        if matches!(e, ProcError::Reported { .. }) {
+            process::exit(exit_code as i32);
+        }
+
         // If --json was requested, output error as JSON to stdout
         if wants_json() {
-            let action = std::env::args().nth(1).unwrap_or_default();
-            let error_json = serde_json::json!({
-                "action": action,
-                "success": false,
-                "error": format!("{}", e),
-                "exit_code": exit_code as i32
-            });
-            println!("{}", serde_json::to_string_pretty(&error_json).unwrap());
+            print_json_error(&e.to_string(), exit_code as i32);
         } else {
             eprintln!("{}", e);
         }
@@ -343,7 +361,58 @@ fn main() {
     }
 }
 
+/// Print an error as the standard JSON error object on stdout
+fn print_json_error(error: &str, exit_code: i32) {
+    let error_json = serde_json::json!({
+        "action": action_name(),
+        "success": false,
+        "error": error,
+        "exit_code": exit_code
+    });
+    println!("{}", serde_json::to_string_pretty(&error_json).unwrap());
+}
+
+/// Canonical command name for the JSON `action` field, resolving aliases
+/// (e.g. `proc k` → "kill"). Falls back to the raw argument, or "proc".
+fn action_name() -> String {
+    let first = std::env::args().skip(1).find(|a| !a.starts_with('-'));
+    match first {
+        Some(arg) => Cli::command()
+            .find_subcommand(&arg)
+            .map(|cmd| cmd.get_name().to_string())
+            .unwrap_or(arg),
+        None => "proc".to_string(),
+    }
+}
+
 /// Check if --json or -j was passed in the command line arguments
 fn wants_json() -> bool {
-    std::env::args().any(|a| a == "--json" || a == "-j")
+    std::env::args()
+        .skip(1)
+        .take_while(|a| a != "--")
+        .any(|a| is_json_flag(&a))
+}
+
+/// Matches `--json`, `-j`, and short-flag clusters such as `-yj`.
+///
+/// Scanning a cluster stops at the first short flag that takes a value,
+/// because everything after it is that flag's value (`-bj` is `--by j`).
+fn is_json_flag(arg: &str) -> bool {
+    if arg == "--json" {
+        return true;
+    }
+    let Some(cluster) = arg.strip_prefix('-') else {
+        return false;
+    };
+    if cluster.starts_with('-') {
+        return false;
+    }
+    for c in cluster.chars() {
+        match c {
+            'j' => return true,
+            'b' | 'd' | 'i' | 'l' | 'n' | 'p' | 'r' | 's' | 'S' | 't' => return false,
+            _ => {}
+        }
+    }
+    false
 }

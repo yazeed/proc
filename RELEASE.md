@@ -39,6 +39,7 @@ Update version in ALL of these files:
 - [ ] `Cargo.toml` — version field
 - [ ] `pkg/npm/package.json` — version field
 - [ ] `flake.nix` — version field
+- [ ] `.claude-plugin/marketplace.json` — `metadata.version` field
 
 ## 4. Documentation
 

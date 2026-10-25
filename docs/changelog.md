@@ -5,6 +5,151 @@ description: "release history for proc."
 permalink: /changelog
 ---
 
+## 1.13.0 — 2026-10-24
+
+A consistent JSON and exit-code contract: every command prints one JSON document, `action` is always the command name, and `"success": false` always comes with a non-zero exit code. Scripts that relied on the old behaviour should check the **Changed** entries below.
+
+**Changed**
+- **`--dry-run --json`** now reports the command's own `action` (e.g. `"kill"`) and `"dry_run": true`, instead of a list result with `"action": "list"` (`kill`, `stop`, `freeze`, `thaw`, `free`, `orphans --kill`, `stuck --kill`)
+- **`proc orphans --kill` / `proc stuck --kill` with `--json`** print one action result (`"action": "orphans"`/`"stuck"`, `succeeded`/`failed`) instead of two JSON documents
+- **`proc thaw --json`** reports `"action": "thaw"` instead of `"resume"`
+- **`proc why` / `proc tree` JSON** use lowercase `status` (`"running"`) and `protocol` (`"tcp"`), matching the Process and Port objects
+- **Invalid flags and arguments** exit with code 4 (invalid input) instead of 2, which meant "not found"; with `--json` the error is a JSON object on stdout
+- **`proc wait --json` on timeout** exits 1, as it already did without `--json`
+- **`proc stop`, `freeze`, `thaw`, `orphans --kill`, `stuck --kill`** exit 1 when any process fails, as `proc kill` already did
+- **`proc free`** exits 1 when a port is still in use after `--wait`
+- **`proc unstick`** exits 1 when a process is still stuck or failed; an explicit target removed by `--in`/`--by` is "not found" (exit 2)
+- **`proc info`** exits 2 when no target is found
+- **`proc on` with multiple targets and `--json`** prints one document (`count`, `results` with `target`/`process`/`ports`, `not_found`) instead of one per target; exits 2 when no target is found
+- **`proc in <path>`** exits 4 when the directory does not exist, like `proc for` with a missing file
+
+**Fixed**
+- **`proc why --json`** prints a JSON error and exits 2 when nothing is found, instead of printing nothing and exiting 0; multiple targets print one document instead of one per target
+- **`proc kill --json`** no longer prints a second JSON error document after a partial failure
+- **Error `action`** uses the canonical command name when an alias is used (`proc k` → `"kill"`)
+- **JSON errors** are detected for short-flag clusters such as `-yj`
+- **Human output**: "Stopped" instead of "Stoped"
+- **Agent skill**: `SKILL.md` covers `proc for`, `proc in`, `proc unstick`, `--ancestors`, `--graceful`, `--exposed`/`--local`/`--range`, `--status`, `--min-uptime`, `--parent`, with a per-command filter table and the bounded `proc watch --json` stream; `reference.md` adds the `on <PID>`, `tree --ancestors`, `--dry-run`, `unstick`, and `watch` shapes
+- **Plugin manifest**: `.claude-plugin/marketplace.json` version kept in sync and added to the release checklist
+
+**Added**
+- **Docs**: agent skill install instructions (`npx skills add yazeed/proc`, Claude Code plugin) in README and the install page; exit code table in README and the commands page
+- **Tests**: JSON contract integration tests (`tests/cli_json.rs`)
+
+## 1.12.3 — 2026-05-03
+
+**Fixed**
+- **Clippy**: Use `sort_by_key` instead of `sort_by` for name sorting (Rust 1.95+ lint)
+
+## 1.12.2 — 2026-03-30
+
+**Security**
+- **npm install script hardened**: SHA-256 checksum verification, redirect host pinning, `execFileSync` (no shell injection), dead code removed
+
+**Fixed**
+- **README**: SafeSkill badge, correct badge ordering
+- **Skills**: Added `proc for` and empty result JSON schemas to reference
+- **Rust docs**: Added `wait`, `free`, `why`, `freeze/thaw`, `--signal`, `--json` to Quick Start and Features
+
+## 1.12.1 — 2026-03-27
+
+**Fixed**
+- **CI**: Upgrade to `softprops/action-gh-release@v2` — v1 fails with immutable releases enabled
+
+## 1.12.0 — 2026-03-27
+
+**Added**
+- **`proc wait`**: Block until process(es) exit — the pipe-friendly replacement for `while ps aux | grep ... | grep -v grep; do sleep; done`
+  - `proc wait node` — wait until all node processes exit
+  - `proc wait :3000 --timeout 60` — wait up to 60s for port process to exit
+  - `proc wait node -n 10 -q` — check every 10s, quiet mode for scripting
+  - Supports `--in`, `--by`, `--json`, `--verbose` like other commands
+  - Reports each process as it exits, with elapsed time
+  - JSON output includes per-process exit timing and timeout status
+
+**Fixed**
+- **`--by` now matches full command line**: The `--by` filter across all commands now matches against both process name AND command line arguments (consistent with how positional targets and `proc by` work). Previously `proc wait node --by KXBTCD` would not match a process whose args contained "KXBTCD" — now it does. Affects: kill, stop, freeze, thaw, info, tree, stuck, unstick, orphans, wait, on, watch, for
+- **JSON output for empty results**: Commands that find nothing (`stuck`, `orphans`, `free` when ports already free) now output `{"action":"...", "success":true, "count":0, "message":"..."}` in JSON mode instead of empty stdout
+- **Consistent JSON envelopes**: `on` (name target), `for`, `why` now wrap results in `{"action":"...", "success":true, "count":N, "results":[...]}` instead of outputting bare arrays
+- **Consistent JSON action field**: All commands now use lowercase action names (`"kill"`, `"stop"`, `"freeze"`, `"resume"`) instead of mixed-case past-tense verbs (`"Killed"`, `"Stopped"`)
+- **Command-specific action names**: `by`, `in`, `stuck`, `orphans` now report their own command name as the JSON `action` field instead of generic `"list"`
+- **`wait` timeout no longer double-outputs JSON**: Previously emitted both a WaitOutput and an error envelope; now emits a single `{"success":false, "timed_out":true, ...}` object
+- **Error envelope includes `action` field**: JSON error responses now include the command name (e.g. `{"action":"kill", "success":false, "error":"...", "exit_code":2}`)
+- **`watch` JSON includes `success` field**: Consistent with all other commands
+- **`tree --ancestors` uses `action: "tree"`**: Consistent regardless of `--ancestors` flag
+- **Ancestor chain exclusion**: Name matching now excludes the entire ancestor process chain (up to 10 levels) instead of just the immediate parent. Prevents false matches in deep shell environments (IDE → terminal → shell → shell wrapper → proc)
+
+**Changed**
+- **Shared `matches_by_filter`**: Extracted the `--by` matching logic into `core::filters::matches_by_filter()`, replacing 14 inline copies with a single consistent implementation
+- **Agent Skills**: Added `proc wait` to skill reference, added "Agent/Pipe Readiness" section documenting which commands are safe for agents vs interactive-only
+- **`src/lib.rs`**: Clarified `watch` as interactive TUI, `wait` as pipe-friendly blocking
+
+**Updated**
+- Updated dependencies (`mio`, `roff`, `unicode-segmentation`, `wasm-bindgen`)
+
+## 1.11.0 — 2026-03-23
+
+**Changed**
+- **CLAUDE.md**: Added explicit rules requiring user approval before every push, tag, and release. Added mandatory RELEASE.md checklist compliance for all versions including patches
+
+**Updated**
+- Updated dependencies (`itoa`, `unicode-segmentation`)
+
+## 1.10.1 — 2026-03-23
+
+**Fixed**
+- **Parent shell self-matching**: Name-based searches (`proc by`, `proc on <name>`, `proc tree <name>`) no longer match the parent shell process whose command line contains proc's own arguments. Previously, `proc on :99999 --json` would match the shell running proc instead of returning "not found". Now correctly returns exit code 2 with a JSON error
+
+## 1.10.0 — 2026-03-23
+
+**Added**
+- **JSON error envelope**: With `--json`, errors now output `{"success":false, "error":"...", "exit_code":N}` to stdout instead of plain text to stderr — enables reliable machine parsing by LLMs and scripts
+- **Agent Skills**: `skills/proc-cli/SKILL.md` — Claude Code skill for process management with proc. Includes structured command reference, JSON output schemas, and LLM usage guidelines. Compatible with the [Agent Skills](https://agentskills.io) open standard
+
+## 1.9.1 — 2026-03-16
+
+**Fixed**
+- **Windows build**: Gate unix-only imports behind `#[cfg(unix)]` in `freeze.rs` and `thaw.rs` — fixes unused import errors with `-D warnings` on Windows CI
+
+## 1.9.0 — 2026-03-16
+
+**Added**
+- **`proc freeze`**: Pause processes with SIGSTOP
+  - `proc freeze node` — freeze all node processes
+  - `proc freeze :3000 --yes` — freeze by port, skip confirmation
+  - Supports `--in`, `--by`, `--dry-run`, `--json`, `--verbose`
+- **`proc thaw`**: Resume frozen processes with SIGCONT
+  - `proc thaw node` — resume all frozen node processes
+  - `proc thaw :3000` — resume process on port 3000
+  - Supports `--in`, `--by`, `--dry-run`, `--json`, `--verbose`
+- **`proc orphans`**: Find orphaned processes (parent exited, reparented to init/launchd)
+  - `proc orphans` — list orphaned processes
+  - `proc orphans --in .` — orphans in current directory
+  - `proc orphans --kill --yes` — find and kill orphans
+  - Filters out system daemons on both macOS and Linux
+- **`proc why`**: Trace why a port is busy or show process ancestry
+  - `proc why :3000` — ancestry chain with port context
+  - `proc why node` — how was this node process started?
+  - Shows working directory and command for the target process
+  - Full JSON output support
+- **`proc free`**: Free ports by killing the process and verifying availability
+  - `proc free :3000` — kill process, verify port freed
+  - `proc free :3000,:8080 --yes` — free multiple ports
+  - `proc free :3000 --wait 30` — wait up to 30s for port to free
+  - Reports per-port success/failure (handles TIME_WAIT)
+  - Port-only targets; rejects PIDs/names with clear error message
+- **`--signal` flag on `proc stop`**: Send custom initial signal instead of SIGTERM
+  - `proc stop nginx --signal HUP` — reload config (SIGHUP)
+  - `proc stop worker --signal USR1` — application-defined signal
+  - Accepts signal names: HUP, INT, QUIT, ABRT, KILL, TERM, STOP, CONT, USR1, USR2
+
+**Changed**
+- **Core**: Added `Process::send_signal()` for arbitrary Unix signal delivery
+- **Core**: Added `Process::find_orphans()` for orphan detection with system process filtering
+
+**Updated**
+- Updated dependencies (`clap`, `sysinfo`, `libc`, `tempfile`, and others)
+
 ## 1.8.1 — 2026-03-06
 
 **Fixed**

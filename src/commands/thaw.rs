@@ -68,11 +68,11 @@ impl ThawCommand {
         }
 
         if self.dry_run {
-            printer.print_dry_run("resume", &processes);
+            printer.print_dry_run("thaw", &processes);
             return Ok(());
         }
 
-        if !printer.ask_confirm("resume", &processes, self.yes)? {
+        if !printer.ask_confirm("thaw", &processes, self.yes)? {
             return Ok(());
         }
 
@@ -86,9 +86,7 @@ impl ThawCommand {
             }
         }
 
-        printer.print_action_result("resume", &succeeded, &failed);
-
-        Ok(())
+        printer.print_action_result("thaw", &succeeded, &failed)
     }
 
     /// Windows stub

@@ -6,16 +6,30 @@ The goal is not to accumulate features, but to cover the process and port manage
 
 See [PHILOSOPHY.md](PHILOSOPHY.md) for our full manifesto.
 
-## Current Release (v1.9.0)
+## Current Release (v1.13.0)
 
-The core commands are complete, with process lifecycle control, diagnostics, real-time monitoring, the Proc Query Language, shell completions, file lookup, consistent filtering, terminal-adaptive tables, and full CI/CD automation:
+The core commands are complete, with process lifecycle control, diagnostics, real-time monitoring, the Proc Query Language, shell completions, file lookup, consistent filtering, terminal-adaptive tables, a consistent JSON and exit-code contract, an agent skill, and full CI/CD automation:
 
 | Area | Commands | Status |
 |------|----------|--------|
 | Discovery | `on`, `for`, `by`, `in`, `ports`, `list`, `info`, `tree`, `stuck`, `why`, `orphans` | ✅ |
-| Monitoring | `watch` (alias: `top`) — real-time process monitoring | ✅ |
+| Monitoring | `watch` (alias: `top`) — real-time process monitoring; `wait` — block until exit | ✅ |
 | Lifecycle | `kill`, `stop`, `unstick`, `freeze`, `thaw`, `free` (all support multi-target + filters) | ✅ |
-| Tooling | `completions`, `manpage` | ✅ |
+| Tooling | `completions`, `manpage`, agent skill (`npx skills add yazeed/proc`) | ✅ |
+
+### v1.13.0 Highlights
+
+- **One JSON contract**: every command prints a single JSON document whose `action` is the command name; `"success": false` always means a non-zero exit code
+- **Dry runs say what they are**: `--dry-run --json` reports the command and `"dry_run": true`
+- **Usage errors are invalid input**: exit 4, and JSON with `--json`
+- **Agent skill** brought up to date with every command, flag, and output shape
+
+### v1.10.0 – v1.12.x Highlights
+
+- **`proc wait`** (1.12.0): block until processes exit, with `--timeout` and `--interval`
+- **Consistent JSON envelopes** (1.12.0): `on`, `for`, and `why` wrap results in `count`/`results`; empty results return JSON
+- **JSON error envelope** (1.10.0): with `--json`, errors print `{"success": false, "error", "exit_code"}` to stdout
+- **Agent Skills** (1.10.0): `skills/proc-cli/SKILL.md` for coding agents
 
 ### v1.9.0 Highlights
 

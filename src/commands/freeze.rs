@@ -87,9 +87,7 @@ impl FreezeCommand {
             }
         }
 
-        printer.print_action_result("freeze", &succeeded, &failed);
-
-        Ok(())
+        printer.print_action_result("freeze", &succeeded, &failed)
     }
 
     /// Windows stub

@@ -8,9 +8,9 @@
 
 use crate::core::{
     find_ports_for_pid, parse_target, parse_targets, resolve_target, PortInfo, Process,
-    ProcessStatus, TargetType,
+    ProcessStatus, Protocol, TargetType,
 };
-use crate::error::Result;
+use crate::error::{ExitCode, ProcError, Result};
 use crate::ui::Printer;
 use clap::Args;
 use colored::*;
@@ -43,6 +43,11 @@ impl WhyCommand {
 
         let targets = parse_targets(&self.target);
 
+        // JSON results are collected across targets and printed as one document
+        let mut json_results: Vec<WhyOutput> = Vec::new();
+        let mut found_any = false;
+        let mut first_error: Option<ProcError> = None;
+
         for (i, target_str) in targets.iter().enumerate() {
             if i > 0 && !self.json {
                 println!();
@@ -64,45 +69,37 @@ impl WhyCommand {
                     if !self.json {
                         printer.warning(&format!("{}", e));
                     }
+                    first_error.get_or_insert(e);
                     continue;
                 }
             };
 
             if target_processes.is_empty() {
                 printer.warning(&format!("No process found for '{}'", target_str));
+                first_error.get_or_insert(ProcError::ProcessNotFound(target_str.clone()));
                 continue;
             }
+            found_any = true;
 
             if self.json {
-                let results: Vec<WhyOutput> = target_processes
-                    .iter()
-                    .map(|proc| {
-                        let chain = self.build_ancestry_chain(proc, &pid_map);
-                        let ports = find_ports_for_pid(proc.pid).unwrap_or_default();
-                        WhyOutput {
-                            target: target_str.clone(),
-                            port: port_context.as_ref().map(|p| p.port),
-                            protocol: port_context
-                                .as_ref()
-                                .map(|p| format!("{:?}", p.protocol).to_uppercase()),
-                            process: WhyProcessInfo {
-                                pid: proc.pid,
-                                name: proc.name.clone(),
-                                command: proc.command.clone(),
-                                cwd: proc.cwd.clone(),
-                                status: format!("{:?}", proc.status),
-                            },
-                            ports,
-                            ancestry: chain,
-                        }
-                    })
-                    .collect();
-                printer.print_json(&WhyEnvelope {
-                    action: "why",
-                    success: true,
-                    count: results.len(),
-                    results,
-                });
+                json_results.extend(target_processes.iter().map(|proc| {
+                    let chain = self.build_ancestry_chain(proc, &pid_map);
+                    let ports = find_ports_for_pid(proc.pid).unwrap_or_default();
+                    WhyOutput {
+                        target: target_str.clone(),
+                        port: port_context.as_ref().map(|p| p.port),
+                        protocol: port_context.as_ref().map(|p| p.protocol),
+                        process: WhyProcessInfo {
+                            pid: proc.pid,
+                            name: proc.name.clone(),
+                            command: proc.command.clone(),
+                            cwd: proc.cwd.clone(),
+                            status: proc.status,
+                        },
+                        ports,
+                        ancestry: chain,
+                    }
+                }));
             } else {
                 // Print port header if applicable
                 if let Some(ref port_info) = port_context {
@@ -128,6 +125,28 @@ impl WhyCommand {
             }
         }
 
+        if !found_any {
+            let error =
+                first_error.unwrap_or_else(|| ProcError::ProcessNotFound(self.target.clone()));
+            if self.json {
+                return Err(error);
+            }
+            // Humans already saw a warning per target
+            return Err(ProcError::reported(
+                ExitCode::from(&error),
+                error.to_string(),
+            ));
+        }
+
+        if self.json {
+            printer.print_json(&WhyEnvelope {
+                action: "why",
+                success: true,
+                count: json_results.len(),
+                results: json_results,
+            });
+        }
+
         Ok(())
     }
 
@@ -147,7 +166,7 @@ impl WhyCommand {
                     name: proc.name.clone(),
                     command: proc.command.clone(),
                     cwd: proc.cwd.clone(),
-                    status: format!("{:?}", proc.status),
+                    status: proc.status,
                     is_target: proc.pid == target.pid,
                 });
                 current_pid = proc.parent_pid;
@@ -270,7 +289,7 @@ struct WhyOutput {
     #[serde(skip_serializing_if = "Option::is_none")]
     port: Option<u16>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    protocol: Option<String>,
+    protocol: Option<Protocol>,
     process: WhyProcessInfo,
     ports: Vec<PortInfo>,
     ancestry: Vec<AncestryEntry>,
@@ -284,7 +303,7 @@ struct WhyProcessInfo {
     command: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     cwd: Option<String>,
-    status: String,
+    status: ProcessStatus,
 }
 
 #[derive(Serialize)]
@@ -295,6 +314,6 @@ struct AncestryEntry {
     command: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     cwd: Option<String>,
-    status: String,
+    status: ProcessStatus,
     is_target: bool,
 }

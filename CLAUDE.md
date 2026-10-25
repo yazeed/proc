@@ -167,7 +167,7 @@ Pre-commit hook runs `cargo fmt --check` automatically.
 
 1. Pre-release checks: `cargo fmt --check`, `cargo clippy`, `cargo test`, `cargo build --release`, `cargo update`, `cargo audit`, `cargo check --target x86_64-pc-windows-msvc`
 2. Manual testing with the release binary (`./target/release/proc --version`, `--help`, new features)
-3. Version bump in ALL files: `Cargo.toml`, `pkg/npm/package.json`, `flake.nix`
+3. Version bump in ALL files: `Cargo.toml`, `pkg/npm/package.json`, `flake.nix`, `.claude-plugin/marketplace.json`
 4. Documentation: `CHANGELOG.md`, `README.md`, `ROADMAP.md`, `src/lib.rs` — verify all reflect new changes
 5. Commit, tag, push (tag push triggers CI for all package managers)
 6. Verify CI completes successfully

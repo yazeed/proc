@@ -64,49 +64,57 @@ impl OrphansCommand {
             processes.len(),
             plural(processes.len())
         ));
-        printer.print_processes_as("orphans", &processes, None);
 
-        // Dry run: show what would be killed
-        if self.kill && self.dry_run {
-            printer.warning(&format!(
-                "Dry run: would kill {} orphaned process{}",
-                processes.len(),
-                plural(processes.len())
-            ));
+        if !self.kill {
+            printer.print_processes_as("orphans", &processes, None);
             return Ok(());
         }
 
-        // Kill if requested
-        if self.kill {
-            if !self.yes && !self.json {
-                let confirmed = Confirm::new()
-                    .with_prompt(format!(
-                        "Kill {} orphaned process{}?",
-                        processes.len(),
-                        plural(processes.len())
-                    ))
-                    .default(false)
-                    .interact()?;
-
-                if !confirmed {
-                    printer.warning("Cancelled");
-                    return Ok(());
-                }
-            }
-
-            let mut killed = Vec::new();
-            let mut failed = Vec::new();
-
-            for proc in processes {
-                match proc.kill_and_wait() {
-                    Ok(_) => killed.push(proc),
-                    Err(e) => failed.push((proc, e.to_string())),
-                }
-            }
-
-            printer.print_kill_result(&killed, &failed);
+        // Dry run: show what would be killed
+        if self.dry_run {
+            printer.print_dry_run_with(
+                "orphans",
+                &processes,
+                &format!(
+                    "Dry run: would kill {} orphaned process{}",
+                    processes.len(),
+                    plural(processes.len())
+                ),
+            );
+            return Ok(());
         }
 
-        Ok(())
+        // Kill: JSON prints a single action result; humans see the list first
+        if !self.json {
+            printer.print_processes_as("orphans", &processes, None);
+        }
+
+        if !self.yes && !self.json {
+            let confirmed = Confirm::new()
+                .with_prompt(format!(
+                    "Kill {} orphaned process{}?",
+                    processes.len(),
+                    plural(processes.len())
+                ))
+                .default(false)
+                .interact()?;
+
+            if !confirmed {
+                printer.warning("Cancelled");
+                return Ok(());
+            }
+        }
+
+        let mut killed = Vec::new();
+        let mut failed = Vec::new();
+
+        for proc in processes {
+            match proc.kill_and_wait() {
+                Ok(_) => killed.push(proc),
+                Err(e) => failed.push((proc, e.to_string())),
+            }
+        }
+
+        printer.print_action_result_as("orphans", "kill", &killed, &failed)
     }
 }
