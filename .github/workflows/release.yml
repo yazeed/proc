@@ -137,6 +137,8 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.crates-io-auth.outputs.token }}
         run: |
+          # Without pipefail, the `if` tests tee's exit status and a failed publish looks successful
+          set -o pipefail
           VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
           echo "Local version: $VERSION"
 
@@ -173,6 +175,8 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          # Without pipefail, the `if` tests tee's exit status and a failed publish looks successful
+          set -o pipefail
           VERSION=$(node -p "require('./package.json').version")
           echo "Publishing version: $VERSION"
 

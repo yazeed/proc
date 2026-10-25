@@ -1,5 +1,5 @@
-# Build stage
-FROM rust:latest as builder
+# Build stage: same Debian release as the runtime stage, so the binary's glibc matches
+FROM rust:1-bookworm as builder
 
 WORKDIR /app
 
