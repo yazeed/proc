@@ -27,3 +27,11 @@ Thumbs.db
 /pkg/npm/node_modules
 # Nix flake lock file
 flake.lock
+
+# Local scratch space (never committed)
+/.scratch
+premortem-*.md
+premortem-*.html
+HANDOVER-*.md
+# Local design notes and specs (never committed or published)
+/docs/superpowers/

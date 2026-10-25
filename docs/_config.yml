@@ -1,9 +1,13 @@
 title: proc
 description: Semantic CLI tool for process management. Target by port, PID, name or path.
-url: https://yazeed.github.io
-baseurl: /proc
+url: https://proc-cli.com
+baseurl: ""
 
 permalink: /posts/:title/
+
+# Internal design docs live under docs/ but are not part of the published site.
+exclude:
+  - superpowers
 
 plugins:
   - jekyll-seo-tag

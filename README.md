@@ -13,7 +13,7 @@
 [![Downloads](https://img.shields.io/crates/d/proc-cli.svg)](https://crates.io/crates/proc-cli)
 [![Open Collective](https://img.shields.io/opencollective/all/proc-cli?label=backers)](https://opencollective.com/proc-cli)
 [![SafeSkill](https://safeskill.dev/api/badge/proc-cli)](https://safeskill.dev/scan/proc-cli)
-[![Website](https://img.shields.io/website?url=https%3A%2F%2Fyazeed.github.io%2Fproc%2F&label=website)](https://yazeed.github.io/proc/)
+[![Website](https://img.shields.io/website?url=https%3A%2F%2Fproc-cli.com%2F&label=website)](https://proc-cli.com/)
 
 Semantic CLI tool for process management. Target by port, process id (PID), name or path.
 
@@ -42,7 +42,7 @@ proc info :3000,1234            # info for port + PID
 | Watch in real-time | `proc watch node` | `watch -n2 'ps aux \| grep node'` |
 | What runs this file? | `proc for ./app.js` | `lsof ./app.js` or `fuser ./app.js` |
 
-One syntax. One tool. [Full comparison &rarr;](https://yazeed.github.io/proc/posts/proc-vs-lsof-fuser-killport-fkill/)
+One syntax. One tool. [Full comparison &rarr;](https://proc-cli.com/posts/proc-vs-lsof-fuser-killport-fkill/)
 
 ## Install
 
