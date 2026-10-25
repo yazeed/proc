@@ -20,6 +20,16 @@ fn user_name(uid: &Uid) -> String {
         .unwrap_or_else(|| uid.to_string())
 }
 
+/// Linux reports a working directory that was deleted as "/path (deleted)".
+/// Strip that marker so the cwd matches `--in` and reads the same as on macOS;
+/// a real directory with that name still exists, so it is kept as is.
+fn strip_deleted_marker(cwd: String) -> String {
+    match cwd.strip_suffix(" (deleted)") {
+        Some(path) if !std::path::Path::new(&cwd).exists() => path.to_string(),
+        _ => cwd,
+    }
+}
+
 /// Process status
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -431,7 +441,9 @@ impl Process {
         };
 
         let exe_path = proc.exe().map(|p| p.to_string_lossy().to_string());
-        let cwd = proc.cwd().map(|p| p.to_string_lossy().to_string());
+        let cwd = proc
+            .cwd()
+            .map(|p| strip_deleted_marker(p.to_string_lossy().to_string()));
 
         Process {
             pid: pid.as_u32(),
@@ -493,6 +505,25 @@ mod tests {
         let pid = std::process::id();
         let process = Process::find_by_pid(pid).unwrap();
         assert!(process.is_some(), "Should find own process");
+    }
+
+    #[test]
+    fn test_strip_deleted_marker() {
+        assert_eq!(
+            strip_deleted_marker("/nonexistent/proc-gone (deleted)".to_string()),
+            "/nonexistent/proc-gone"
+        );
+        assert_eq!(
+            strip_deleted_marker("/tmp/project".to_string()),
+            "/tmp/project"
+        );
+
+        // A directory really named "x (deleted)" keeps its name
+        let real = std::env::temp_dir().join(format!("proc-real-{} (deleted)", std::process::id()));
+        std::fs::create_dir_all(&real).unwrap();
+        let path = real.to_string_lossy().to_string();
+        assert_eq!(strip_deleted_marker(path.clone()), path);
+        std::fs::remove_dir(&real).unwrap();
     }
 
     #[test]

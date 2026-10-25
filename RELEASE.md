@@ -62,7 +62,7 @@ Update and verify all docs are complete:
 - [ ] `README.md` — Review thoroughly: hero examples, Quick Start, Commands table, Filters table, Examples section all reflect new features
 - [ ] `ROADMAP.md` — Mark completed items, update current release section
 - [ ] `src/lib.rs` — Review Rust docs: Features list, Quick Start examples, Commands list all reflect new features. Run `cargo doc --no-deps --open` to preview. This is what shows on docs.rs.
-- [ ] `skills/proc-cli/SKILL.md` — Agent Skills: new commands, flags, schemas
+- [ ] `skills/proc-cli/SKILL.md` — Agent Skills: new commands, flags, schemas, playbooks; bump the "This skill describes proc X.Y" line in "Before You Start"
 - [ ] `skills/proc-cli/reference.md` — JSON output schemas match actual output
 - [ ] `docs/commands/` — GitHub Pages: new command pages, index.md updated
 - [ ] Verify `proc manpage` output includes new commands
@@ -108,6 +108,12 @@ for img in debian:bullseye-slim alpine; do
   docker run --rm --platform linux/arm64 -v "$PWD":/w $img /w/proc-linux-aarch64 --version
 done
 cd -
+
+# Agent skill: skills.sh doesn't watch the repo. It re-reads main only when someone
+# installs the skill with telemetry on, and its pages are cached, so trigger it once.
+mkdir -p /tmp/proc-skill-check && cd /tmp/proc-skill-check
+bunx skills add yazeed/proc --skill proc-cli -a claude-code -y   # installs into this folder only
+cd - && rm -rf /tmp/proc-skill-check
 ```
 
 Also verify:
@@ -115,6 +121,7 @@ Also verify:
 - [ ] `proc --version` — Shows new version
 - [ ] `proc manpage` — Includes new commands
 - [ ] `proc completions bash` — Includes new commands
+- [ ] https://www.skills.sh/yazeed/proc/proc-cli — shows the new skill text (allow time for its cache to refresh after the install above)
 
 ## 8. Cleanup
 

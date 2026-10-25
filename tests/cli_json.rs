@@ -224,6 +224,38 @@ mod unix {
     }
 
     #[test]
+    fn in_finds_processes_in_a_deleted_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let dir_path = dir.path().canonicalize().unwrap();
+        let dir_str = dir_path.to_str().unwrap().to_string();
+        let sleeper = Sleeper(
+            StdCommand::new("sleep")
+                .arg("300")
+                .current_dir(&dir_path)
+                .spawn()
+                .unwrap(),
+        );
+        dir.close().unwrap();
+        assert!(!dir_path.exists());
+
+        for args in [
+            vec!["in", dir_str.as_str(), "--json"],
+            vec!["list", "--in", dir_str.as_str(), "--json"],
+        ] {
+            let (json, code) = run_json(&args);
+            assert_eq!(code, 0, "{args:?}: {json}");
+            let found = json["processes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|p| p["pid"].as_u64() == Some(u64::from(sleeper.0.id())))
+                .unwrap_or_else(|| panic!("{args:?} missed the sleeper: {json}"));
+            // Linux reports "<dir> (deleted)"; proc shows the plain path everywhere
+            assert_eq!(found["cwd"], dir_str.as_str(), "{args:?}");
+        }
+    }
+
+    #[test]
     fn orphans_kill_prints_one_document() {
         let dir = tempfile::tempdir().unwrap();
         let dir_path = dir.path().canonicalize().unwrap();

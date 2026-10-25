@@ -104,8 +104,17 @@ impl InCommand {
             }
         };
 
-        // A path that doesn't exist is a typo, not an empty directory (same as `proc for`)
-        if !dir_filter.is_dir() {
+        // Directory filter (required for this command)
+        processes.retain(|p| {
+            p.cwd
+                .as_ref()
+                .is_some_and(|cwd| PathBuf::from(cwd).starts_with(&dir_filter))
+        });
+
+        // A missing path with nothing running there is a typo, not an empty
+        // directory (same as `proc for`). A deleted directory that processes
+        // still run in is kept, so its leftovers can be found.
+        if processes.is_empty() && !dir_filter.is_dir() {
             return Err(ProcError::InvalidInput(format!(
                 "Directory not found: {}",
                 self.path
@@ -114,16 +123,6 @@ impl InCommand {
 
         // Apply filters
         processes.retain(|p| {
-            // Directory filter (required for this command)
-            if let Some(ref proc_cwd) = p.cwd {
-                let proc_path = PathBuf::from(proc_cwd);
-                if !proc_path.starts_with(&dir_filter) {
-                    return false;
-                }
-            } else {
-                return false;
-            }
-
             // CPU filter
             if let Some(min_cpu) = self.min_cpu {
                 if p.cpu_percent < min_cpu {

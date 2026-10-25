@@ -13,6 +13,8 @@ proc in ~/projects/myapp   # processes in a specific path
 proc in . --by node        # node processes in cwd
 ```
 
+The directory can be one that was deleted, such as a removed git worktree: processes still running there are listed. A path that doesn't exist and has nothing running in it is treated as a typo and exits 4.
+
 ## options
 
 | flag | short | description |
