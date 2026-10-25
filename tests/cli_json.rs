@@ -224,6 +224,25 @@ mod unix {
     }
 
     #[test]
+    fn stop_rejects_an_unknown_signal_even_on_dry_run() {
+        let mut sleeper = Sleeper::spawn();
+        for extra in [&["--dry-run"][..], &["--yes"][..]] {
+            let mut args = vec!["stop", "--signal", "9", "--json"];
+            let pid = sleeper.pid();
+            args.push(&pid);
+            args.extend_from_slice(extra);
+            let (json, code) = run_json(&args);
+            assert_eq!(code, 4, "{extra:?}: {json}");
+            assert_eq!(json["action"], "stop");
+            assert!(json["error"].as_str().unwrap().contains("Unknown signal"));
+        }
+        assert!(
+            sleeper.0.try_wait().unwrap().is_none(),
+            "sleeper was signalled"
+        );
+    }
+
+    #[test]
     fn in_finds_processes_in_a_deleted_directory() {
         let dir = tempfile::tempdir().unwrap();
         let dir_path = dir.path().canonicalize().unwrap();

@@ -59,6 +59,15 @@ impl StopCommand {
     pub fn execute(&self) -> Result<()> {
         let printer = Printer::from_flags(self.json, self.verbose);
 
+        // Validate --signal first, so a bad name fails the same way with or
+        // without --dry-run, and before the confirmation prompt
+        #[cfg(unix)]
+        let custom_signal = if let Some(ref sig_name) = self.signal {
+            Some(parse_signal_name(sig_name)?)
+        } else {
+            None
+        };
+
         // Parse comma-separated targets and resolve to processes
         // Use resolve_targets_excluding_self to avoid stopping ourselves
         let targets = parse_targets(&self.target);
@@ -86,14 +95,6 @@ impl StopCommand {
         if !printer.ask_confirm("stop", &processes, self.yes)? {
             return Ok(());
         }
-
-        // Parse custom signal if provided
-        #[cfg(unix)]
-        let custom_signal = if let Some(ref sig_name) = self.signal {
-            Some(parse_signal_name(sig_name)?)
-        } else {
-            None
-        };
 
         // Stop processes
         let mut stopped = Vec::new();
