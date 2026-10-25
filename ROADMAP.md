@@ -6,7 +6,7 @@ The goal is not to accumulate features, but to cover the process and port manage
 
 See [PHILOSOPHY.md](PHILOSOPHY.md) for our full manifesto.
 
-## Current Release (v1.14.0)
+## Current Release (v1.14.1)
 
 The core commands are complete, with process lifecycle control, diagnostics, real-time monitoring, the Proc Query Language, shell completions, file lookup, consistent filtering, terminal-adaptive tables, a consistent JSON and exit-code contract, an agent skill, and full CI/CD automation:
 
@@ -16,6 +16,11 @@ The core commands are complete, with process lifecycle control, diagnostics, rea
 | Monitoring | `watch` (alias: `top`) — real-time process monitoring; `wait` — block until exit | ✅ |
 | Lifecycle | `kill`, `stop`, `unstick`, `freeze`, `thaw`, `free` (all support multi-target + filters) | ✅ |
 | Tooling | `completions`, `manpage`, agent skill (`npx skills add yazeed/proc`) | ✅ |
+
+### v1.14.1 Highlights
+
+- **Processes in deleted directories**: `proc in <dir>` lists processes still running in a directory that was deleted (such as a removed git worktree), and on Linux `cwd` and `--in` no longer trip over the kernel's `(deleted)` marker
+- **Agent skill**: when to reach for proc, what it replaces, and playbooks for busy ports and cleaning up leftovers
 
 ### v1.14.0 Highlights
 

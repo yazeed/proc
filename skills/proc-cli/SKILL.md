@@ -10,7 +10,7 @@ proc is a semantic CLI for processes and ports on macOS, Linux, and Windows. You
 
 ## Before You Start
 
-- Check it's installed: `proc --version`. This skill describes proc 1.14 (`proc inspect` and `uptime_secs` need 1.14 or later).
+- Check it's installed: `proc --version`. This skill describes proc 1.14.1 (`proc inspect` and `uptime_secs` need 1.14 or later).
 - If it's missing, ask the user before installing. Options: `brew install yazeed/proc/proc` (macOS), `cargo install proc-cli`, `npm install -g proc-cli`, `scoop bucket add proc https://github.com/yazeed/scoop-bucket-proc && scoop install proc` (Windows), or `nix profile install github:yazeed/proc`.
 
 ## Critical Rules
@@ -198,7 +198,7 @@ For complete JSON output schemas and field definitions, see [reference.md](refer
 - Name matching is substring-based: `proc by node` matches "node", "nodejs", "nodemon". Narrow with `--in` or use PIDs.
 - `proc by` takes one pattern; `proc list` takes several, comma-separated: `proc list 'git commit,pre-commit' --json`. Patterns are plain case-insensitive substrings matched against the name and the full command line, not regular expressions.
 - Uptime is `uptime_secs` in the JSON (seconds). `start_time` is a Unix timestamp, not a duration.
-- Processes can keep running in a directory that was deleted (a removed worktree, say), and they're often the leftovers you're looking for. In proc 1.14 and earlier, `proc in <dir>` rejects a deleted directory with exit 4, so use `proc list --in <dir>` or `proc orphans --in <dir>` there (on macOS; on Linux 1.14 misses them, because the kernel reports their cwd as `<dir> (deleted)`). Later versions handle both: `proc in` lists them, and `cwd` shows the plain path.
+- Processes can keep running in a directory that was deleted (a removed worktree, say), and they're often the leftovers you're looking for. From proc 1.14.1, `proc in <dir>` lists them and `cwd` shows the plain path. In 1.14.0 and earlier, `proc in <dir>` rejects a deleted directory with exit 4, so use `proc list --in <dir>` or `proc orphans --in <dir>` there (on macOS; on Linux those versions miss them, because the kernel reports their cwd as `<dir> (deleted)`).
 - `--dry-run --json` prints `"dry_run": true` plus the `processes` that would be affected; nothing is changed.
 - `proc orphans --kill` and `proc stuck --kill` report like `proc kill` (`succeeded`/`failed`), with `action` `"orphans"`/`"stuck"`.
 - If any process fails in `kill`/`stop`/`freeze`/`thaw`/`orphans --kill`/`stuck --kill`, the exit code is 1 and `failed` lists why; the ones in `succeeded` were still acted on.

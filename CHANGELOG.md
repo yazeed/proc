@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.14.1] - 2026-10-25
+
 ### Changed
 
 - **Skill**: tells agents when to reach for proc. It covers:
@@ -635,7 +637,8 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 
 ---
 
-[Unreleased]: https://github.com/yazeed/proc/compare/v1.14.0...HEAD
+[Unreleased]: https://github.com/yazeed/proc/compare/v1.14.1...HEAD
+[1.14.1]: https://github.com/yazeed/proc/compare/v1.14.0...v1.14.1
 [1.14.0]: https://github.com/yazeed/proc/compare/v1.13.4...v1.14.0
 [1.13.4]: https://github.com/yazeed/proc/compare/v1.13.3...v1.13.4
 [1.13.3]: https://github.com/yazeed/proc/compare/v1.13.2...v1.13.3
