@@ -6,7 +6,7 @@ The goal is not to accumulate features, but to cover the process and port manage
 
 See [PHILOSOPHY.md](PHILOSOPHY.md) for our full manifesto.
 
-## Current Release (v1.14.1)
+## Current Release (v1.14.2)
 
 The core commands are complete, with process lifecycle control, diagnostics, real-time monitoring, the Proc Query Language, shell completions, file lookup, consistent filtering, terminal-adaptive tables, a consistent JSON and exit-code contract, an agent skill, and full CI/CD automation:
 
@@ -16,6 +16,11 @@ The core commands are complete, with process lifecycle control, diagnostics, rea
 | Monitoring | `watch` (alias: `top`) — real-time process monitoring; `wait` — block until exit | ✅ |
 | Lifecycle | `kill`, `stop`, `unstick`, `freeze`, `thaw`, `free` (all support multi-target + filters) | ✅ |
 | Tooling | `completions`, `manpage`, agent skill (`npx skills add yazeed/proc`) | ✅ |
+
+### v1.14.2 Highlights
+
+- **`proc stop --signal`** rejects an unknown signal before the dry run and the confirmation prompt
+- **Website** at [proc-cli.com](https://proc-cli.com)
 
 ### v1.14.1 Highlights
 

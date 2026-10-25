@@ -10,7 +10,7 @@ proc is a semantic CLI for processes and ports on macOS, Linux, and Windows. You
 
 ## Before You Start
 
-- Check it's installed: `proc --version`. This skill describes proc 1.14.1 (`proc inspect` and `uptime_secs` need 1.14 or later).
+- Check it's installed: `proc --version`. This skill describes proc 1.14.2 (`proc inspect` and `uptime_secs` need 1.14 or later).
 - If it's missing, ask the user before installing. Options: `brew install yazeed/proc/proc` (macOS), `cargo install proc-cli`, `npm install -g proc-cli`, `scoop bucket add proc https://github.com/yazeed/scoop-bucket-proc && scoop install proc` (Windows), or `nix profile install github:yazeed/proc`.
 
 ## Critical Rules

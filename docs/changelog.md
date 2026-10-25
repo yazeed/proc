@@ -5,6 +5,15 @@ description: "release history for proc."
 permalink: /changelog
 ---
 
+## 1.14.2 — 2026-10-25
+
+**Fixed**
+- **`proc stop --signal`** only checked the signal name after the dry run and the confirmation prompt. `--dry-run` reported success for a signal the real run rejects (`--signal 9`), and without `--yes` you confirmed before being told the name was invalid. An unknown signal now exits 4 straight away, with or without `--dry-run`
+
+**Changed**
+- **Website** moved to [proc-cli.com](https://proc-cli.com). The old `yazeed.github.io/proc` address redirects there
+- **PHILOSOPHY.md** describes proc as it is today: every command in the grammar, the JSON and exit-code contract shared by people, scripts and agents, how targets are read without guessing, and `--kill` on `orphans`/`stuck`
+
 ## 1.14.1 — 2026-10-25
 
 **Fixed**
