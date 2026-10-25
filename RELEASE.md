@@ -119,9 +119,10 @@ Configure in GitHub repo settings → Secrets:
 |--------|---------|
 | `HOMEBREW_TAP_TOKEN` | PAT for homebrew-proc repo |
 | `SCOOP_BUCKET_TOKEN` | PAT for scoop-bucket-proc repo |
-| `NPM_TOKEN` | npm automation token |
 | `DOCKERHUB_USERNAME` | Docker Hub username |
 | `DOCKERHUB_TOKEN` | Docker Hub access token |
+
+npm needs no secret. It publishes through **Trusted Publishing (OIDC)**, configured on npmjs.com under `proc-cli` → Settings → Trusted Publisher: GitHub Actions, `yazeed` / `proc`, workflow `release.yml`, no environment, **Allow npm publish** checked. The `publish-npm` job needs `id-token: write` and npm 11.5.1 or newer. If the workflow file is renamed, the trusted publisher must be recreated.
 
 ## Package Distribution
 

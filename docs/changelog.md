@@ -5,6 +5,11 @@ description: "release history for proc."
 permalink: /changelog
 ---
 
+## 1.13.2 — 2026-10-24
+
+**Changed**
+- **npm publishing** uses Trusted Publishing (OIDC) from the release workflow instead of a stored token. The `NPM_TOKEN` secret is no longer used. The publish job runs on Node 24 with npm 11.5.1 or newer, as Trusted Publishing requires. 1.13.0 and 1.13.1 were not published to npm, so npm goes from 1.12.3 to 1.13.2
+
 ## 1.13.1 — 2026-10-24
 
 **Fixed**

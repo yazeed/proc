@@ -6,7 +6,7 @@ The goal is not to accumulate features, but to cover the process and port manage
 
 See [PHILOSOPHY.md](PHILOSOPHY.md) for our full manifesto.
 
-## Current Release (v1.13.1)
+## Current Release (v1.13.2)
 
 The core commands are complete, with process lifecycle control, diagnostics, real-time monitoring, the Proc Query Language, shell completions, file lookup, consistent filtering, terminal-adaptive tables, a consistent JSON and exit-code contract, an agent skill, and full CI/CD automation:
 

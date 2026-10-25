@@ -167,13 +167,19 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
+      # Trusted publishing (OIDC, no token) needs npm 11.5.1 or newer
+      - name: Install npm 11
+        run: |
+          npm install -g npm@^11.5.1
+          npm --version
+
+      # Authenticates through the trusted publisher configured on npmjs.com
+      # (yazeed/proc, release.yml), using this job's id-token permission
       - name: Publish to npm
         working-directory: pkg/npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           # Without pipefail, the `if` tests tee's exit status and a failed publish looks successful
           set -o pipefail
