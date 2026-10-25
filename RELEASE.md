@@ -96,6 +96,7 @@ cargo install proc-cli                    # crates.io
 npm info proc-cli version                 # npm
 npm install --prefix /tmp/proc-npm-check proc-cli && /tmp/proc-npm-check/node_modules/.bin/proc --version  # npm installer works
 brew update && brew info yazeed/proc/proc # Homebrew
+brew upgrade yazeed/proc/proc && proc --version  # upgrades only proc, nothing else
 docker pull yazeed/proc                   # Docker
 
 # Linux binaries are static (musl): they must run on an older distro and on Alpine
