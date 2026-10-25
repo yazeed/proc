@@ -57,7 +57,8 @@ Update version in ALL of these files:
 
 Update and verify all docs are complete:
 
-- [ ] `CHANGELOG.md` — Add new version section with changes
+- [ ] `CHANGELOG.md` — Rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and add a new empty `## [Unreleased]` above it. Everything worked on since the last release is already listed there (see "Unreleased Work" in CLAUDE.md); check that it is complete
+- [ ] `docs/changelog.md` — Add the same section (GitHub Pages)
 - [ ] `README.md` — Review thoroughly: hero examples, Quick Start, Commands table, Filters table, Examples section all reflect new features
 - [ ] `ROADMAP.md` — Mark completed items, update current release section
 - [ ] `src/lib.rs` — Review Rust docs: Features list, Quick Start examples, Commands list all reflect new features. Run `cargo doc --no-deps --open` to preview. This is what shows on docs.rs.
@@ -96,6 +97,16 @@ npm info proc-cli version                 # npm
 npm install --prefix /tmp/proc-npm-check proc-cli && /tmp/proc-npm-check/node_modules/.bin/proc --version  # npm installer works
 brew update && brew info yazeed/proc/proc # Homebrew
 docker pull yazeed/proc                   # Docker
+
+# Linux binaries are static (musl): they must run on an older distro and on Alpine
+mkdir -p /tmp/proc-linux && cd /tmp/proc-linux
+curl -fsSL https://github.com/yazeed/proc/releases/latest/download/proc-linux-x86_64.tar.gz | tar xz
+curl -fsSL https://github.com/yazeed/proc/releases/latest/download/proc-linux-aarch64.tar.gz | tar xz
+for img in debian:bullseye-slim alpine; do
+  docker run --rm --platform linux/amd64 -v "$PWD":/w $img /w/proc-linux-x86_64 --version
+  docker run --rm --platform linux/arm64 -v "$PWD":/w $img /w/proc-linux-aarch64 --version
+done
+cd -
 ```
 
 Also verify:

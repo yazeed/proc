@@ -161,6 +161,10 @@ cargo clippy             # Lint
 
 Pre-commit hook runs `cargo fmt --check` automatically.
 
+## Unreleased Work
+
+Work is committed and pushed to `main` without a tag, and every change goes under `## [Unreleased]` in `CHANGELOG.md` in the same commit. Docs (`README.md`, `skills/`, `docs/`) are updated with the change, so `main` describes the next release. Nothing is tagged or version-bumped until the maintainer decides to ship; the release then turns `[Unreleased]` into the new version (see RELEASE.md).
+
 ## Releasing
 
 **ALWAYS follow [RELEASE.md](RELEASE.md) for every release.** Do not skip steps. This includes:

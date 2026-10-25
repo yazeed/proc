@@ -86,10 +86,10 @@ nix profile install github:yazeed/proc
 
 ### docker
 
-Runs with host PID namespace for full process visibility.
+Runs with the host PID and network namespaces: `--pid=host` shows the host's processes, and `--net=host` shows its ports (`on :port`, `ports`, `free`).
 
 ```bash
-docker run --rm -it --pid=host yazeed/proc
+docker run --rm -it --pid=host --net=host yazeed/proc
 ```
 
 ## verify

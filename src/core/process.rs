@@ -5,8 +5,20 @@
 
 use crate::error::{ProcError, Result};
 use serde::{Deserialize, Serialize};
+use std::sync::OnceLock;
 use std::time::Duration;
-use sysinfo::{Pid, ProcessStatus as SysProcessStatus, System};
+use sysinfo::{Pid, ProcessStatus as SysProcessStatus, System, Uid, Users};
+
+/// Resolve a user ID to its user name, falling back to the ID itself.
+/// The user list is read once per run.
+fn user_name(uid: &Uid) -> String {
+    static USERS: OnceLock<Users> = OnceLock::new();
+    USERS
+        .get_or_init(Users::new_with_refreshed_list)
+        .get_user_by_id(uid)
+        .map(|user| user.name().to_string())
+        .unwrap_or_else(|| uid.to_string())
+}
 
 /// Process status
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -427,7 +439,7 @@ impl Process {
             cpu_percent: proc.cpu_usage(),
             memory_mb: proc.memory() as f64 / 1024.0 / 1024.0,
             status: ProcessStatus::from(proc.status()),
-            user: proc.user_id().map(|u| u.to_string()),
+            user: proc.user_id().map(user_name),
             parent_pid: proc.parent().map(|p| p.as_u32()),
             start_time: Some(proc.start_time()),
         }

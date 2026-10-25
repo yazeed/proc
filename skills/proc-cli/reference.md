@@ -39,13 +39,14 @@ Every process in JSON output follows this shape:
   "cpu_percent": 12.5,
   "memory_mb": 256.0,
   "status": "running",
-  "user": "501",
+  "user": "alice",
   "parent_pid": 1000,
   "start_time": 1700000000
 }
 ```
 
 Fields `exe_path`, `cwd`, `command`, `user`, `parent_pid`, `start_time` are omitted when unavailable.
+`user` is the user name; it falls back to the numeric user ID when the ID has no name on the system.
 Status is one of: `running`, `sleeping`, `stopped`, `zombie`, `dead`, `unknown` — the same lowercase values everywhere, including `why` and `tree`.
 
 ## Port Object

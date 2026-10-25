@@ -124,6 +124,17 @@ mod unix {
     }
 
     #[test]
+    fn user_is_reported_by_name() {
+        let sleeper = Sleeper::spawn();
+        let id = StdCommand::new("id").arg("-un").output().unwrap();
+        let expected = String::from_utf8(id.stdout).unwrap();
+
+        let (json, code) = run_json(&["info", &sleeper.pid(), "--json"]);
+        assert_eq!(code, 0);
+        assert_eq!(json["processes"][0]["user"], expected.trim());
+    }
+
+    #[test]
     fn on_multi_target_prints_one_document() {
         let first = Sleeper::spawn();
         let second = Sleeper::spawn();

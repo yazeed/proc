@@ -53,7 +53,7 @@ One syntax. One tool. [Full comparison &rarr;](https://yazeed.github.io/proc/pos
 | Rust | `cargo install proc-cli` |
 | npm/bun | `npm install -g proc-cli` |
 | Nix | `nix profile install github:yazeed/proc` |
-| Docker | `docker run --rm -it --pid=host yazeed/proc` |
+| Docker | `docker run --rm -it --pid=host --net=host yazeed/proc` |
 | Shell | `curl -fsSL https://raw.githubusercontent.com/yazeed/proc/main/install.sh \| bash` |
 
 <details>
@@ -317,6 +317,8 @@ proc unstick --force
 | Linux | ARM64 | ✅ |
 | Windows | x86_64 | ✅ |
 | Docker | linux/amd64, linux/arm64 | ✅ |
+
+The Linux binaries are statically linked (musl) and need no particular glibc version, so they also run on Alpine and on older releases such as Debian 10, Ubuntu 20.04 and Amazon Linux 2.
 
 ## Shell Completions
 

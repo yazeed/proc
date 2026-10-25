@@ -26,9 +26,10 @@ RUN touch src/main.rs && cargo build --release
 # Runtime stage
 FROM debian:bookworm-slim
 
-# Install runtime dependencies (minimal)
+# Install runtime dependencies (minimal); iproute2 provides `ss`, which port lookups use on Linux
 RUN apt-get update && apt-get install -y \
     ca-certificates \
+    iproute2 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy binary from builder
