@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.13.4] - 2026-10-25
+
 ### Fixed
 
 - **Linux binaries** failed to start on anything older than Ubuntu 24.04 (`GLIBC_2.39 not found`, e.g. on Debian 12), because they were built on the `ubuntu-latest` runner and linked against its glibc. They are now static musl builds (`x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`) with no glibc dependency. Tested on x86_64 and ARM64 with Amazon Linux 2, Debian 10, 11 and 12, Ubuntu 20.04 and Alpine 3.20. File names are unchanged, so the curl install, npm, Homebrew on Linux and cargo-binstall pick them up as before
@@ -604,7 +606,12 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 
 ---
 
-[Unreleased]: https://github.com/yazeed/proc/compare/v1.12.3...HEAD
+[Unreleased]: https://github.com/yazeed/proc/compare/v1.13.4...HEAD
+[1.13.4]: https://github.com/yazeed/proc/compare/v1.13.3...v1.13.4
+[1.13.3]: https://github.com/yazeed/proc/compare/v1.13.2...v1.13.3
+[1.13.2]: https://github.com/yazeed/proc/compare/v1.13.1...v1.13.2
+[1.13.1]: https://github.com/yazeed/proc/compare/v1.13.0...v1.13.1
+[1.13.0]: https://github.com/yazeed/proc/compare/v1.12.3...v1.13.0
 [1.12.3]: https://github.com/yazeed/proc/compare/v1.12.2...v1.12.3
 [1.12.2]: https://github.com/yazeed/proc/compare/v1.12.1...v1.12.2
 [1.12.1]: https://github.com/yazeed/proc/compare/v1.12.0...v1.12.1

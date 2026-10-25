@@ -6,7 +6,7 @@ The goal is not to accumulate features, but to cover the process and port manage
 
 See [PHILOSOPHY.md](PHILOSOPHY.md) for our full manifesto.
 
-## Current Release (v1.13.3)
+## Current Release (v1.13.4)
 
 The core commands are complete, with process lifecycle control, diagnostics, real-time monitoring, the Proc Query Language, shell completions, file lookup, consistent filtering, terminal-adaptive tables, a consistent JSON and exit-code contract, an agent skill, and full CI/CD automation:
 
@@ -16,6 +16,12 @@ The core commands are complete, with process lifecycle control, diagnostics, rea
 | Monitoring | `watch` (alias: `top`) — real-time process monitoring; `wait` — block until exit | ✅ |
 | Lifecycle | `kill`, `stop`, `unstick`, `freeze`, `thaw`, `free` (all support multi-target + filters) | ✅ |
 | Tooling | `completions`, `manpage`, agent skill (`npx skills add yazeed/proc`) | ✅ |
+
+### v1.13.4 Highlights
+
+- **Static Linux binaries**: musl builds that also run on older distributions (Debian 10, Ubuntu 20.04, Amazon Linux 2) and on Alpine
+- **Docker port lookups**: the image includes `ss`, so `on :port`, `ports` and `free` work (run with `--net=host`)
+- **User names**: `user` shows the user name instead of the numeric ID
 
 ### v1.13.0 Highlights
 
