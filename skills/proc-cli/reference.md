@@ -41,12 +41,14 @@ Every process in JSON output follows this shape:
   "status": "running",
   "user": "alice",
   "parent_pid": 1000,
-  "start_time": 1700000000
+  "start_time": 1700000000,
+  "uptime_secs": 3600
 }
 ```
 
-Fields `exe_path`, `cwd`, `command`, `user`, `parent_pid`, `start_time` are omitted when unavailable.
+Fields `exe_path`, `cwd`, `command`, `user`, `parent_pid`, `start_time`, `uptime_secs` are omitted when unavailable.
 `user` is the user name; it falls back to the numeric user ID when the ID has no name on the system.
+`start_time` is a Unix timestamp; `uptime_secs` is how long the process has been running, in seconds.
 Status is one of: `running`, `sleeping`, `stopped`, `zombie`, `dead`, `unknown` — the same lowercase values everywhere, including `why` and `tree`.
 
 ## Port Object

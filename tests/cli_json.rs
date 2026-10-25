@@ -49,6 +49,13 @@ fn alias_reports_canonical_action() {
 }
 
 #[test]
+fn inspect_is_an_alias_of_info() {
+    let (json, code) = run_json(&["inspect", MISSING_PID, "--json"]);
+    assert_eq!(code, 2);
+    assert_eq!(json["action"], "info");
+}
+
+#[test]
 fn short_flag_cluster_enables_json_errors() {
     let (json, code) = run_json(&["kill", MISSING_PID, "-yj"]);
     assert_eq!(code, 2);
@@ -132,6 +139,24 @@ mod unix {
         let (json, code) = run_json(&["info", &sleeper.pid(), "--json"]);
         assert_eq!(code, 0);
         assert_eq!(json["processes"][0]["user"], expected.trim());
+    }
+
+    #[test]
+    fn uptime_is_reported_in_seconds() {
+        let sleeper = Sleeper::spawn();
+
+        let (json, code) = run_json(&["info", &sleeper.pid(), "--json"]);
+        assert_eq!(code, 0);
+        let process = &json["processes"][0];
+        let uptime = process["uptime_secs"].as_u64().unwrap();
+        let start = process["start_time"].as_u64().unwrap();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        // The sleeper was just spawned, and uptime agrees with start_time
+        assert!(uptime < 60, "uptime_secs = {uptime}");
+        assert!(now.saturating_sub(start).abs_diff(uptime) <= 2);
     }
 
     #[test]

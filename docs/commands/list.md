@@ -13,6 +13,8 @@ proc list node                 # filter by name
 proc list --sort cpu --limit 10  # top 10 by CPU
 ```
 
+the table shows PID, directory, name, arguments, CPU, memory and status, plus uptime on terminals at least 100 columns wide. `--verbose` and `--json` always include uptime.
+
 ## options
 
 | flag | short | description |
@@ -27,7 +29,7 @@ proc list --sort cpu --limit 10  # top 10 by CPU
 | `--sort <key>` | `-s` | sort by: cpu, mem, pid, name (default: cpu) |
 | `--limit <n>` | `-n` | limit results |
 | `--json` | `-j` | output as JSON |
-| `--verbose` | `-v` | show command line, cwd, parent PID |
+| `--verbose` | `-v` | show command line, cwd, parent PID, uptime |
 
 ## examples
 

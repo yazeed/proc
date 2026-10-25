@@ -46,7 +46,7 @@ pub struct ByCommand {
     #[arg(long, short = 'j')]
     pub json: bool,
 
-    /// Show verbose output with command line, cwd, and parent PID
+    /// Show verbose output with command line, cwd, parent PID, and uptime
     #[arg(long, short = 'v')]
     pub verbose: bool,
 

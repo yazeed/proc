@@ -15,7 +15,7 @@ permalink: /commands
 | [by](by) | `b` | filter processes by name |
 | [in](in) | | filter processes by working directory |
 | [list](list) | `l`, `ps` | list processes |
-| [info](info) | `i` | show detailed process information |
+| [info](info) | `i`, `inspect` | show detailed process information |
 | [ports](ports) | `p` | list all listening ports |
 | [tree](tree) | `t` | show process tree |
 | [watch](watch) | `w`, `top` | real-time process monitoring |

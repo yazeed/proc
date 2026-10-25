@@ -82,6 +82,9 @@ pub struct Process {
     /// Process start time (Unix timestamp)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub start_time: Option<u64>,
+    /// Seconds the process has been running
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uptime_secs: Option<u64>,
 }
 
 impl Process {
@@ -442,6 +445,7 @@ impl Process {
             user: proc.user_id().map(user_name),
             parent_pid: proc.parent().map(|p| p.as_u32()),
             start_time: Some(proc.start_time()),
+            uptime_secs: Some(proc.run_time()),
         }
     }
 }
@@ -539,6 +543,7 @@ mod tests {
             user: None,
             parent_pid: Some(1),
             start_time: None,
+            uptime_secs: None,
         };
 
         // System daemons with cwd "/" and system exe paths
@@ -637,6 +642,7 @@ mod tests {
             user: None,
             parent_pid: None,
             start_time: None,
+            uptime_secs: None,
         };
 
         let result = proc.send_signal(Signal::SIGCONT);

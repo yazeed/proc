@@ -5,7 +5,7 @@ description: "show detailed process information."
 permalink: /commands/info
 ---
 
-detailed information about specific processes. alias: `i`.
+detailed information about specific processes. aliases: `i`, `inspect`.
 
 ```bash
 proc info :3000            # info for process on port 3000

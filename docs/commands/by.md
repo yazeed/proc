@@ -13,6 +13,8 @@ proc by python --in .      # python in current directory
 proc by node --min-cpu 5   # node using >5% CPU
 ```
 
+`by` takes one pattern, matched as a case-insensitive substring of the name or the full command line. for several patterns, use `proc list node,python`. the table includes uptime on terminals at least 100 columns wide; `--verbose` and `--json` always include it.
+
 ## options
 
 | flag | short | description |
@@ -26,7 +28,7 @@ proc by node --min-cpu 5   # node using >5% CPU
 | `--sort <key>` | `-s` | sort by: cpu, mem, pid, name (default: cpu) |
 | `--limit <n>` | `-n` | limit results |
 | `--json` | `-j` | output as JSON |
-| `--verbose` | `-v` | show command line, cwd, parent PID |
+| `--verbose` | `-v` | show command line, cwd, parent PID, uptime |
 
 ## examples
 

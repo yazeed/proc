@@ -120,7 +120,7 @@ enum Commands {
     List(ListCommand),
 
     /// Show detailed process information
-    #[command(visible_alias = "i")]
+    #[command(visible_aliases = ["i", "inspect"])]
     Info(InfoCommand),
 
     /// List all listening ports

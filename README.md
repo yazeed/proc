@@ -162,7 +162,7 @@ All commands accept the same target syntax:
 | `by <name>` | `b` | Filter processes by name |
 | `in <path>` | | Filter processes by working directory |
 | `list` | `l`, `ps` | List all processes |
-| `info <target>` | `i` | Detailed process information |
+| `info <target>` | `i`, `inspect` | Detailed process information |
 | `ports` | `p` | List all listening ports |
 | `tree` | `t` | Process hierarchy |
 | `watch` | `w`, `top` | Real-time process monitoring |

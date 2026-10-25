@@ -45,7 +45,7 @@ proc in ~/project --by node --json
 proc list --json                  # all processes
 proc list --min-cpu 10 --json     # processes using >10% CPU
 proc list --status stopped --json # frozen/stopped processes
-proc info :3000,1234 --json       # detailed info for one or more targets
+proc info :3000,1234 --json       # inspect one or more targets: full details
 proc ports --json                 # all listening ports
 proc ports --exposed --json       # only ports bound to 0.0.0.0 / ::
 proc ports --range 3000-3999 --json
@@ -55,6 +55,8 @@ proc tree 1234 --ancestors --json # path from the top ancestor down to PID 1234
 proc orphans --in . --json        # processes whose parent died (reparented to PID 1)
 proc stuck --json                 # processes >50% CPU running longer than --timeout (default 300s)
 ```
+
+To inspect a process, use `proc info` (aliases: `inspect`, `i`; JSON `action` is always `"info"`). For each target it reports the name, PID, command line, executable path, working directory, user, parent PID, status, CPU, memory, start time and uptime. `list`, `by` and `in` return the same process fields for many processes at once.
 
 ### Lifecycle (destructive — always use --yes --json)
 
@@ -119,6 +121,8 @@ For complete JSON output schemas and field definitions, see [reference.md](refer
 - Port targets must start with `:` — `proc on 3000` looks up PID 3000, not port 3000.
 - `proc free` only accepts port targets (`:3000`). Use `proc kill` for name/PID targets.
 - Name matching is substring-based: `proc by node` matches "node", "nodejs", "nodemon". Narrow with `--in` or use PIDs.
+- `proc by` takes one pattern; `proc list` takes several, comma-separated: `proc list 'git commit,pre-commit' --json`. Patterns are plain case-insensitive substrings matched against the name and the full command line, not regular expressions.
+- Uptime is `uptime_secs` in the JSON (seconds). `start_time` is a Unix timestamp, not a duration.
 - `--dry-run --json` prints `"dry_run": true` plus the `processes` that would be affected; nothing is changed.
 - `proc orphans --kill` and `proc stuck --kill` report like `proc kill` (`succeeded`/`failed`), with `action` `"orphans"`/`"stuck"`.
 - If any process fails in `kill`/`stop`/`freeze`/`thaw`/`orphans --kill`/`stuck --kill`, the exit code is 1 and `failed` lists why; the ones in `succeeded` were still acted on.

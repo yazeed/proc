@@ -26,7 +26,7 @@ proc in . --by node        # node processes in cwd
 | `--sort <key>` | `-s` | sort by: cpu, mem, pid, name (default: cpu) |
 | `--limit <n>` | `-n` | limit results |
 | `--json` | `-j` | output as JSON |
-| `--verbose` | `-v` | show command line, cwd, parent PID |
+| `--verbose` | `-v` | show command line, cwd, parent PID, uptime |
 
 ## examples
 
