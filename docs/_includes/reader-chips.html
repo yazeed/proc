@@ -1,0 +1,4 @@
+{%- comment -%} Target chips for one command. Each carries its explanation in a template. {%- endcomment -%}
+{%- for ex in include.verb.examples -%}
+<button type="button" data-target="{{ ex.t | escape }}" aria-pressed="{% if include.pressed and forloop.first %}true{% else %}false{% endif %}"{% if ex.t == "" %} class="is-none"{% endif %}>{% if ex.t == "" %}no target{% else %}{{ ex.t | escape }}{% endif %}<template>{% include reader-explain.html ex=ex %}</template></button>
+{%- endfor -%}

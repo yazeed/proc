@@ -1,0 +1,2 @@
+<p class="explain-does">{{ include.ex.text }}</p>
+<p class="explain-rule">{% if include.ex.rule %}{{ include.ex.rule }}{% else %}{{ site.data.reader.rules[include.ex.kind] }}{% endif %}</p>

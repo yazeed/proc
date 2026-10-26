@@ -7,22 +7,37 @@ description: "Semantic CLI tool for process management. Target by port, PID, nam
 
   <section class="hero" aria-labelledby="hero-title">
     <div class="hero-copy">
-      <h1 id="hero-title">Target processes by port, PID, name or path.</h1>
+      <h1 id="hero-title"><span class="hero-target">Target</span> processes by port, PID, name or path.</h1>
       <p class="hero-lede">proc is a semantic CLI tool for process management on macOS, Linux and Windows. Find what's on a port, why it's there, and stop it, in one command you'd guess on the first try.</p>
     </div>
 
+    {%- comment -%} The default command, rendered without JavaScript: kill :3000 {%- endcomment -%}
+    {%- for group in site.data.reader.groups -%}{%- for v in group.verbs -%}{%- if v.verb == "kill" -%}{%- assign default_verb = v -%}{%- endif -%}{%- endfor -%}{%- endfor -%}
+    {%- assign default_example = default_verb.examples | first -%}
     <div class="reader" data-reader>
-      <p class="reader-line" aria-live="polite"><span class="p-path">~</span><span class="p-chevron" aria-hidden="true">❯</span><span class="p-verb">proc <span data-reader-verb>kill</span></span> <span class="reader-target" data-reader-target>:3000</span></p>
-      <p class="reader-explain" data-reader-explain aria-live="polite">A leading colon means a port: proc acts on whatever is listening on <strong>3000</strong>.</p>
-      <div class="reader-choices" role="group" aria-label="Kinds of target">
-        <button type="button" data-verb="kill" data-target=":3000" aria-pressed="true">:3000<template>A leading colon means a port: proc acts on whatever is listening on <strong>3000</strong>.</template></button>
-        <button type="button" data-verb="kill" data-target="1234" aria-pressed="false">1234<template>A number is a PID: process <strong>1234</strong>, and nothing else.</template></button>
-        <button type="button" data-verb="kill" data-target="node" aria-pressed="false">node<template>Anything else is a name, matched against each process's name and full command line, so <code>node</code> also finds <code>nodemon</code> and <code>node server.js</code>.</template></button>
-        <button type="button" data-verb="kill" data-target=":3000,:8080,node" aria-pressed="false">:3000,:8080,node<template>Separate targets with commas to act on several at once. A process matched twice is only acted on once.</template></button>
-        <button type="button" data-verb="for" data-target="./server.py" aria-pressed="false">./server.py<template>With <code>proc for</code>, a path finds what's running that file or has it open.</template></button>
-        <button type="button" data-verb="in" data-target="." aria-pressed="false">.<template>With <code>proc in</code>, a directory lists everything started there, even after the folder is deleted.</template></button>
-        <button type="button" data-verb="kill" data-target="node --in ." aria-pressed="false">node --in .<template>Add <code>--in</code> to keep any target inside a folder and the folders below it: only the <code>node</code> processes started there, not every one on the machine. Most commands take it.</template></button>
+      <p class="reader-line" aria-live="polite"><span class="p-path">~</span><span class="p-chevron" aria-hidden="true">❯</span><span class="p-verb">proc</span> <span class="reader-verb" data-reader-verb>kill</span><span data-reader-gap> </span><span class="reader-target" data-reader-target>:3000</span></p>
+      <div class="reader-explain" data-reader-explain aria-live="polite">{% include reader-explain.html ex=default_example %}</div>
+      <div class="reader-picks">
+        <div class="reader-row">
+          <span class="reader-label reader-label-verb" id="reader-verbs-label">Command</span>
+          <div class="reader-choices reader-verbs" role="group" aria-labelledby="reader-verbs-label" data-reader-verbs>
+            {%- for group in site.data.reader.groups -%}
+            {%- comment -%} Discovery gets its own row; Action and Monitoring share the next {%- endcomment -%}
+            {%- if forloop.index == 2 %}<span class="reader-break" aria-hidden="true"></span>{% elsif forloop.index > 2 %}<span class="reader-sep" aria-hidden="true"></span>{% endif -%}
+            {%- for v in group.verbs -%}
+            <button type="button" data-verb="{{ v.verb }}" aria-pressed="{% if v.verb == 'kill' %}true{% else %}false{% endif %}">{{ v.verb }}</button>
+            {%- endfor -%}
+            {%- endfor -%}
+          </div>
+        </div>
+        <div class="reader-row">
+          <span class="reader-label reader-label-target" id="reader-targets-label">Target</span>
+          <div class="reader-choices reader-targets" role="group" aria-labelledby="reader-targets-label" data-reader-targets>{% include reader-chips.html verb=default_verb pressed=true %}</div>
+        </div>
       </div>
+      {%- for group in site.data.reader.groups -%}{%- for v in group.verbs %}
+      <template data-examples="{{ v.verb }}">{% include reader-chips.html verb=v %}</template>
+      {%- endfor -%}{%- endfor %}
     </div>
 
     <div class="hero-actions">

@@ -15,6 +15,7 @@
   --link: #1e5fd9;
   --link-hover: #0f43a8;
   --chevron: #c8338f;
+  --target: #a35f00; /* the reader's target yellow, darkened to 4.6:1 on paper */
   --focus: #1e5fd9;
   --mark: rgba(30, 95, 217, 0.08);
 
@@ -59,6 +60,7 @@
     --link: #89b4fa;
     --link-hover: #b4cdfc;
     --chevron: #f5c2e7;
+    --target: #f9e2af;
     --focus: #89b4fa;
     --mark: rgba(137, 180, 250, 0.1);
     --term: #11111b;
@@ -586,7 +588,15 @@ pre:hover + .copy-button,
   max-width: 38rem;
 }
 
-/* the target reader: the one loud thing on the page */
+/* "Target" in the headline wears the same yellow and underline as the target in the reader */
+.hero-target {
+  color: var(--target);
+  text-decoration: underline;
+  text-decoration-thickness: 0.07em;
+  text-underline-offset: 0.12em;
+}
+
+/* the command reader: the one loud thing on the page */
 .reader {
   background: var(--term);
   border: 1px solid var(--term-edge);
@@ -602,7 +612,7 @@ pre:hover + .copy-button,
   font-size: clamp(1.35rem, 4.2vw, 2.6rem);
   font-weight: 500;
   letter-spacing: -0.02em;
-  line-height: 1.25;
+  line-height: 1.35;
   white-space: nowrap;
   overflow-x: auto;
 }
@@ -610,42 +620,83 @@ pre:hover + .copy-button,
 .reader-line .p-path { color: var(--term-path); }
 .reader-line .p-chevron { color: var(--term-chevron); margin: 0 0.45em 0 0.35em; }
 .reader-line .p-verb { color: var(--term-text); }
+/* the two words you can change: the command in mauve, the target in yellow */
+.reader-verb,
 .reader-target {
-  color: var(--syn-type);
   border-bottom: 3px solid currentColor;
   padding-bottom: 0.04em;
 }
+.reader-verb { color: var(--syn-keyword); }
+.reader-target { color: var(--syn-type); }
 
 .reader-explain {
-  margin: 0;
-  padding: 0.75rem 1.75rem 1.5rem;
-  min-height: 4.6rem;
-  font-size: 1.08rem;
+  padding: 0.75rem 1.75rem 1.4rem;
+  min-height: 7.5rem; /* fits the longest explanation, so the chips below never jump */
+}
+.reader-explain p { margin: 0; }
+.reader-explain .explain-does {
+  font-size: 1.12rem;
+  line-height: 1.5;
+  color: var(--term-text);
+  max-width: 52rem;
+}
+.reader-explain .explain-rule {
+  margin-top: 0.45rem;
+  font-size: 0.95rem;
   line-height: 1.5;
   color: var(--term-muted);
 }
-.reader-explain strong { color: var(--term-text); }
 .reader-explain code { background: rgba(205, 214, 244, 0.08); color: var(--term-text); }
+
+.reader-picks {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1.1rem 1.75rem 1.4rem;
+  border-top: 1px solid var(--term-edge);
+}
+
+.reader-row {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0.5rem 1rem;
+}
+
+.reader-label {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+.reader-label-verb { color: var(--syn-keyword); }
+.reader-label-target { color: var(--syn-type); }
 
 .reader-choices {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  padding: 1rem 1.75rem 1.4rem;
-  border-top: 1px solid var(--term-edge);
+  gap: 0.45rem;
 }
+/* the command groups of the sidebar: Discovery on its own row, then Action, a gap, Monitoring */
+.reader-break { flex-basis: 100%; height: 0; }
+.reader-sep { width: 0.6rem; }
+/* a target such as "--signal HUP" wraps between words, never inside one */
+.reader-word { white-space: nowrap; }
 
 .reader-choices button {
-  font: 500 0.95rem/1.2 var(--font-mono);
+  font: 500 0.9rem/1.2 var(--font-mono);
   color: var(--term-muted);
   background: transparent;
   border: 1px solid var(--term-edge);
   border-radius: 999px;
-  padding: 0.45rem 0.9rem;
+  padding: 0.4rem 0.8rem;
   cursor: pointer;
 }
 .reader-choices button:hover { color: var(--term-text); border-color: var(--term-muted); }
-.reader-choices button[aria-pressed="true"] {
+.reader-choices button.is-none { font-family: var(--font-text); font-style: italic; }
+.reader-verbs button[aria-pressed="true"] {
+  color: var(--term);
+  background: var(--syn-keyword);
+  border-color: var(--syn-keyword);
+}
+.reader-targets button[aria-pressed="true"] {
   color: var(--term);
   background: var(--syn-type);
   border-color: var(--syn-type);
@@ -846,7 +897,10 @@ pre:hover + .copy-button,
   .install-line { font-size: 0.9rem; }
   /* long inline spans (error messages, pipelines) wrap instead of running off the screen */
   .prose :not(pre) > code { white-space: normal; overflow-wrap: anywhere; }
-  .reader-line, .reader-explain, .reader-choices { padding-left: 1.15rem; padding-right: 1.15rem; }
+  .reader-line, .reader-explain, .reader-picks { padding-left: 1.15rem; padding-right: 1.15rem; }
+  .reader-row { grid-template-columns: minmax(0, 1fr); }
+  .reader-explain { min-height: 13rem; }
+  .reader-explain .explain-does { font-size: 1.02rem; }
   /* let a long target wrap rather than hide behind a scroll */
   .reader-line { white-space: normal; font-size: 1.3rem; }
 }

@@ -1,4 +1,4 @@
-// proc website: copy buttons, heading anchors, sidebar scroll tracking, and the target reader on the home page.
+// proc website: copy buttons, heading anchors, sidebar scroll tracking, and the command reader on the home page.
 (function () {
   "use strict";
 
@@ -106,54 +106,104 @@
     update();
   }
 
-  // The target reader: shows how proc reads each kind of target
+  // The command reader: pick a command and a target, and read what that exact command does
   function setupReader() {
     var reader = document.querySelector("[data-reader]");
     if (!reader) return;
     var verbEl = reader.querySelector("[data-reader-verb]");
+    var gapEl = reader.querySelector("[data-reader-gap]");
     var targetEl = reader.querySelector("[data-reader-target]");
     var explainEl = reader.querySelector("[data-reader-explain]");
-    var buttons = Array.prototype.slice.call(reader.querySelectorAll("[data-target]"));
-    var current = 0;
+    var verbsEl = reader.querySelector("[data-reader-verbs]");
+    var targetsEl = reader.querySelector("[data-reader-targets]");
+    var verbButtons = Array.prototype.slice.call(verbsEl.querySelectorAll("button"));
+    var examples = {};
+    reader.querySelectorAll("template[data-examples]").forEach(function (t) {
+      examples[t.getAttribute("data-examples")] = t;
+    });
     var timer = null;
 
-    function show(i) {
-      current = i;
-      var b = buttons[i];
-      verbEl.textContent = b.getAttribute("data-verb");
-      targetEl.textContent = b.getAttribute("data-target");
-      explainEl.replaceChildren(b.querySelector("template").content.cloneNode(true));
-      buttons.forEach(function (other, j) {
-        other.setAttribute("aria-pressed", j === i ? "true" : "false");
+    function targetButtons() {
+      return Array.prototype.slice.call(targetsEl.querySelectorAll(":scope > button"));
+    }
+
+    function pickTarget(button) {
+      var target = button.getAttribute("data-target");
+      var parts = [];
+      target.split(" ").forEach(function (word, i) {
+        if (i) parts.push(" ");
+        var span = document.createElement("span");
+        span.className = "reader-word";
+        span.textContent = word;
+        parts.push(span);
       });
+      targetEl.replaceChildren.apply(targetEl, parts);
+      targetEl.hidden = gapEl.hidden = target === "";
+      explainEl.replaceChildren(button.querySelector("template").content.cloneNode(true));
+      targetButtons().forEach(function (b) {
+        b.setAttribute("aria-pressed", b === button ? "true" : "false");
+      });
+    }
+
+    // Switching command keeps the target when that command takes it, else uses its first example
+    function pickVerb(verb, wantedTarget) {
+      verbEl.textContent = verb;
+      verbButtons.forEach(function (b) {
+        b.setAttribute("aria-pressed", b.getAttribute("data-verb") === verb ? "true" : "false");
+      });
+      targetsEl.replaceChildren(examples[verb].content.cloneNode(true));
+      var buttons = targetButtons();
+      var match = buttons.filter(function (b) { return b.getAttribute("data-target") === wantedTarget; })[0];
+      pickTarget(match || buttons[0]);
     }
 
     function stop() {
       if (timer) { clearInterval(timer); timer = null; }
     }
 
-    buttons.forEach(function (b, i) {
-      b.addEventListener("click", function () { stop(); show(i); });
-    });
-    reader.addEventListener("keydown", function (e) {
-      if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+    verbsEl.addEventListener("click", function (e) {
+      var b = e.target.closest("button");
+      if (!b) return;
       stop();
-      var next = (current + (e.key === "ArrowRight" ? 1 : buttons.length - 1)) % buttons.length;
-      show(next);
-      buttons[next].focus();
+      pickVerb(b.getAttribute("data-verb"), targetEl.textContent);
+    });
+    targetsEl.addEventListener("click", function (e) {
+      var b = e.target.closest("button");
+      if (!b) return;
+      stop();
+      pickTarget(b);
     });
 
-    show(0);
+    // Arrow keys move along a row and pick as they go
+    [verbsEl, targetsEl].forEach(function (row) {
+      row.addEventListener("keydown", function (e) {
+        if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+        e.preventDefault();
+        stop();
+        var buttons = row === verbsEl ? verbButtons : targetButtons();
+        var i = buttons.indexOf(document.activeElement);
+        var next = buttons[(i + (e.key === "ArrowRight" ? 1 : buttons.length - 1)) % buttons.length];
+        next.click();
+        // picking a command rebuilds the target row, so find the button again
+        (row === verbsEl ? next : targetButtons().filter(function (b) {
+          return b.getAttribute("data-target") === next.getAttribute("data-target");
+        })[0]).focus();
+      });
+    });
 
-    // Step through the examples once, slowly, unless motion is reduced
+    pickVerb("kill", ":3000");
+
+    // One short tour of different commands, once, unless motion is reduced
     var calm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (!calm) {
-      var steps = 0;
+      var tour = [["on", ":3000"], ["why", ":3000"], ["free", ":3000"], ["stop", "node"],
+        ["freeze", "node"], ["in", "."], ["orphans", "--in ."], ["kill", ":3000"]];
+      var step = 0;
       timer = setInterval(function () {
-        steps += 1;
-        if (steps >= buttons.length) { stop(); show(0); return; }
-        show(steps);
-      }, 3600);
+        pickVerb(tour[step][0], tour[step][1]);
+        step += 1;
+        if (step >= tour.length) stop();
+      }, 3400);
       ["pointerdown", "keydown", "focusin"].forEach(function (evt) {
         reader.addEventListener(evt, stop, { once: true });
       });

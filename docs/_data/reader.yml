@@ -1,0 +1,235 @@
+# The home page command reader: pick a command, then a target, and read what that command does.
+# Every sentence is checked against proc's --help and source; see the facts list in the design note.
+# t: the target as typed ("" for none). kind: picks the rule line from `rules`, unless `rule` is given.
+
+rules:
+  port: "A leading colon means a port: proc acts on whatever is listening on it."
+  pid: "A number is a PID: that one process and nothing else."
+  name: "Anything else is a name, matched against each process's name and full command line, so <code>node</code> also finds <code>nodemon</code> and <code>node server.js</code>."
+  list: "Commas combine targets. A process matched twice is only acted on once."
+  scope: "<code>--in</code> keeps any target inside a folder and the folders below it. Most commands take it."
+  path: "With <code>proc for</code>, the target is a file: relative, absolute or starting with <code>~</code>."
+  dir: "With <code>proc in</code>, the target is a folder. <code>.</code> is the one you're in."
+  none: "No target: proc looks at every process."
+
+groups:
+  - name: Discovery
+    verbs:
+      - verb: "on"
+        examples:
+          - t: ":3000"
+            kind: port
+            text: "Shows what's listening on port 3000: its name, PID, folder, CPU, memory and how long it has been running."
+          - t: "1234"
+            kind: pid
+            text: "Works the other way too: shows process 1234 and every port it listens on."
+          - t: "node"
+            kind: name
+            text: "Shows each <code>node</code> process and the ports it listens on."
+          - t: ":3000,:8080,node"
+            kind: list
+            text: "Answers all three at once: what's on ports 3000 and 8080, and which ports the <code>node</code> processes hold."
+          - t: "node --in ."
+            kind: scope
+            text: "Shows only the <code>node</code> processes started in this folder, and their ports."
+      - verb: why
+        examples:
+          - t: ":3000"
+            kind: port
+            text: "Traces what's on port 3000 back through its parent processes, so you see what started it: a terminal tab, a tmux session, your editor."
+          - t: "1234"
+            kind: pid
+            text: "Shows the chain of parents that led to process 1234, with how long each one has been running."
+          - t: "node"
+            kind: name
+            text: "Traces every <code>node</code> process back to whatever started it."
+          - t: ":3000,:8080"
+            kind: list
+            text: "Traces what holds ports 3000 and 8080, one chain each."
+      - verb: for
+        examples:
+          - t: "./server.py"
+            kind: path
+            text: "Finds the processes running <code>server.py</code> from this folder."
+          - t: "./logs/app.log"
+            kind: path
+            text: "Finds whatever has <code>app.log</code> open, such as a server that's still writing to it."
+      - verb: by
+        examples:
+          - t: "node"
+            kind: name
+            text: "Lists every process whose name or command line matches <code>node</code>."
+          - t: "node --in ."
+            kind: scope
+            text: "The same, limited to processes started in this folder."
+      - verb: in
+        examples:
+          - t: "."
+            kind: dir
+            text: "Lists everything started in this folder or below it."
+          - t: "~/code/shop"
+            kind: dir
+            text: "Lists everything started in <code>~/code/shop</code>, wherever you run it from, even after the folder has been deleted."
+      - verb: list
+        examples:
+          - t: ""
+            kind: none
+            text: "Lists every process, busiest first."
+          - t: "node"
+            kind: name
+            text: "Lists only the processes matching <code>node</code>."
+          - t: "--status zombie"
+            rule: "Flags narrow any listing. <code>--status</code> takes running, sleeping, stopped or zombie."
+            text: "Lists zombie processes: ones that have exited but haven't been cleaned up by their parent."
+      - verb: info
+        examples:
+          - t: "1234"
+            kind: pid
+            text: "Shows everything about process 1234: folder, path, user, parent, status, CPU, memory and uptime."
+          - t: ":3000"
+            kind: port
+            text: "Shows everything about whatever is listening on port 3000."
+          - t: "node"
+            kind: name
+            text: "Shows the full details of each <code>node</code> process."
+      - verb: ports
+        examples:
+          - t: ""
+            kind: none
+            rule: "No target: proc looks at every listening port."
+            text: "Lists every listening port and the process behind it."
+          - t: "--exposed"
+            rule: "<code>--exposed</code> keeps ports listening on 0.0.0.0 or ::, and <code>--local</code> the localhost ones."
+            text: "Only the ports other machines can reach, the ones worth checking."
+          - t: "--in ."
+            kind: scope
+            text: "Only the ports held by processes started in this folder."
+      - verb: tree
+        examples:
+          - t: ""
+            kind: none
+            text: "Shows every process as a tree of parents and children."
+          - t: "node"
+            kind: name
+            text: "Shows each <code>node</code> process with the processes it started."
+          - t: "1234 --ancestors"
+            rule: "A number is a PID. <code>--ancestors</code> turns the tree upside down."
+            text: "Goes up instead of down: from process 1234 to the first process the system started."
+      - verb: orphans
+        examples:
+          - t: ""
+            kind: none
+            rule: "No target: proc looks at every process whose parent has gone."
+            text: "Finds processes whose parent has exited, like dev servers left behind by a closed terminal. System services are left out."
+          - t: "--in ."
+            kind: scope
+            text: "Only the orphans started in this folder."
+          - t: "--in . --kill"
+            rule: "<code>--kill</code> acts on what was found, and asks first like <code>proc kill</code>."
+            text: "Ends this folder's orphans, after showing the list and asking."
+      - verb: stuck
+        examples:
+          - t: ""
+            kind: none
+            text: "Finds processes that have used more than half a CPU for over 5 minutes."
+          - t: "--kill"
+            rule: "<code>--kill</code> acts on what was found, and asks first like <code>proc kill</code>."
+            text: "Ends the stuck processes, after showing the list and asking."
+  - name: Action
+    verbs:
+      - verb: kill
+        examples:
+          - t: ":3000"
+            kind: port
+            text: "Ends whatever is listening on port 3000 immediately (SIGKILL). Asks first, and <code>--dry-run</code> previews."
+          - t: "1234"
+            kind: pid
+            text: "Ends process 1234 immediately, and nothing else."
+          - t: "node"
+            kind: name
+            text: "Ends every <code>node</code> process, after listing them and asking."
+          - t: ":3000,:8080,node"
+            kind: list
+            text: "Ends all of them in one go, after one confirmation."
+          - t: "node --in ."
+            kind: scope
+            text: "Ends only this folder's <code>node</code> processes, not your editor's or another project's."
+      - verb: stop
+        examples:
+          - t: ":3000"
+            kind: port
+            text: "Asks whatever is on port 3000 to exit (SIGTERM), so it can clean up, and forces it after 10 seconds if it hasn't."
+          - t: "1234"
+            kind: pid
+            text: "Stops process 1234 the same way: politely first, by force only if needed."
+          - t: "node"
+            kind: name
+            text: "Stops every <code>node</code> process gracefully, after asking."
+          - t: "node --in ."
+            kind: scope
+            text: "Stops only the <code>node</code> processes started in this folder."
+          - t: ":3000 --signal HUP"
+            rule: "A leading colon means a port. <code>--signal</code> picks the first signal sent."
+            text: "Sends HUP instead of SIGTERM, which many servers take as “reload your config”."
+      - verb: free
+        examples:
+          - t: ":3000"
+            kind: port
+            text: "Ends whatever holds port 3000, politely and then by force, and waits until the port is really free before saying so."
+          - t: ":3000,:8080"
+            rule: "<code>proc free</code> only takes ports. Commas combine them."
+            text: "Frees both ports in one go."
+      - verb: freeze
+        examples:
+          - t: "node"
+            kind: name
+            text: "Pauses every <code>node</code> process (SIGSTOP) without ending them, until you thaw them. macOS and Linux."
+          - t: "1234"
+            kind: pid
+            text: "Pauses process 1234, handy for a heavy build while you need the machine back."
+          - t: ":3000"
+            kind: port
+            text: "Pauses whatever is on port 3000. Connections to it hang until you thaw it."
+      - verb: thaw
+        examples:
+          - t: "node"
+            kind: name
+            text: "Resumes the <code>node</code> processes you froze (SIGCONT), right where they stopped."
+          - t: "1234"
+            kind: pid
+            text: "Resumes process 1234, whether <code>proc freeze</code> or Ctrl+Z paused it."
+      - verb: unstick
+        examples:
+          - t: ""
+            kind: none
+            text: "Finds stuck processes and tries to recover them: wakes them (SIGCONT), then interrupts them like Ctrl+C. Nothing is ended without <code>--force</code>."
+          - t: "1234"
+            kind: pid
+            text: "Tries to recover process 1234 the same gentle way, if it's stuck."
+          - t: "node --force"
+            rule: "Anything else is a name. <code>--force</code> allows ending it as a last resort."
+            text: "If gentle recovery fails, ends the stuck <code>node</code> processes (SIGTERM, then SIGKILL)."
+  - name: Monitoring
+    verbs:
+      - verb: watch
+        examples:
+          - t: ""
+            kind: none
+            text: "A live table of every process, busiest first, refreshed every 2 seconds. Press q to quit."
+          - t: "node"
+            kind: name
+            text: "Watches only the <code>node</code> processes."
+          - t: ":3000"
+            kind: port
+            text: "Watches whatever is on port 3000."
+      - verb: wait
+        examples:
+          - t: ":3000"
+            kind: port
+            text: "Waits until whatever is on port 3000 has exited, so a script can start the next server."
+          - t: "1234"
+            kind: pid
+            text: "Waits until process 1234 exits."
+          - t: "node --timeout 60"
+            rule: "Anything else is a name. <code>--timeout</code> gives up after that many seconds and exits 1."
+            text: "Gives up after 60 seconds if the <code>node</code> processes are still running, so CI doesn't hang."
