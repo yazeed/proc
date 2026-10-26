@@ -13,6 +13,8 @@ proc why node      # show ancestry of node processes
 proc why 1234      # show ancestry of PID 1234
 ```
 
+each step of the chain shows how long that process has been running (`up 2d 4h`), so a long-lived parent such as a forgotten `tmux` session stands out; `--json` includes `uptime_secs`.
+
 ## options
 
 | flag | short | description |

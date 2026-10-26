@@ -22,9 +22,6 @@
   "bin": {
     "proc": "run.js"
   },
-  "scripts": {
-    "postinstall": "node install.js"
-  },
   "engines": {
     "node": ">=14"
   },

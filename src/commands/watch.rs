@@ -12,7 +12,7 @@ use crate::core::{
     parse_target, resolve_in_dir, sort_processes, Process, ProcessStatus, SortKey, TargetType,
 };
 use crate::error::Result;
-use crate::ui::format::{format_memory, truncate_string};
+use crate::ui::format::{format_duration, format_memory, truncate_string};
 use clap::{Args, ValueEnum};
 use comfy_table::presets::NOTHING;
 use comfy_table::{Attribute, Cell, CellAlignment, Color, ContentArrangement, Table};
@@ -392,6 +392,10 @@ impl WatchCommand {
                     output.push_str(&format!("    cwd: {}", cwd));
                     output.push('\n');
                 }
+                if let Some(uptime) = proc.uptime_secs {
+                    output.push_str(&format!("    uptime: {}", format_duration(uptime)));
+                    output.push('\n');
+                }
                 output.push('\n');
             }
         } else {
@@ -402,7 +406,11 @@ impl WatchCommand {
                 .set_content_arrangement(ContentArrangement::Dynamic)
                 .set_width(width);
 
-            table.set_header(vec![
+            // UPTIME only fits next to a readable ARGS column on wider terminals,
+            // the same rule as the other process tables
+            let show_uptime = width >= 100;
+
+            let mut header = vec![
                 Cell::new("PID")
                     .fg(Color::Blue)
                     .add_attribute(Attribute::Bold),
@@ -423,11 +431,22 @@ impl WatchCommand {
                     .fg(Color::Blue)
                     .add_attribute(Attribute::Bold)
                     .set_alignment(CellAlignment::Right),
+            ];
+            if show_uptime {
+                header.push(
+                    Cell::new("UPTIME")
+                        .fg(Color::Blue)
+                        .add_attribute(Attribute::Bold)
+                        .set_alignment(CellAlignment::Right),
+                );
+            }
+            header.push(
                 Cell::new("STATUS")
                     .fg(Color::Blue)
                     .add_attribute(Attribute::Bold)
                     .set_alignment(CellAlignment::Right),
-            ]);
+            );
+            table.set_header(header);
 
             use comfy_table::ColumnConstraint::*;
             use comfy_table::Width::*;
@@ -458,8 +477,17 @@ impl WatchCommand {
                 .column_mut(5)
                 .expect("MEM column")
                 .set_constraint(Absolute(Fixed(11)));
+            let status_column = if show_uptime {
+                table
+                    .column_mut(6)
+                    .expect("UPTIME column")
+                    .set_constraint(Absolute(Fixed(10))); // 8 content — fits "999d 23h"
+                7
+            } else {
+                6
+            };
             table
-                .column_mut(6)
+                .column_mut(status_column)
                 .expect("STATUS column")
                 .set_constraint(Absolute(Fixed(12)));
 
@@ -510,7 +538,7 @@ impl WatchCommand {
                     _ => Color::White,
                 };
 
-                table.add_row(vec![
+                let mut row = vec![
                     Cell::new(proc.pid).fg(Color::Cyan),
                     Cell::new(&path_display).fg(Color::DarkGrey),
                     Cell::new(&proc.name).fg(Color::White),
@@ -518,10 +546,20 @@ impl WatchCommand {
                     Cell::new(format!("{:.1}", proc.cpu_percent))
                         .set_alignment(CellAlignment::Right),
                     Cell::new(&mem_display).set_alignment(CellAlignment::Right),
+                ];
+                if show_uptime {
+                    let uptime_display = proc
+                        .uptime_secs
+                        .map(format_duration)
+                        .unwrap_or_else(|| "-".to_string());
+                    row.push(Cell::new(uptime_display).set_alignment(CellAlignment::Right));
+                }
+                row.push(
                     Cell::new(&status_str)
                         .fg(status_color)
                         .set_alignment(CellAlignment::Right),
-                ]);
+                );
+                table.add_row(row);
             }
 
             output.push_str(&table.to_string());

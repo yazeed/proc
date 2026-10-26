@@ -145,6 +145,7 @@ impl UnstickCommand {
                         .map(|p| ProcessOutcome {
                             pid: p.pid,
                             name: p.name.clone(),
+                            uptime_secs: p.uptime_secs,
                             outcome: "would_attempt".to_string(),
                         })
                         .collect(),
@@ -260,6 +261,7 @@ impl UnstickCommand {
                     .map(|(p, o)| ProcessOutcome {
                         pid: p.pid,
                         name: p.name.clone(),
+                        uptime_secs: p.uptime_secs,
                         outcome: match o {
                             Outcome::Recovered => "recovered".to_string(),
                             Outcome::Terminated => "terminated".to_string(),
@@ -497,5 +499,7 @@ struct UnstickOutput {
 struct ProcessOutcome {
     pid: u32,
     name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    uptime_secs: Option<u64>,
     outcome: String,
 }

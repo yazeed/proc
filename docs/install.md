@@ -115,6 +115,8 @@ Or, in Claude Code, as a plugin:
 /plugin install proc-cli@proc-cli
 ```
 
+see [agent skill](skill) for what it teaches, updating, and prompts to try.
+
 ## shell completions
 
 ```bash

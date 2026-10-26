@@ -11,7 +11,7 @@ use crate::core::{
     ProcessStatus, Protocol, TargetType,
 };
 use crate::error::{ExitCode, ProcError, Result};
-use crate::ui::Printer;
+use crate::ui::{uptime_label, Printer};
 use clap::Args;
 use colored::*;
 use serde::Serialize;
@@ -95,6 +95,7 @@ impl WhyCommand {
                             command: proc.command.clone(),
                             cwd: proc.cwd.clone(),
                             status: proc.status,
+                            uptime_secs: proc.uptime_secs,
                         },
                         ports,
                         ancestry: chain,
@@ -167,6 +168,7 @@ impl WhyCommand {
                     command: proc.command.clone(),
                     cwd: proc.cwd.clone(),
                     status: proc.status,
+                    uptime_secs: proc.uptime_secs,
                     is_target: proc.pid == target.pid,
                 });
                 current_pid = proc.parent_pid;
@@ -237,13 +239,14 @@ impl WhyCommand {
                     format!(" {}", cmd_summary)
                 };
                 println!(
-                    "{}{}{} {} [{}]{}  {}",
+                    "{}{}{} {} [{}]{}{}  {}",
                     indent.bright_black(),
                     connector.bright_black(),
                     status_indicator,
                     proc.name.cyan().bold(),
                     proc.pid.to_string().cyan().bold(),
                     cmd_part,
+                    uptime_label(proc.uptime_secs).bright_black(),
                     "← target".yellow()
                 );
                 // Show working directory for the target
@@ -262,13 +265,14 @@ impl WhyCommand {
                     format!(" {}", cmd_summary)
                 };
                 println!(
-                    "{}{}{} {} [{}]{}",
+                    "{}{}{} {} [{}]{}{}",
                     indent.bright_black(),
                     connector.bright_black(),
                     status_indicator,
                     proc.name.white(),
                     proc.pid.to_string().cyan(),
-                    cmd_part.bright_black()
+                    cmd_part.bright_black(),
+                    uptime_label(proc.uptime_secs).bright_black()
                 );
             }
         }
@@ -304,6 +308,8 @@ struct WhyProcessInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     cwd: Option<String>,
     status: ProcessStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    uptime_secs: Option<u64>,
 }
 
 #[derive(Serialize)]
@@ -315,5 +321,7 @@ struct AncestryEntry {
     #[serde(skip_serializing_if = "Option::is_none")]
     cwd: Option<String>,
     status: ProcessStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    uptime_secs: Option<u64>,
     is_target: bool,
 }

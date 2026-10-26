@@ -14,6 +14,8 @@ proc tree :3000            # tree from port 3000's process
 proc tree 1234 --ancestors # path up to root
 ```
 
+each line shows the process's status, name, PID, CPU, memory and uptime (`up 3m 12s`); `--json` includes `uptime_secs`.
+
 ## options
 
 | flag | short | description |

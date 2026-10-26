@@ -10,10 +10,10 @@
 
 use crate::core::{
     matches_by_filter, parse_target, resolve_in_dir, resolve_target, Process, ProcessStatus,
-    TargetType,
+    StatusFilter, TargetType,
 };
 use crate::error::Result;
-use crate::ui::{format_memory, plural, Printer};
+use crate::ui::{format_memory, plural, uptime_label, Printer};
 use clap::Args;
 use colored::*;
 use serde::Serialize;
@@ -55,8 +55,8 @@ pub struct TreeCommand {
     min_mem: Option<f64>,
 
     /// Filter by status: running, sleeping, stopped, zombie
-    #[arg(long)]
-    status: Option<String>,
+    #[arg(long, value_enum, ignore_case = true)]
+    status: Option<StatusFilter>,
 
     /// Only show processes running longer than this (seconds)
     #[arg(long)]
@@ -193,15 +193,8 @@ impl TreeCommand {
                     return false;
                 }
             }
-            if let Some(ref status) = self.status {
-                let status_match = match status.to_lowercase().as_str() {
-                    "running" => matches!(p.status, ProcessStatus::Running),
-                    "sleeping" | "sleep" => matches!(p.status, ProcessStatus::Sleeping),
-                    "stopped" | "stop" => matches!(p.status, ProcessStatus::Stopped),
-                    "zombie" => matches!(p.status, ProcessStatus::Zombie),
-                    _ => true,
-                };
-                if !status_match {
+            if let Some(status) = self.status {
+                if !status.matches(p.status) {
                     return false;
                 }
             }
@@ -348,14 +341,15 @@ impl TreeCommand {
             };
 
             println!(
-                "{}{}{} {} [{}] {:.1}% {}",
+                "{}{}{} {} [{}] {:.1}% {}{}",
                 prefix.bright_black(),
                 connector.bright_black(),
                 status_indicator,
                 proc.name.white().bold(),
                 proc.pid.to_string().cyan(),
                 proc.cpu_percent,
-                format_memory(proc.memory_mb)
+                format_memory(proc.memory_mb),
+                uptime_label(proc.uptime_secs).bright_black()
             );
         }
 
@@ -401,6 +395,7 @@ impl TreeCommand {
             cpu_percent: proc.cpu_percent,
             memory_mb: proc.memory_mb,
             status: proc.status,
+            uptime_secs: proc.uptime_secs,
             children,
         }
     }
@@ -497,7 +492,7 @@ impl TreeCommand {
             if is_target {
                 // Highlight the target
                 println!(
-                    "{}{}{} {} [{}] {:.1}% {}  {}",
+                    "{}{}{} {} [{}] {:.1}% {}{}  {}",
                     indent.bright_black(),
                     connector.bright_black(),
                     status_indicator,
@@ -505,18 +500,20 @@ impl TreeCommand {
                     proc.pid.to_string().cyan().bold(),
                     proc.cpu_percent,
                     format_memory(proc.memory_mb),
+                    uptime_label(proc.uptime_secs).bright_black(),
                     "← target".yellow()
                 );
             } else {
                 println!(
-                    "{}{}{} {} [{}] {:.1}% {}",
+                    "{}{}{} {} [{}] {:.1}% {}{}",
                     indent.bright_black(),
                     connector.bright_black(),
                     status_indicator,
                     proc.name.white(),
                     proc.pid.to_string().cyan(),
                     proc.cpu_percent,
-                    format_memory(proc.memory_mb)
+                    format_memory(proc.memory_mb),
+                    uptime_label(proc.uptime_secs).bright_black()
                 );
             }
         }
@@ -539,6 +536,7 @@ impl TreeCommand {
                     cpu_percent: proc.cpu_percent,
                     memory_mb: proc.memory_mb,
                     status: proc.status,
+                    uptime_secs: proc.uptime_secs,
                 });
                 current_pid = proc.parent_pid;
                 if chain.len() > 100 {
@@ -582,6 +580,8 @@ struct ProcessInfo {
     cpu_percent: f32,
     memory_mb: f64,
     status: ProcessStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    uptime_secs: Option<u64>,
 }
 
 #[derive(Serialize)]
@@ -598,5 +598,7 @@ struct TreeNode {
     cpu_percent: f32,
     memory_mb: f64,
     status: ProcessStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    uptime_secs: Option<u64>,
     children: Vec<TreeNode>,
 }

@@ -206,9 +206,8 @@ async function install(binDir) {
   return binPath;
 }
 
-// postinstall entry point (npm 12+ skips install scripts by default;
-// run.js then installs on first use instead). A failure here does not fail
-// `npm install`: run.js retries, and reports any error, on first use.
+// The package has no install script: run.js downloads the binary on first use.
+// `node install.js` still pre-downloads it, e.g. for an image that runs offline.
 if (require.main === module) {
   install(__dirname)
     .then(() => console.error("Done!"))

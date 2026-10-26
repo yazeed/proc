@@ -86,6 +86,37 @@ fn in_missing_directory_is_invalid_input() {
 }
 
 #[test]
+fn unknown_status_filter_is_invalid_input() {
+    // A typo must not silently match every process
+    for cmd in ["list", "tree"] {
+        let (json, code) = run_json(&[cmd, "--status", "stoped", "--json"]);
+        assert_eq!(code, 4, "{cmd}: {json}");
+        assert_eq!(json["action"], cmd);
+        assert!(json["error"].as_str().unwrap().contains("stoped"));
+    }
+    let (_, code) = run_json(&["list", "--status", "STOP", "--json"]);
+    assert_eq!(code, 0, "aliases and any case still work");
+}
+
+#[test]
+fn no_process_has_been_up_longer_than_the_machine() {
+    // A start time that can't be read must not turn into "up since 1970"
+    let boot_uptime = sysinfo::System::uptime();
+    let (json, code) = run_json(&["list", "--json"]);
+    assert_eq!(code, 0);
+    for p in json["processes"].as_array().unwrap() {
+        if let Some(uptime) = p["uptime_secs"].as_u64() {
+            assert!(
+                uptime <= boot_uptime + 5,
+                "{} (PID {}) reports {uptime}s, but the system has been up {boot_uptime}s",
+                p["name"],
+                p["pid"]
+            );
+        }
+    }
+}
+
+#[test]
 fn info_not_found_exits_not_found() {
     let (json, code) = run_json(&["info", MISSING_PID, "--json"]);
     assert_eq!(code, 2);
@@ -157,6 +188,49 @@ mod unix {
         // The sleeper was just spawned, and uptime agrees with start_time
         assert!(uptime < 60, "uptime_secs = {uptime}");
         assert!(now.saturating_sub(start).abs_diff(uptime) <= 2);
+    }
+
+    #[test]
+    fn every_process_view_reports_uptime() {
+        let sleeper = Sleeper::spawn();
+        let pid = sleeper.pid();
+        let has_uptime = |v: &Value, what: &str| {
+            assert!(v["uptime_secs"].as_u64().is_some(), "{what}: {v}");
+        };
+
+        let (tree, _) = run_json(&["tree", &pid, "--json"]);
+        has_uptime(&tree["tree"][0], "tree node");
+
+        // Ancestors owned by other users (PID 1 on macOS) have no readable
+        // start time, so check the sleeper's own entry in each chain
+        let own_entry = |chain: &Value| -> Value {
+            chain
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|e| e["pid"].as_u64() == Some(u64::from(sleeper.0.id())))
+                .cloned()
+                .unwrap_or_else(|| panic!("sleeper not in chain: {chain}"))
+        };
+
+        let (ancestors, _) = run_json(&["tree", &pid, "--ancestors", "--json"]);
+        has_uptime(
+            &own_entry(&ancestors["ancestry"][0]["chain"]),
+            "tree --ancestors chain entry",
+        );
+
+        let (why, _) = run_json(&["why", &pid, "--json"]);
+        has_uptime(&why["results"][0]["process"], "why process");
+        has_uptime(
+            &own_entry(&why["results"][0]["ancestry"]),
+            "why ancestry entry",
+        );
+
+        let (unstick, _) = run_json(&["unstick", &pid, "--dry-run", "--json"]);
+        has_uptime(&unstick["processes"][0], "unstick process");
+
+        let (on, _) = run_json(&["on", &pid, "--json"]);
+        has_uptime(&on["process"], "on <pid> process");
     }
 
     #[test]
@@ -338,5 +412,20 @@ mod linux {
 
         tx.send(()).unwrap();
         worker.join().unwrap();
+    }
+}
+
+#[cfg(windows)]
+mod windows {
+    use super::*;
+
+    #[test]
+    fn stop_signal_is_rejected_on_windows() {
+        // Windows has no signals; --signal must not quietly become a normal stop
+        let pid = std::process::id().to_string();
+        let (json, code) = run_json(&["stop", &pid, "--signal", "HUP", "--dry-run", "--json"]);
+        assert_eq!(code, 4, "{json}");
+        assert_eq!(json["action"], "stop");
+        assert!(json["error"].as_str().unwrap().contains("Windows"));
     }
 }

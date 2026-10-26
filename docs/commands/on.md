@@ -14,6 +14,8 @@ proc on 1234           # what ports is PID 1234 using?
 proc on :3000,:8080    # multiple targets
 ```
 
+every view shows the process's directory and uptime.
+
 ## options
 
 | flag | short | description |

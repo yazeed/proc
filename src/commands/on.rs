@@ -354,11 +354,7 @@ impl OnCommand {
                 format_memory(proc.memory_mb)
             );
 
-            if let Some(start_time) = proc.start_time {
-                let uptime = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_secs().saturating_sub(start_time))
-                    .unwrap_or(0);
+            if let Some(uptime) = proc.uptime_secs {
                 println!("  {} {}", "Uptime:".bright_black(), format_duration(uptime));
             }
 
@@ -396,9 +392,14 @@ impl OnCommand {
             }
         }
 
-        if let Some(ref cwd) = process.cwd {
+        if process.cwd.is_some() || process.uptime_secs.is_some() {
             println!();
+        }
+        if let Some(ref cwd) = process.cwd {
             println!("  {} {}", "Directory:".bright_black(), cwd);
+        }
+        if let Some(uptime) = process.uptime_secs {
+            println!("  {} {}", "Uptime:".bright_black(), format_duration(uptime));
         }
 
         if self.verbose {

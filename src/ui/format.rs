@@ -20,6 +20,14 @@ pub fn format_duration(secs: u64) -> String {
     }
 }
 
+/// Uptime as a trailing label for one-line process views (tree, why):
+/// `"  up 3m 12s"`, or empty when unknown.
+pub fn uptime_label(uptime_secs: Option<u64>) -> String {
+    uptime_secs
+        .map(|secs| format!("  up {}", format_duration(secs)))
+        .unwrap_or_default()
+}
+
 /// Return "es" for plural process counts, "" for singular.
 ///
 /// Usage: `format!("{} process{}", n, plural(n))` → "1 process" or "3 processes"

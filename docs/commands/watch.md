@@ -16,6 +16,8 @@ proc watch :3000           # watch process on port
 
 press `q`, `Esc`, or `Ctrl+C` to exit. terminal is always restored cleanly.
 
+the table has the same columns as `proc list`, including uptime on terminals at least 100 columns wide.
+
 ## options
 
 | flag | short | description |

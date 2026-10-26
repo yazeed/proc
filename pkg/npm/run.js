@@ -7,9 +7,9 @@ const { install, binaryPath, cacheDir } = require("./install.js");
 /**
  * Find the proc binary, installing it on first use if needed.
  *
- * npm 12+ does not run postinstall scripts by default, so the binary may
- * not exist yet. Prefer the package directory; fall back to a per-user
- * cache directory when the package directory is not writable.
+ * The package has no install script, so the first run downloads the binary.
+ * Prefer the package directory; fall back to a per-user cache directory when
+ * the package directory is not writable.
  */
 async function resolveBinary() {
   for (const dir of [__dirname, cacheDir()]) {

@@ -7,10 +7,10 @@
 //!   proc for ~/bin/myapp         # Tilde expansion
 
 use crate::core::{
-    find_ports_for_pid, resolve_in_dir, sort_processes, PortInfo, Process, ProcessStatus, SortKey,
+    find_ports_for_pid, resolve_in_dir, sort_processes, PortInfo, Process, SortKey, StatusFilter,
 };
 use crate::error::{ProcError, Result};
-use crate::ui::{format_memory, truncate_string, Printer};
+use crate::ui::{format_duration, format_memory, Printer};
 use clap::Args;
 use colored::*;
 use serde::Serialize;
@@ -40,8 +40,8 @@ pub struct ForCommand {
     pub min_mem: Option<f64>,
 
     /// Filter by status: running, sleeping, stopped, zombie
-    #[arg(long)]
-    pub status: Option<String>,
+    #[arg(long, value_enum, ignore_case = true)]
+    pub status: Option<StatusFilter>,
 
     /// Only show processes running longer than this (seconds)
     #[arg(long)]
@@ -193,15 +193,8 @@ impl ForCommand {
             }
 
             // Status filter
-            if let Some(ref status) = self.status {
-                let status_match = match status.to_lowercase().as_str() {
-                    "running" => matches!(p.status, ProcessStatus::Running),
-                    "sleeping" | "sleep" => matches!(p.status, ProcessStatus::Sleeping),
-                    "stopped" | "stop" => matches!(p.status, ProcessStatus::Stopped),
-                    "zombie" => matches!(p.status, ProcessStatus::Zombie),
-                    _ => true,
-                };
-                if !status_match {
+            if let Some(status) = self.status {
+                if !status.matches(p.status) {
                     return false;
                 }
             }
@@ -240,94 +233,74 @@ impl ForCommand {
             );
             println!();
 
-            println!("  {}", "Process:".bright_black());
+            // Same labels and order as `proc on :port`
             println!(
-                "    {} {} (PID {})",
-                "Name:".bright_black(),
+                "  {} {} (PID {})",
+                "Process:".bright_black(),
                 proc.name.white().bold(),
                 proc.pid.to_string().cyan()
             );
-            println!("    {} {:.1}%", "CPU:".bright_black(), proc.cpu_percent);
+            if let Some(ref cwd) = proc.cwd {
+                println!("  {} {}", "Directory:".bright_black(), cwd);
+            }
+            if let Some(ref path) = proc.exe_path {
+                println!("  {} {}", "Path:".bright_black(), path.bright_black());
+            }
+            for port_info in ports {
+                let addr = port_info.address.as_deref().unwrap_or("*");
+                println!(
+                    "  {} :{} ({} on {})",
+                    "Listening:".bright_black(),
+                    port_info.port.to_string().cyan(),
+                    format!("{:?}", port_info.protocol).to_uppercase(),
+                    addr
+                );
+            }
             println!(
-                "    {} {}",
-                "MEM:".bright_black(),
+                "  {} {:.1}% CPU, {}",
+                "Resources:".bright_black(),
+                proc.cpu_percent,
                 format_memory(proc.memory_mb)
             );
-
-            if let Some(ref path) = proc.exe_path {
-                println!("    {} {}", "Path:".bright_black(), path.bright_black());
+            if let Some(uptime) = proc.uptime_secs {
+                println!("  {} {}", "Uptime:".bright_black(), format_duration(uptime));
             }
-
             if self.verbose {
-                if let Some(ref cwd) = proc.cwd {
-                    println!("    {} {}", "CWD:".bright_black(), cwd.bright_black());
-                }
                 if let Some(ref cmd) = proc.command {
-                    println!("    {} {}", "Command:".bright_black(), cmd.bright_black());
+                    println!("  {} {}", "Command:".bright_black(), cmd.bright_black());
                 }
             }
-
             println!();
+        } else {
+            // Multiple processes: the standard process table, then who listens where
+            let processes: Vec<Process> = results.iter().map(|(p, _)| p.clone()).collect();
+            Printer::from_flags(false, self.verbose).print_processes_as(
+                "for",
+                &processes,
+                Some(&format!("for {}", file_display)),
+            );
 
-            if ports.is_empty() {
-                println!("  {} No listening ports", "ℹ".blue());
-            } else {
-                println!("  {}", "Listening Ports:".bright_black());
-                for port_info in ports {
+            let listening: Vec<_> = results
+                .iter()
+                .flat_map(|(proc, ports)| ports.iter().map(move |p| (proc, p)))
+                .collect();
+            if !listening.is_empty() {
+                println!("  {}", "Listening:".bright_black());
+                for (proc, port_info) in listening {
                     let addr = port_info.address.as_deref().unwrap_or("*");
                     println!(
-                        "    {} :{} ({} on {})",
+                        "    {} :{} ({} on {})  {} [PID {}]",
                         "→".bright_black(),
                         port_info.port.to_string().cyan(),
                         format!("{:?}", port_info.protocol).to_uppercase(),
-                        addr
+                        addr,
+                        proc.name.white(),
+                        proc.pid.to_string().cyan()
                     );
                 }
-            }
-        } else {
-            // Multiple processes - table view
-            println!(
-                "{} Found {} processes for {}",
-                "✓".green().bold(),
-                count.to_string().white().bold(),
-                file_display.cyan().bold()
-            );
-            println!();
-
-            // Header
-            println!(
-                "  {:>7}  {:<15}  {:>5}  {:>8}  {}",
-                "PID".bright_black(),
-                "NAME".bright_black(),
-                "CPU%".bright_black(),
-                "MEM".bright_black(),
-                "PORTS".bright_black()
-            );
-            println!("  {}", "─".repeat(60).bright_black());
-
-            for (proc, ports) in results {
-                let ports_str = if ports.is_empty() {
-                    "-".to_string()
-                } else {
-                    ports
-                        .iter()
-                        .map(|p| format!(":{}", p.port))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                };
-
-                println!(
-                    "  {:>7}  {:<15}  {:>5.1}  {:>8}  {}",
-                    proc.pid.to_string().cyan(),
-                    truncate_string(&proc.name, 15).white(),
-                    proc.cpu_percent,
-                    format_memory(proc.memory_mb),
-                    ports_str
-                );
+                println!();
             }
         }
-
-        println!();
     }
 
     fn print_json(&self, results: &[(Process, Vec<PortInfo>)]) -> Result<()> {

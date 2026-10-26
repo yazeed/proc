@@ -10,7 +10,7 @@ pub mod target;
 
 pub use filters::{
     apply_filters, matches_by_filter, matches_in_filter, resolve_in_dir, sort_processes,
-    PortSortKey, SortKey,
+    PortSortKey, SortKey, StatusFilter,
 };
 pub use port::{parse_port, PortInfo, Protocol};
 #[cfg(unix)]

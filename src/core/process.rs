@@ -466,8 +466,10 @@ impl Process {
             status: ProcessStatus::from(proc.status()),
             user: proc.user_id().map(user_name),
             parent_pid: proc.parent().map(|p| p.as_u32()),
-            start_time: Some(proc.start_time()),
-            uptime_secs: Some(proc.run_time()),
+            // sysinfo reports 0 when it can't read the start time (on macOS, any
+            // other user's process), which would make the uptime about 56 years
+            start_time: (proc.start_time() > 0).then(|| proc.start_time()),
+            uptime_secs: (proc.start_time() > 0).then(|| proc.run_time()),
         }
     }
 }

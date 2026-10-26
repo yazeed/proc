@@ -2,9 +2,38 @@
 //!
 //! Provides common filter resolution logic to avoid duplication.
 
-use crate::core::Process;
+use crate::core::{Process, ProcessStatus};
 use clap::ValueEnum;
 use std::path::PathBuf;
+
+/// Values accepted by `--status`. An unknown value is a usage error (exit 4),
+/// not a filter that silently matches everything.
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum StatusFilter {
+    /// Running on a CPU
+    Running,
+    /// Waiting (idle, blocked on I/O)
+    #[value(alias = "sleep")]
+    Sleeping,
+    /// Paused (e.g. by `proc freeze` or Ctrl+Z)
+    #[value(alias = "stop")]
+    Stopped,
+    /// Exited, but not yet reaped by its parent
+    Zombie,
+}
+
+impl StatusFilter {
+    /// Whether a process with this status passes the filter
+    pub fn matches(self, status: ProcessStatus) -> bool {
+        matches!(
+            (self, status),
+            (StatusFilter::Running, ProcessStatus::Running)
+                | (StatusFilter::Sleeping, ProcessStatus::Sleeping)
+                | (StatusFilter::Stopped, ProcessStatus::Stopped)
+                | (StatusFilter::Zombie, ProcessStatus::Zombie)
+        )
+    }
+}
 
 /// Sort key for process commands (list, by, in, for)
 #[derive(Debug, Clone, Copy, ValueEnum)]

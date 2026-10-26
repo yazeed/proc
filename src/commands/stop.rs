@@ -67,6 +67,14 @@ impl StopCommand {
         } else {
             None
         };
+        // Windows has no signals: say so rather than quietly sending a normal stop
+        #[cfg(not(unix))]
+        if self.signal.is_some() {
+            return Err(ProcError::InvalidInput(
+                "--signal is not supported on Windows (proc stop asks the process to exit)"
+                    .to_string(),
+            ));
+        }
 
         // Parse comma-separated targets and resolve to processes
         // Use resolve_targets_excluding_self to avoid stopping ourselves

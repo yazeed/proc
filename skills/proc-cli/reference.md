@@ -48,7 +48,7 @@ Every process in JSON output follows this shape:
 
 Fields `exe_path`, `cwd`, `command`, `user`, `parent_pid`, `start_time`, `uptime_secs` are omitted when unavailable.
 `user` is the user name; it falls back to the numeric user ID when the ID has no name on the system.
-`start_time` is a Unix timestamp; `uptime_secs` is how long the process has been running, in seconds.
+`start_time` is a Unix timestamp; `uptime_secs` is how long the process has been running, in seconds. Both are left out when the start time can't be read (on macOS, processes owned by other users), and `--min-uptime` never matches those processes.
 Status is one of: `running`, `sleeping`, `stopped`, `zombie`, `dead`, `unknown` — the same lowercase values everywhere, including `why` and `tree`.
 
 ## Port Object
@@ -250,7 +250,7 @@ On timeout: `success` is `false`, `timed_out` is `true`, `still_running` lists r
   "terminated": 0,
   "failed": 0,
   "processes": [
-    {"pid": 1234, "name": "node", "outcome": "recovered"}
+    {"pid": 1234, "name": "node", "uptime_secs": 3600, "outcome": "recovered"}
   ]
 }
 ```
@@ -282,13 +282,14 @@ Newline-delimited JSON, one object per refresh (`-n` seconds, default 2), until 
       "name": "node",
       "command": "node server.js",
       "cwd": "/home/user/project",
-      "status": "running"
+      "status": "running",
+      "uptime_secs": 3600
     },
     "ports": [<Port>, ...],
     "ancestry": [
-      {"pid": 1, "name": "launchd", "status": "running", "is_target": false},
-      {"pid": 500, "name": "zsh", "status": "sleeping", "is_target": false},
-      {"pid": 1234, "name": "node", "command": "node server.js", "cwd": "/home/user/project", "status": "running", "is_target": true}
+      {"pid": 1, "name": "launchd", "status": "running", "uptime_secs": 864000, "is_target": false},
+      {"pid": 500, "name": "zsh", "status": "sleeping", "uptime_secs": 7200, "is_target": false},
+      {"pid": 1234, "name": "node", "command": "node server.js", "cwd": "/home/user/project", "status": "running", "uptime_secs": 3600, "is_target": true}
     ]
   }
   ]
@@ -308,6 +309,7 @@ Newline-delimited JSON, one object per refresh (`-n` seconds, default 2), until 
       "cpu_percent": 0.0,
       "memory_mb": 10.0,
       "status": "running",
+      "uptime_secs": 864000,
       "children": [...]
     }
   ]
@@ -326,9 +328,9 @@ Newline-delimited JSON, one object per refresh (`-n` seconds, default 2), until 
       "target_name": "node",
       "depth": 3,
       "chain": [
-        {"pid": 1, "name": "launchd", "cpu_percent": 0.0, "memory_mb": 10.0, "status": "running"},
-        {"pid": 500, "name": "zsh", "cpu_percent": 0.0, "memory_mb": 2.0, "status": "sleeping"},
-        {"pid": 1234, "name": "node", "cpu_percent": 1.2, "memory_mb": 80.0, "status": "running"}
+        {"pid": 1, "name": "launchd", "cpu_percent": 0.0, "memory_mb": 10.0, "status": "running", "uptime_secs": 864000},
+        {"pid": 500, "name": "zsh", "cpu_percent": 0.0, "memory_mb": 2.0, "status": "sleeping", "uptime_secs": 7200},
+        {"pid": 1234, "name": "node", "cpu_percent": 1.2, "memory_mb": 80.0, "status": "running", "uptime_secs": 3600}
       ]
     }
   ]

@@ -197,13 +197,13 @@ For complete JSON output schemas and field definitions, see [reference.md](refer
 - `proc free` only accepts port targets (`:3000`). Use `proc kill` for name/PID targets.
 - Name matching is substring-based: `proc by node` matches "node", "nodejs", "nodemon". Narrow with `--in` or use PIDs.
 - `proc by` takes one pattern; `proc list` takes several, comma-separated: `proc list 'git commit,pre-commit' --json`. Patterns are plain case-insensitive substrings matched against the name and the full command line, not regular expressions.
-- Uptime is `uptime_secs` in the JSON (seconds). `start_time` is a Unix timestamp, not a duration.
+- Uptime is `uptime_secs` in the JSON (seconds), on every process in every command (since 1.14.5 also in `tree`, `why` and `unstick`). `start_time` is a Unix timestamp, not a duration. In human output, process tables show an UPTIME column on terminals 100+ columns wide, and `tree` and `why` show `up 3m 12s` on each line.
 - Processes can keep running in a directory that was deleted (a removed worktree, say), and they're often the leftovers you're looking for. From proc 1.14.1, `proc in <dir>` lists them and `cwd` shows the plain path. In 1.14.0 and earlier, `proc in <dir>` rejects a deleted directory with exit 4, so use `proc list --in <dir>` or `proc orphans --in <dir>` there (on macOS; on Linux those versions miss them, because the kernel reports their cwd as `<dir> (deleted)`).
 - `--dry-run --json` prints `"dry_run": true` plus the `processes` that would be affected; nothing is changed.
 - `proc orphans --kill` and `proc stuck --kill` report like `proc kill` (`succeeded`/`failed`), with `action` `"orphans"`/`"stuck"`.
 - If any process fails in `kill`/`stop`/`freeze`/`thaw`/`orphans --kill`/`stuck --kill`, the exit code is 1 and `failed` lists why; the ones in `succeeded` were still acted on.
 - `proc wait` on timeout prints its result with `timed_out: true` and exits 1.
-- `--signal` is only on `proc stop`. Valid signals: HUP, INT, QUIT, ABRT, KILL, TERM, STOP, CONT, USR1, USR2 (with or without `SIG`, any case).
+- `--signal` is only on `proc stop`. Valid signals: HUP, INT, QUIT, ABRT, KILL, TERM, STOP, CONT, USR1, USR2 (with or without `SIG`, any case). Windows has no signals, so there `--signal` exits 4.
 - `--graceful` is only on `proc kill`.
 - Unknown flags exit 4; with `--json` the error is a JSON object on stdout, otherwise plain text on stderr.
 - `freeze` and `thaw` are Unix only — on Windows they fail with exit 1.

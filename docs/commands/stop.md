@@ -20,7 +20,7 @@ proc stop node --timeout 5 # 5s before force kill
 | `--yes` | `-y` | skip confirmation |
 | `--dry-run` | | show what would be stopped |
 | `--timeout <secs>` | `-t` | seconds before force kill (default: 10) |
-| `--signal <name>` | `-S` | send a specific signal instead of SIGTERM |
+| `--signal <name>` | `-S` | send a specific signal instead of SIGTERM (macOS and Linux; exits 4 on Windows) |
 | `--in [<dir>]` | `-i` | filter by directory |
 | `--by <name>` | `-b` | filter by process name |
 | `--json` | `-j` | output as JSON |

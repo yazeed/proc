@@ -13,6 +13,8 @@ proc for /usr/bin/node     # processes using this executable
 proc for ~/bin/myapp       # tilde expansion
 ```
 
+one process gets the same detail view as `proc on :port` (directory, path, listening ports, resources, uptime). several get the standard process table, followed by the ports they listen on.
+
 ## options
 
 | flag | short | description |

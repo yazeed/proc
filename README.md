@@ -13,6 +13,7 @@
 [![Downloads](https://img.shields.io/crates/d/proc-cli.svg)](https://crates.io/crates/proc-cli)
 [![Open Collective](https://img.shields.io/opencollective/all/proc-cli?label=backers)](https://opencollective.com/proc-cli)
 [![SafeSkill](https://safeskill.dev/api/badge/proc-cli)](https://safeskill.dev/scan/proc-cli)
+[![Socket](https://badge.socket.dev/npm/package/proc-cli)](https://socket.dev/npm/package/proc-cli)
 [![Website](https://img.shields.io/website?url=https%3A%2F%2Fproc-cli.com%2F&label=website)](https://proc-cli.com/)
 
 Semantic CLI tool for process management. Target by port, process id (PID), name or path.
@@ -106,7 +107,7 @@ In Claude Code you can also install it as a plugin:
 /plugin install proc-cli@proc-cli
 ```
 
-The skill lives in [`skills/proc-cli/`](skills/proc-cli/SKILL.md) and follows the [Agent Skills](https://agentskills.io) standard.
+The skill lives in [`skills/proc-cli/`](skills/proc-cli/SKILL.md) and follows the [Agent Skills](https://agentskills.io) standard. [What it teaches, how to update it, and prompts to try &rarr;](https://proc-cli.com/skill)
 
 ## Quick Start
 

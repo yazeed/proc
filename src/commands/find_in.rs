@@ -6,7 +6,7 @@
 //!   proc in . --by node        # Node processes in cwd
 //!   proc in ~/projects         # Processes in ~/projects
 
-use crate::core::{sort_processes, Process, ProcessStatus, SortKey};
+use crate::core::{sort_processes, Process, SortKey, StatusFilter};
 use crate::error::{ProcError, Result};
 use crate::ui::{OutputFormat, Printer};
 use clap::Args;
@@ -31,8 +31,8 @@ pub struct InCommand {
     pub min_mem: Option<f64>,
 
     /// Filter by status: running, sleeping, stopped, zombie
-    #[arg(long)]
-    pub status: Option<String>,
+    #[arg(long, value_enum, ignore_case = true)]
+    pub status: Option<StatusFilter>,
 
     /// Only show processes running longer than this (seconds)
     #[arg(long)]
@@ -138,15 +138,8 @@ impl InCommand {
             }
 
             // Status filter
-            if let Some(ref status) = self.status {
-                let status_match = match status.to_lowercase().as_str() {
-                    "running" => matches!(p.status, ProcessStatus::Running),
-                    "sleeping" | "sleep" => matches!(p.status, ProcessStatus::Sleeping),
-                    "stopped" | "stop" => matches!(p.status, ProcessStatus::Stopped),
-                    "zombie" => matches!(p.status, ProcessStatus::Zombie),
-                    _ => true,
-                };
-                if !status_match {
+            if let Some(status) = self.status {
+                if !status.matches(p.status) {
                     return false;
                 }
             }

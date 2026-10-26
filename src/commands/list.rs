@@ -7,7 +7,7 @@
 //!   proc list --in /project    # Processes in /project
 //!   proc list --min-cpu 10     # Processes using >10% CPU
 
-use crate::core::{resolve_in_dir, sort_processes, Process, ProcessStatus, SortKey};
+use crate::core::{resolve_in_dir, sort_processes, Process, SortKey, StatusFilter};
 use crate::error::Result;
 use crate::ui::Printer;
 use clap::Args;
@@ -36,8 +36,8 @@ pub struct ListCommand {
     pub min_mem: Option<f64>,
 
     /// Filter by status: running, sleeping, stopped, zombie
-    #[arg(long)]
-    pub status: Option<String>,
+    #[arg(long, value_enum, ignore_case = true)]
+    pub status: Option<StatusFilter>,
 
     /// Only show processes running longer than this (seconds)
     #[arg(long)]
@@ -148,15 +148,8 @@ impl ListCommand {
             }
 
             // Status filter
-            if let Some(ref status) = self.status {
-                let status_match = match status.to_lowercase().as_str() {
-                    "running" => matches!(p.status, ProcessStatus::Running),
-                    "sleeping" | "sleep" => matches!(p.status, ProcessStatus::Sleeping),
-                    "stopped" | "stop" => matches!(p.status, ProcessStatus::Stopped),
-                    "zombie" => matches!(p.status, ProcessStatus::Zombie),
-                    _ => true,
-                };
-                if !status_match {
+            if let Some(status) = self.status {
+                if !status.matches(p.status) {
                     return false;
                 }
             }
