@@ -5,6 +5,21 @@ description: "release history for proc."
 permalink: /changelog
 ---
 
+## 1.14.4 — 2026-10-25
+
+**Fixed**
+- **Linux: threads were listed as processes.** `list`, `by`, `in`, `orphans`, `stuck`, `watch` and name targets listed every thread of a process as a separate entry, with the process's command line. A Node dev server, for example, showed up a dozen times, and a name target such as `proc kill node` resolved those extra entries too. Only processes are listed now. macOS and Windows were not affected
+- **`proc orphans` and `proc stuck`** printed two headlines for one result ("⚠ Found 2 orphaned processes", then "✓ Found 2 processes"). They now print one
+
+**Changed**
+- **New demo recording** (README GIF and website video). It tells one story:
+  - `npm run dev` fails because port 3000 is taken
+  - `proc on`, `proc why` and `proc free` find the old tmux session holding the port and free it
+  - `proc orphans` finds the leftovers, shows them as JSON, and cleans them up after a confirmation
+
+  It's recorded in a staged project (`demo/`), so the recording tool's own processes no longer appear, and it's larger and easier to read. To regenerate it, run the two commands at the top of `demo.Dockerfile`
+- **`.dockerignore`** keeps `target/` and other unused folders out of Docker build contexts
+
 ## 1.14.3 — 2026-10-25
 
 **Changed**

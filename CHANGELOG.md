@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.14.4] - 2026-10-25
+
 ### Fixed
 
 - **Linux: threads were listed as processes.** `list`, `by`, `in`, `orphans`, `stuck`, `watch` and name targets listed every thread of a process as a separate entry, with the process's command line. A Node dev server, for example, showed up a dozen times, and a name target such as `proc kill node` resolved those extra entries too. Only processes are listed now. macOS and Windows were not affected
@@ -674,7 +676,8 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 
 ---
 
-[Unreleased]: https://github.com/yazeed/proc-cli/compare/v1.14.3...HEAD
+[Unreleased]: https://github.com/yazeed/proc-cli/compare/v1.14.4...HEAD
+[1.14.4]: https://github.com/yazeed/proc-cli/compare/v1.14.3...v1.14.4
 [1.14.3]: https://github.com/yazeed/proc-cli/compare/v1.14.2...v1.14.3
 [1.14.2]: https://github.com/yazeed/proc-cli/compare/v1.14.1...v1.14.2
 [1.14.1]: https://github.com/yazeed/proc-cli/compare/v1.14.0...v1.14.1
