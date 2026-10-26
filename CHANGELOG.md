@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.14.3] - 2026-10-25
+
 ### Changed
 
 - **Repository renamed to [`yazeed/proc-cli`](https://github.com/yazeed/proc-cli)**, matching the crate, the npm package, the agent skill and proc-cli.com. Old `github.com/yazeed/proc` links, git remotes and release downloads redirect, so existing installs keep working. Install commands now use the new name: `npx skills add yazeed/proc-cli`, `/plugin marketplace add yazeed/proc-cli`, `nix profile install github:yazeed/proc-cli`. The Homebrew command is unchanged (`brew install yazeed/proc/proc`)
@@ -657,46 +659,47 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 
 ---
 
-[Unreleased]: https://github.com/yazeed/proc/compare/v1.14.2...HEAD
-[1.14.2]: https://github.com/yazeed/proc/compare/v1.14.1...v1.14.2
-[1.14.1]: https://github.com/yazeed/proc/compare/v1.14.0...v1.14.1
-[1.14.0]: https://github.com/yazeed/proc/compare/v1.13.4...v1.14.0
-[1.13.4]: https://github.com/yazeed/proc/compare/v1.13.3...v1.13.4
-[1.13.3]: https://github.com/yazeed/proc/compare/v1.13.2...v1.13.3
-[1.13.2]: https://github.com/yazeed/proc/compare/v1.13.1...v1.13.2
-[1.13.1]: https://github.com/yazeed/proc/compare/v1.13.0...v1.13.1
-[1.13.0]: https://github.com/yazeed/proc/compare/v1.12.3...v1.13.0
-[1.12.3]: https://github.com/yazeed/proc/compare/v1.12.2...v1.12.3
-[1.12.2]: https://github.com/yazeed/proc/compare/v1.12.1...v1.12.2
-[1.12.1]: https://github.com/yazeed/proc/compare/v1.12.0...v1.12.1
-[1.12.0]: https://github.com/yazeed/proc/compare/v1.11.0...v1.12.0
-[1.11.0]: https://github.com/yazeed/proc/compare/v1.10.1...v1.11.0
-[1.10.1]: https://github.com/yazeed/proc/compare/v1.10.0...v1.10.1
-[1.10.0]: https://github.com/yazeed/proc/compare/v1.9.1...v1.10.0
-[1.9.1]: https://github.com/yazeed/proc/compare/v1.9.0...v1.9.1
-[1.9.0]: https://github.com/yazeed/proc/compare/v1.8.1...v1.9.0
-[1.8.1]: https://github.com/yazeed/proc/compare/v1.8.0...v1.8.1
-[1.8.0]: https://github.com/yazeed/proc/compare/v1.7.4...v1.8.0
-[1.7.4]: https://github.com/yazeed/proc/compare/v1.7.3...v1.7.4
-[1.7.3]: https://github.com/yazeed/proc/compare/v1.7.2...v1.7.3
-[1.7.2]: https://github.com/yazeed/proc/compare/v1.7.1...v1.7.2
-[1.7.1]: https://github.com/yazeed/proc/compare/v1.7.0...v1.7.1
-[1.7.0]: https://github.com/yazeed/proc/compare/v1.6.0...v1.7.0
-[1.6.0]: https://github.com/yazeed/proc/compare/v1.5.1...v1.6.0
-[1.5.1]: https://github.com/yazeed/proc/compare/v1.5.0...v1.5.1
-[1.5.0]: https://github.com/yazeed/proc/compare/v1.4.2...v1.5.0
-[1.4.2]: https://github.com/yazeed/proc/compare/v1.4.1...v1.4.2
-[1.4.1]: https://github.com/yazeed/proc/compare/v1.4.0...v1.4.1
-[1.4.0]: https://github.com/yazeed/proc/compare/v1.3.3...v1.4.0
-[1.3.3]: https://github.com/yazeed/proc/compare/v1.3.2...v1.3.3
-[1.3.2]: https://github.com/yazeed/proc/compare/v1.3.1...v1.3.2
-[1.3.1]: https://github.com/yazeed/proc/compare/v1.3.0...v1.3.1
-[1.3.0]: https://github.com/yazeed/proc/compare/v1.2.3...v1.3.0
-[1.2.3]: https://github.com/yazeed/proc/compare/v1.2.2...v1.2.3
-[1.2.2]: https://github.com/yazeed/proc/compare/v1.2.1...v1.2.2
-[1.2.1]: https://github.com/yazeed/proc/compare/v1.2.0...v1.2.1
-[1.2.0]: https://github.com/yazeed/proc/compare/v1.1.0...v1.2.0
-[1.1.0]: https://github.com/yazeed/proc/compare/v1.0.2...v1.1.0
-[1.0.2]: https://github.com/yazeed/proc/compare/v1.0.1...v1.0.2
-[1.0.1]: https://github.com/yazeed/proc/compare/v1.0.0...v1.0.1
-[1.0.0]: https://github.com/yazeed/proc/releases/tag/v1.0.0
+[Unreleased]: https://github.com/yazeed/proc-cli/compare/v1.14.3...HEAD
+[1.14.3]: https://github.com/yazeed/proc-cli/compare/v1.14.2...v1.14.3
+[1.14.2]: https://github.com/yazeed/proc-cli/compare/v1.14.1...v1.14.2
+[1.14.1]: https://github.com/yazeed/proc-cli/compare/v1.14.0...v1.14.1
+[1.14.0]: https://github.com/yazeed/proc-cli/compare/v1.13.4...v1.14.0
+[1.13.4]: https://github.com/yazeed/proc-cli/compare/v1.13.3...v1.13.4
+[1.13.3]: https://github.com/yazeed/proc-cli/compare/v1.13.2...v1.13.3
+[1.13.2]: https://github.com/yazeed/proc-cli/compare/v1.13.1...v1.13.2
+[1.13.1]: https://github.com/yazeed/proc-cli/compare/v1.13.0...v1.13.1
+[1.13.0]: https://github.com/yazeed/proc-cli/compare/v1.12.3...v1.13.0
+[1.12.3]: https://github.com/yazeed/proc-cli/compare/v1.12.2...v1.12.3
+[1.12.2]: https://github.com/yazeed/proc-cli/compare/v1.12.1...v1.12.2
+[1.12.1]: https://github.com/yazeed/proc-cli/compare/v1.12.0...v1.12.1
+[1.12.0]: https://github.com/yazeed/proc-cli/compare/v1.11.0...v1.12.0
+[1.11.0]: https://github.com/yazeed/proc-cli/compare/v1.10.1...v1.11.0
+[1.10.1]: https://github.com/yazeed/proc-cli/compare/v1.10.0...v1.10.1
+[1.10.0]: https://github.com/yazeed/proc-cli/compare/v1.9.1...v1.10.0
+[1.9.1]: https://github.com/yazeed/proc-cli/compare/v1.9.0...v1.9.1
+[1.9.0]: https://github.com/yazeed/proc-cli/compare/v1.8.1...v1.9.0
+[1.8.1]: https://github.com/yazeed/proc-cli/compare/v1.8.0...v1.8.1
+[1.8.0]: https://github.com/yazeed/proc-cli/compare/v1.7.4...v1.8.0
+[1.7.4]: https://github.com/yazeed/proc-cli/compare/v1.7.3...v1.7.4
+[1.7.3]: https://github.com/yazeed/proc-cli/compare/v1.7.2...v1.7.3
+[1.7.2]: https://github.com/yazeed/proc-cli/compare/v1.7.1...v1.7.2
+[1.7.1]: https://github.com/yazeed/proc-cli/compare/v1.7.0...v1.7.1
+[1.7.0]: https://github.com/yazeed/proc-cli/compare/v1.6.0...v1.7.0
+[1.6.0]: https://github.com/yazeed/proc-cli/compare/v1.5.1...v1.6.0
+[1.5.1]: https://github.com/yazeed/proc-cli/compare/v1.5.0...v1.5.1
+[1.5.0]: https://github.com/yazeed/proc-cli/compare/v1.4.2...v1.5.0
+[1.4.2]: https://github.com/yazeed/proc-cli/compare/v1.4.1...v1.4.2
+[1.4.1]: https://github.com/yazeed/proc-cli/compare/v1.4.0...v1.4.1
+[1.4.0]: https://github.com/yazeed/proc-cli/compare/v1.3.3...v1.4.0
+[1.3.3]: https://github.com/yazeed/proc-cli/compare/v1.3.2...v1.3.3
+[1.3.2]: https://github.com/yazeed/proc-cli/compare/v1.3.1...v1.3.2
+[1.3.1]: https://github.com/yazeed/proc-cli/compare/v1.3.0...v1.3.1
+[1.3.0]: https://github.com/yazeed/proc-cli/compare/v1.2.3...v1.3.0
+[1.2.3]: https://github.com/yazeed/proc-cli/compare/v1.2.2...v1.2.3
+[1.2.2]: https://github.com/yazeed/proc-cli/compare/v1.2.1...v1.2.2
+[1.2.1]: https://github.com/yazeed/proc-cli/compare/v1.2.0...v1.2.1
+[1.2.0]: https://github.com/yazeed/proc-cli/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/yazeed/proc-cli/compare/v1.0.2...v1.1.0
+[1.0.2]: https://github.com/yazeed/proc-cli/compare/v1.0.1...v1.0.2
+[1.0.1]: https://github.com/yazeed/proc-cli/compare/v1.0.0...v1.0.1
+[1.0.0]: https://github.com/yazeed/proc-cli/releases/tag/v1.0.0

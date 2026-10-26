@@ -5,6 +5,15 @@ description: "release history for proc."
 permalink: /changelog
 ---
 
+## 1.14.3 — 2026-10-25
+
+**Changed**
+- **Repository renamed to [`yazeed/proc-cli`](https://github.com/yazeed/proc-cli)**, matching the crate, the npm package, the agent skill and proc-cli.com. Old `github.com/yazeed/proc` links, git remotes and release downloads redirect, so existing installs keep working. Install commands now use the new name: `npx skills add yazeed/proc-cli`, `/plugin marketplace add yazeed/proc-cli`, `nix profile install github:yazeed/proc-cli`. The Homebrew command is unchanged (`brew install yazeed/proc/proc`)
+- **Docker image published as `yazeed/proc-cli`.** Docker Hub can't rename repositories, so each release also pushes the same image to `yazeed/proc`, and `docker pull yazeed/proc` keeps getting updates
+
+**Removed**
+- **`Formula/proc.rb` and `pkg/scoop/proc.json`**: hand-maintained copies left over from before publishing was automated (frozen at 1.2.2 and 1.3.3 since January). Releases have written the real Homebrew formula and Scoop manifest to `yazeed/homebrew-proc` and `yazeed/scoop-bucket-proc` ever since; nothing read these
+
 ## 1.14.2 — 2026-10-25
 
 **Fixed**
@@ -258,4 +267,4 @@ A consistent JSON and exit-code contract: every command prints one JSON document
 
 ---
 
-[full changelog on github](https://github.com/yazeed/proc/blob/main/CHANGELOG.md)
+[full changelog on github](https://github.com/yazeed/proc-cli/blob/main/CHANGELOG.md)
