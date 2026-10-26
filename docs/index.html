@@ -12,7 +12,7 @@ description: "Semantic CLI tool for process management. Target by port, PID, nam
     </div>
 
     <div class="reader" data-reader>
-      <p class="reader-line" aria-live="polite"><span class="p-path">~/code/shop</span><span class="p-chevron" aria-hidden="true">❯</span><span class="p-verb">proc <span data-reader-verb>kill</span></span> <span class="reader-target" data-reader-target>:3000</span></p>
+      <p class="reader-line" aria-live="polite"><span class="p-path">~</span><span class="p-chevron" aria-hidden="true">❯</span><span class="p-verb">proc <span data-reader-verb>kill</span></span> <span class="reader-target" data-reader-target>:3000</span></p>
       <p class="reader-explain" data-reader-explain aria-live="polite">A leading colon means a port: proc acts on whatever is listening on <strong>3000</strong>.</p>
       <div class="reader-choices" role="group" aria-label="Kinds of target">
         <button type="button" data-verb="kill" data-target=":3000" aria-pressed="true">:3000<template>A leading colon means a port: proc acts on whatever is listening on <strong>3000</strong>.</template></button>
@@ -21,6 +21,7 @@ description: "Semantic CLI tool for process management. Target by port, PID, nam
         <button type="button" data-verb="kill" data-target=":3000,:8080,node" aria-pressed="false">:3000,:8080,node<template>Separate targets with commas to act on several at once. A process matched twice is only acted on once.</template></button>
         <button type="button" data-verb="for" data-target="./server.py" aria-pressed="false">./server.py<template>With <code>proc for</code>, a path finds what's running that file or has it open.</template></button>
         <button type="button" data-verb="in" data-target="." aria-pressed="false">.<template>With <code>proc in</code>, a directory lists everything started there, even after the folder is deleted.</template></button>
+        <button type="button" data-verb="kill" data-target="node --in ." aria-pressed="false">node --in .<template>Add <code>--in</code> to keep any target inside a folder and the folders below it: only the <code>node</code> processes started there, not every one on the machine. Most commands take it.</template></button>
       </div>
     </div>
 

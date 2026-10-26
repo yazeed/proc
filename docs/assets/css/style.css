@@ -847,10 +847,8 @@ pre:hover + .copy-button,
   /* long inline spans (error messages, pipelines) wrap instead of running off the screen */
   .prose :not(pre) > code { white-space: normal; overflow-wrap: anywhere; }
   .reader-line, .reader-explain, .reader-choices { padding-left: 1.15rem; padding-right: 1.15rem; }
-  /* no room for the path on a phone; let a long target wrap rather than hide behind a scroll */
+  /* let a long target wrap rather than hide behind a scroll */
   .reader-line { white-space: normal; font-size: 1.3rem; }
-  .reader-line .p-path { display: none; }
-  .reader-line .p-chevron { margin-left: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
