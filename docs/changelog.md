@@ -1,7 +1,7 @@
 ---
 layout: page
-title: changelog
-description: "release history for proc."
+title: Changelog
+description: "Release history for proc."
 permalink: /changelog
 ---
 

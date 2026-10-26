@@ -1,5 +1,5 @@
 ---
-title: "unix signals: the complete reference"
+title: "Unix signals: the complete reference"
 description: "Every Unix signal explained: what it does, its number, whether it can be caught, and when to use it. Plus signal handling in bash, C, Node, Python, and Go."
 date: 2026-03-10
 ---

@@ -1,5 +1,5 @@
 ---
-title: "managing child processes in node.js"
+title: "Managing child processes in Node.js"
 description: "Node.js child process methods explained: exec vs execFile vs spawn vs fork. Signal handling, orphan prevention, and graceful shutdown patterns."
 date: 2026-03-10
 ---

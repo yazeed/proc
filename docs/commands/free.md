@@ -1,11 +1,11 @@
 ---
 layout: page
 title: proc free
-description: "free ports by killing the occupying process."
+description: "Free ports by killing the occupying process."
 permalink: /commands/free
 ---
 
-kill the process on a port and verify the port becomes available. port-only targets. asks for confirmation unless `--yes`.
+Kill the process on a port and verify the port becomes available. Port-only targets. Asks for confirmation unless `--yes`.
 
 ```bash
 proc free :3000            # free port 3000
@@ -13,17 +13,17 @@ proc free :3000,:8080      # free multiple ports
 proc free :3000 --wait 30  # wait up to 30s for port to free
 ```
 
-## options
+## Options
 
-| flag | short | description |
+| Flag | Short | Description |
 |------|-------|-------------|
-| `--yes` | `-y` | skip confirmation |
-| `--dry-run` | | show what would be freed |
-| `--wait <secs>` | | seconds to wait for port availability (default: 10) |
-| `--json` | `-j` | output as JSON |
-| `--verbose` | `-v` | show extra details |
+| `--yes` | `-y` | Skip confirmation |
+| `--dry-run` | | Show what would be freed |
+| `--wait <secs>` | | Seconds to wait for port availability (default: 10) |
+| `--json` | `-j` | Output as JSON |
+| `--verbose` | `-v` | Show extra details |
 
-## examples
+## Examples
 
 ```bash
 # free a single port
@@ -39,6 +39,6 @@ proc free :3000 --wait 30
 proc free :3000 --dry-run
 ```
 
-## see also
+## See also
 
 [kill](kill) for force kill without port verification, [stop](stop) for graceful shutdown, [on](on) to check what's on a port.

@@ -1,13 +1,13 @@
 ---
 layout: page
 title: proc unstick
-description: "attempt to recover stuck processes."
+description: "Attempt to recover stuck processes."
 permalink: /commands/unstick
 ---
 
-try to recover stuck processes before resorting to killing. alias: `u`.
+Try to recover stuck processes before resorting to killing. Alias: `u`.
 
-sends SIGCONT then SIGINT recovery sequence. use `--force` to terminate if recovery fails.
+Sends SIGCONT then SIGINT recovery sequence. Use `--force` to terminate if recovery fails.
 
 ```bash
 proc unstick               # recover all stuck processes
@@ -15,20 +15,20 @@ proc unstick node          # recover stuck node processes
 proc unstick --force       # terminate if recovery fails
 ```
 
-## options
+## Options
 
-| flag | short | description |
+| Flag | Short | Description |
 |------|-------|-------------|
-| `--timeout <secs>` | `-t` | seconds of high CPU before considered stuck (default: 300) |
-| `--force` | `-f` | terminate if recovery fails |
-| `--yes` | `-y` | skip confirmation |
-| `--dry-run` | | show what would be done |
-| `--in [<dir>]` | `-i` | filter by directory |
-| `--by <name>` | `-b` | filter by process name |
-| `--json` | `-j` | output as JSON |
-| `--verbose` | `-v` | show extra details |
+| `--timeout <secs>` | `-t` | Seconds of high CPU before considered stuck (default: 300) |
+| `--force` | `-f` | Terminate if recovery fails |
+| `--yes` | `-y` | Skip confirmation |
+| `--dry-run` | | Show what would be done |
+| `--in [<dir>]` | `-i` | Filter by directory |
+| `--by <name>` | `-b` | Filter by process name |
+| `--json` | `-j` | Output as JSON |
+| `--verbose` | `-v` | Show extra details |
 
-## examples
+## Examples
 
 ```bash
 # try to recover all stuck processes
@@ -44,6 +44,6 @@ proc unstick node --force
 proc unstick --dry-run
 ```
 
-## see also
+## See also
 
 [stuck](stuck) for finding stuck processes, [stop](stop) for graceful shutdown.

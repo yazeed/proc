@@ -1,11 +1,11 @@
 ---
 layout: page
 title: proc freeze
-description: "pause processes with SIGSTOP."
+description: "Pause processes with SIGSTOP."
 permalink: /commands/freeze
 ---
 
-send SIGSTOP to pause processes. they remain in memory but stop executing. asks for confirmation unless `--yes`.
+Send SIGSTOP to pause processes. They remain in memory but stop executing. Asks for confirmation unless `--yes`.
 
 ```bash
 proc freeze node             # freeze all node processes
@@ -13,18 +13,18 @@ proc freeze :3000            # freeze process on port 3000
 proc freeze :3000,:8080,node # freeze multiple targets
 ```
 
-## options
+## Options
 
-| flag | short | description |
+| Flag | Short | Description |
 |------|-------|-------------|
-| `--yes` | `-y` | skip confirmation |
-| `--dry-run` | | show what would be frozen |
-| `--in [<dir>]` | `-i` | filter by directory |
-| `--by <name>` | `-b` | filter by process name |
-| `--json` | `-j` | output as JSON |
-| `--verbose` | `-v` | show extra details |
+| `--yes` | `-y` | Skip confirmation |
+| `--dry-run` | | Show what would be frozen |
+| `--in [<dir>]` | `-i` | Filter by directory |
+| `--by <name>` | `-b` | Filter by process name |
+| `--json` | `-j` | Output as JSON |
+| `--verbose` | `-v` | Show extra details |
 
-## examples
+## Examples
 
 ```bash
 # freeze all node processes
@@ -43,6 +43,6 @@ proc freeze node --in .
 proc freeze :3000 --yes
 ```
 
-## see also
+## See also
 
 [thaw](thaw) to resume frozen processes, [stop](stop) for graceful shutdown, [kill](kill) for immediate termination.

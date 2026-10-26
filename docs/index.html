@@ -3,160 +3,133 @@ layout: default
 title: proc
 description: "Semantic CLI tool for process management. Target by port, PID, name or path."
 ---
+<div class="home">
 
-<div class="hero">
-  <h1 class="hero-title">proc</h1>
-  <p class="hero-tagline">process management that makes sense.</p>
-  <p class="hero-sub">target by port, pid, name or path. one syntax everywhere.</p>
-</div>
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="hero-copy">
+      <h1 id="hero-title">Target processes by port, PID, name or path.</h1>
+      <p class="hero-lede">proc is a semantic CLI tool for process management on macOS, Linux and Windows. Find what's on a port, why it's there, and stop it, in one command you'd guess on the first try.</p>
+    </div>
 
-<div class="hero-demo">
-  <video autoplay loop muted playsinline>
-    <source src="{{ '/assets/demo.mp4' | relative_url }}" type="video/mp4">
-  </video>
-</div>
+    <div class="reader" data-reader>
+      <p class="reader-line" aria-live="polite"><span class="p-path">~/code/shop</span><span class="p-chevron" aria-hidden="true">❯</span><span class="p-verb">proc <span data-reader-verb>kill</span></span> <span class="reader-target" data-reader-target>:3000</span></p>
+      <p class="reader-explain" data-reader-explain aria-live="polite">A leading colon means a port: proc acts on whatever is listening on <strong>3000</strong>.</p>
+      <div class="reader-choices" role="group" aria-label="Kinds of target">
+        <button type="button" data-verb="kill" data-target=":3000" aria-pressed="true">:3000<template>A leading colon means a port: proc acts on whatever is listening on <strong>3000</strong>.</template></button>
+        <button type="button" data-verb="kill" data-target="1234" aria-pressed="false">1234<template>A number is a PID: process <strong>1234</strong>, and nothing else.</template></button>
+        <button type="button" data-verb="kill" data-target="node" aria-pressed="false">node<template>Anything else is a name, matched against each process's name and full command line, so <code>node</code> also finds <code>nodemon</code> and <code>node server.js</code>.</template></button>
+        <button type="button" data-verb="kill" data-target=":3000,:8080,node" aria-pressed="false">:3000,:8080,node<template>Separate targets with commas to act on several at once. A process matched twice is only acted on once.</template></button>
+        <button type="button" data-verb="for" data-target="./server.py" aria-pressed="false">./server.py<template>With <code>proc for</code>, a path finds what's running that file or has it open.</template></button>
+        <button type="button" data-verb="in" data-target="." aria-pressed="false">.<template>With <code>proc in</code>, a directory lists everything started there, even after the folder is deleted.</template></button>
+      </div>
+    </div>
 
-<div class="hero-example">
-  <div class="example-grid">
-    <div class="example-pair">
-      <div class="example-label">what's on port 3000?</div>
-      <pre><code>proc on :3000</code></pre>
+    <div class="hero-actions">
+      <div class="install-line"><span class="p-chevron" aria-hidden="true">❯</span><code>brew install yazeed/proc/proc</code><button type="button" data-copy="brew install yazeed/proc/proc" aria-label="Copy install command">Copy</button></div>
+      <p class="hero-meta">Version {{ site.data.release.version }}. Also on <a href="{{ '/install' | relative_url }}">npm, cargo, Scoop, Nix and Docker</a>.</p>
     </div>
-    <div class="example-pair">
-      <div class="example-label">kill it</div>
-      <pre><code>proc kill :3000</code></pre>
-    </div>
-    <div class="example-pair">
-      <div class="example-label">free the port (kill + verify)</div>
-      <pre><code>proc free :3000</code></pre>
-    </div>
-    <div class="example-pair">
-      <div class="example-label">why is this port busy?</div>
-      <pre><code>proc why :3000</code></pre>
-    </div>
-    <div class="example-pair">
-      <div class="example-label">node processes in this directory</div>
-      <pre><code>proc by node --in .</code></pre>
-    </div>
-    <div class="example-pair">
-      <div class="example-label">wait for it to finish</div>
-      <pre><code>proc wait node</code></pre>
-    </div>
-  </div>
-</div>
+  </section>
 
-<div class="section">
-  <h2>before / after</h2>
-  <table>
-    <thead>
-      <tr><th>task</th><th>without proc</th><th>with proc</th></tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>what's on port 3000?</td>
-        <td><code>lsof -i :3000 -P -n</code></td>
-        <td><code>proc on :3000</code></td>
-      </tr>
-      <tr>
-        <td>kill it</td>
-        <td><code>lsof -i :3000 -t | xargs kill -9</code></td>
-        <td><code>proc kill :3000</code></td>
-      </tr>
-      <tr>
-        <td>free the port</td>
-        <td><code>lsof -t -i:3000 | xargs kill && sleep 1 && lsof -i:3000</code></td>
-        <td><code>proc free :3000</code></td>
-      </tr>
-      <tr>
-        <td>wait for process</td>
-        <td><code>while ps aux | grep node | grep -v grep; do sleep 5; done</code></td>
-        <td><code>proc wait node</code></td>
-      </tr>
-      <tr>
-        <td>find orphans</td>
-        <td>no standard tool</td>
-        <td><code>proc orphans</code></td>
-      </tr>
-      <tr>
-        <td>pause a process</td>
-        <td><code>kill -STOP $(pgrep node)</code></td>
-        <td><code>proc freeze node</code></td>
-      </tr>
-    </tbody>
-  </table>
-</div>
+  <figure class="demo">
+    <video autoplay loop muted playsinline preload="metadata" aria-label="proc freeing port 3000 from a forgotten tmux session, then cleaning up leftover processes">
+      <source src="{{ '/assets/demo.mp4' | relative_url }}" type="video/mp4">
+    </video>
+    <figcaption>A dev server won't start because port 3000 is taken. proc finds the old tmux session holding it, frees the port, then cleans up what else was left running.</figcaption>
+  </figure>
 
-<div class="section">
-  <h2>commands</h2>
-
-  <div class="cmd-group">
-    <h3>discovery</h3>
-    <div class="cmd-list">
-      <div class="cmd"><code>proc on :3000</code> <span>what's on this port?</span></div>
-      <div class="cmd"><code>proc by node</code> <span>find by name</span></div>
-      <div class="cmd"><code>proc for ./app.js</code> <span>what's running this file?</span></div>
-      <div class="cmd"><code>proc in .</code> <span>processes in this directory</span></div>
-      <div class="cmd"><code>proc why :3000</code> <span>trace ancestry</span></div>
-      <div class="cmd"><code>proc orphans</code> <span>find abandoned processes</span></div>
-      <div class="cmd"><code>proc ports</code> <span>all listening ports</span></div>
-      <div class="cmd"><code>proc tree</code> <span>process hierarchy</span></div>
+  <section class="section" aria-labelledby="swap-title">
+    <h2 id="swap-title">One command instead of a pipeline</h2>
+    <p class="section-lede">The same jobs, without remembering which flags <code>lsof</code> needs or piping PIDs into <code>kill</code>.</p>
+    <div class="swap">
+      <div class="swap-row"><span class="swap-task">What's on port 3000?</span><span class="swap-old"><code>lsof -i :3000 -P -n</code></span><span class="swap-new"><code>proc on :3000</code></span></div>
+      <div class="swap-row"><span class="swap-task">Why is it there?</span><span class="swap-old"><code>lsof -i :3000</code>, then <code>ps -o ppid=</code> up the chain</span><span class="swap-new"><code>proc why :3000</code></span></div>
+      <div class="swap-row"><span class="swap-task">Free the port</span><span class="swap-old"><code>lsof -t -i:3000 | xargs kill && sleep 1 && lsof -i:3000</code></span><span class="swap-new"><code>proc free :3000</code></span></div>
+      <div class="swap-row"><span class="swap-task">Wait for it to exit</span><span class="swap-old"><code>while ps aux | grep node | grep -v grep; do sleep 5; done</code></span><span class="swap-new"><code>proc wait node</code></span></div>
+      <div class="swap-row"><span class="swap-task">Pause a process</span><span class="swap-old"><code>kill -STOP $(pgrep node)</code></span><span class="swap-new"><code>proc freeze node</code></span></div>
+      <div class="swap-row"><span class="swap-task">Find leftovers</span><span class="swap-old">No standard tool</span><span class="swap-new"><code>proc orphans --in .</code></span></div>
     </div>
-  </div>
+  </section>
 
-  <div class="cmd-group">
-    <h3>lifecycle</h3>
-    <div class="cmd-list">
-      <div class="cmd"><code>proc kill :3000</code> <span>force kill</span></div>
-      <div class="cmd"><code>proc stop node</code> <span>graceful shutdown</span></div>
-      <div class="cmd"><code>proc free :3000</code> <span>kill + verify port freed</span></div>
-      <div class="cmd"><code>proc freeze node</code> <span>pause (SIGSTOP)</span></div>
-      <div class="cmd"><code>proc thaw node</code> <span>resume (SIGCONT)</span></div>
-      <div class="cmd"><code>proc wait node</code> <span>block until exit</span></div>
+  <section class="section" aria-labelledby="verbs-title">
+    <h2 id="verbs-title">Nineteen commands, three jobs</h2>
+    <p class="section-lede">Every command takes the same targets, and almost all take <code>--in</code> to stay inside one project, <code>--json</code> for scripts, and <code>--dry-run</code> before anything changes.</p>
+    <div class="verbs">
+      <div class="v-observe">
+        <h3>Find out</h3>
+        <p>Read-only. Nothing is touched.</p>
+        <ul>
+          <li><a href="{{ '/commands/on' | relative_url }}"><code>on :3000</code><span>what's on a port</span></a></li>
+          <li><a href="{{ '/commands/why' | relative_url }}"><code>why :3000</code><span>what started it</span></a></li>
+          <li><a href="{{ '/commands/in' | relative_url }}"><code>in .</code><span>started in this folder</span></a></li>
+          <li><a href="{{ '/commands/by' | relative_url }}"><code>by node</code><span>by name</span></a></li>
+          <li><a href="{{ '/commands/for' | relative_url }}"><code>for ./app.js</code><span>running a file</span></a></li>
+          <li><a href="{{ '/commands/info' | relative_url }}"><code>info 1234</code><span>everything about one</span></a></li>
+          <li><a href="{{ '/commands/ports' | relative_url }}"><code>ports</code><span>all listening ports</span></a></li>
+          <li><a href="{{ '/commands/tree' | relative_url }}"><code>tree</code><span>parents and children</span></a></li>
+        </ul>
+      </div>
+      <div class="v-act">
+        <h3>Change it</h3>
+        <p>Asks first, or previews with <code>--dry-run</code>.</p>
+        <ul>
+          <li><a href="{{ '/commands/stop' | relative_url }}"><code>stop node</code><span>ask it to exit</span></a></li>
+          <li><a href="{{ '/commands/kill' | relative_url }}"><code>kill :3000</code><span>end it now</span></a></li>
+          <li><a href="{{ '/commands/free' | relative_url }}"><code>free :3000</code><span>and check it's free</span></a></li>
+          <li><a href="{{ '/commands/freeze' | relative_url }}"><code>freeze node</code><span>pause</span></a></li>
+          <li><a href="{{ '/commands/thaw' | relative_url }}"><code>thaw node</code><span>resume</span></a></li>
+          <li><a href="{{ '/commands/unstick' | relative_url }}"><code>unstick</code><span>recover a stuck process</span></a></li>
+        </ul>
+      </div>
+      <div class="v-wait">
+        <h3>Keep watching</h3>
+        <p>Live views and waiting.</p>
+        <ul>
+          <li><a href="{{ '/commands/watch' | relative_url }}"><code>watch node</code><span>live table</span></a></li>
+          <li><a href="{{ '/commands/wait' | relative_url }}"><code>wait :3000</code><span>until it exits</span></a></li>
+          <li><a href="{{ '/commands/list' | relative_url }}"><code>list --sort cpu</code><span>what's busy</span></a></li>
+          <li><a href="{{ '/commands/stuck' | relative_url }}"><code>stuck</code><span>high CPU for too long</span></a></li>
+          <li><a href="{{ '/commands/orphans' | relative_url }}"><code>orphans</code><span>parent has exited</span></a></li>
+        </ul>
+      </div>
     </div>
-  </div>
+    <p class="more"><a href="{{ '/commands' | relative_url }}">All commands and options</a></p>
+  </section>
 
-  <div class="cmd-group">
-    <h3>composable</h3>
-    <p class="cmd-note">targets work everywhere: <code>:port</code>, <code>PID</code>, <code>name</code>. comma-separate for multiple. add <code>--in .</code> to scope to current directory. add <code>--json</code> for structured output.</p>
-    <pre><code>proc kill :3000,:8080,node --in . --json --yes</code></pre>
-  </div>
+  <section class="section" aria-labelledby="agents-title">
+    <h2 id="agents-title">Made for scripts and coding agents</h2>
+    <div class="agents">
+      <div>
+        <p class="section-lede">Every command prints one JSON document with <code>--json</code>, and exit codes always mean the same thing. An agent can read proc the way you do, without parsing tables.</p>
+        <ul class="prose-list">
+          <li><code>0</code> success, <code>1</code> error, <code>2</code> not found, <code>3</code> permission denied, <code>4</code> invalid input</li>
+          <li><code>--dry-run</code> shows what would be touched, and nothing else</li>
+          <li>The <a href="{{ '/skill' | relative_url }}">agent skill</a> teaches Claude Code, Codex, Cursor, Gemini CLI and others when to reach for proc</li>
+        </ul>
+      </div>
+      <div class="term highlight">
+<pre><code><span class="gp">❯</span> proc on :8080 --json | jq '.process | {pid, cwd, uptime_secs}'
+{
+  <span class="nt">"pid"</span>: <span class="m">177</span>,
+  <span class="nt">"cwd"</span>: <span class="s">"/home/dev/code/shop"</span>,
+  <span class="nt">"uptime_secs"</span>: <span class="m">35</span>
+}</code></pre>
+      </div>
+    </div>
+  </section>
 
-  <p><a href="{{ site.baseurl }}/commands">full command reference &rarr;</a></p>
-</div>
+  <section class="section home-end" aria-labelledby="posts-title">
+    <h2 id="posts-title">Posts</h2>
+    <ul class="post-list">
+      {% for post in site.posts limit:4 %}
+      <li>
+        <a href="{{ post.url | relative_url }}">
+          <span class="post-list-title">{{ post.title }}</span>
+          <span class="post-list-date">{{ post.date | date: "%B %-d, %Y" }}</span>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+    <p class="more"><a href="{{ '/posts' | relative_url }}">All posts</a></p>
+  </section>
 
-<div class="section">
-  <h2>install</h2>
-  <div class="install-grid">
-    <div class="install-method">
-      <div class="method-label">macOS</div>
-      <pre><code>brew install yazeed/proc/proc</code></pre>
-    </div>
-    <div class="install-method">
-      <div class="method-label">npm / bun</div>
-      <pre><code>npm install -g proc-cli</code></pre>
-    </div>
-    <div class="install-method">
-      <div class="method-label">rust</div>
-      <pre><code>cargo install proc-cli</code></pre>
-    </div>
-    <div class="install-method">
-      <div class="method-label">shell</div>
-      <pre><code>curl -fsSL https://raw.githubusercontent.com/yazeed/proc-cli/main/install.sh | bash</code></pre>
-    </div>
-  </div>
-  <p><a href="{{ site.baseurl }}/install">all platforms &rarr;</a></p>
-</div>
-
-<div class="section">
-  <h2>posts</h2>
-  <ul class="post-list">
-    {% for post in site.posts limit:5 %}
-    <li class="post-item">
-      <a href="{{ post.url | prepend: site.baseurl }}" class="post-link">
-        <span class="post-title">{{ post.title }}</span>
-        <span class="post-meta">{{ post.date | date: "%B %d, %Y" }}</span>
-      </a>
-    </li>
-    {% endfor %}
-  </ul>
 </div>

@@ -1,5 +1,5 @@
 ---
-title: "automating process management in shell scripts"
+title: "Automating process management in shell scripts"
 description: "Patterns for reliable process management in shell scripts — PID files, health checks, awk parsing, and why text parsing breaks."
 date: 2026-03-06
 ---

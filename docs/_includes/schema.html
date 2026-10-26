@@ -1,0 +1,62 @@
+{%- comment -%}
+  Structured data that jekyll-seo-tag doesn't produce: the app itself on the
+  home page, breadcrumbs on posts and command pages, and the FAQ.
+{%- endcomment -%}
+{%- assign site_url = site.url | append: site.baseurl -%}
+{%- if page.url == "/" -%}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "proc",
+  "description": {{ site.description | jsonify }},
+  "url": "{{ site_url }}/",
+  "applicationCategory": "DeveloperApplication",
+  "applicationSubCategory": "Command-line tool",
+  "operatingSystem": "macOS, Linux, Windows",
+  "softwareVersion": "{{ site.data.release.version }}",
+  "downloadUrl": "https://github.com/yazeed/proc-cli/releases/latest",
+  "installUrl": "{{ site_url }}/install",
+  "license": "https://github.com/yazeed/proc-cli/blob/main/LICENSE",
+  "codeRepository": "https://github.com/yazeed/proc-cli",
+  "programmingLanguage": "Rust",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "author": { "@type": "Person", "name": "yazeed", "url": "https://github.com/yazeed" }
+}
+</script>
+{%- endif -%}
+{%- if page.layout == "post" or page.url contains "/commands/" -%}
+{%- if page.layout == "post" -%}
+  {%- assign crumb_name = "Posts" -%}{%- assign crumb_url = "/posts" -%}
+{%- else -%}
+  {%- assign crumb_name = "Commands" -%}{%- assign crumb_url = "/commands" -%}
+{%- endif -%}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    { "@type": "ListItem", "position": 1, "name": "proc", "item": "{{ site_url }}/" },
+    { "@type": "ListItem", "position": 2, "name": "{{ crumb_name }}", "item": "{{ site_url }}{{ crumb_url }}" },
+    { "@type": "ListItem", "position": 3, "name": {{ page.title | jsonify }}, "item": "{{ site_url }}{{ page.url }}" }
+  ]
+}
+</script>
+{%- endif -%}
+{%- if page.faq -%}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {%- for item in site.data.faq -%}
+    {
+      "@type": "Question",
+      "name": {{ item.q | jsonify }},
+      "acceptedAnswer": { "@type": "Answer", "text": {{ item.a | markdownify | strip_newlines | jsonify }} }
+    }{% unless forloop.last %},{% endunless %}
+    {%- endfor -%}
+  ]
+}
+</script>
+{%- endif -%}

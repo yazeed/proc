@@ -1,11 +1,11 @@
 ---
 layout: page
 title: proc wait
-description: "wait for processes to exit."
+description: "Wait for processes to exit."
 permalink: /commands/wait
 ---
 
-block until target process(es) exit. non-interactive — works in scripts and pipelines.
+Block until target process(es) exit. Non-interactive — works in scripts and pipelines.
 
 ```bash
 proc wait node                 # wait until all node processes exit
@@ -14,19 +14,19 @@ proc wait 1234                 # wait for specific PID to exit
 proc wait node,python          # wait for all to exit
 ```
 
-## options
+## Options
 
-| flag | short | description |
+| Flag | Short | Description |
 |------|-------|-------------|
-| `--interval <secs>` | `-n` | poll interval in seconds (default: 5) |
-| `--timeout <secs>` | `-t` | max wait time, 0 = no timeout (default: 0). exits 1 if processes are still running |
-| `--quiet` | `-q` | suppress periodic status, only print exits and final result |
-| `--in [<dir>]` | `-i` | filter by directory |
-| `--by <name>` | `-b` | filter by process name |
-| `--json` | `-j` | output as JSON |
-| `--verbose` | `-v` | show extra details |
+| `--interval <secs>` | `-n` | Poll interval in seconds (default: 5) |
+| `--timeout <secs>` | `-t` | Max wait time, 0 = no timeout (default: 0). Exits 1 if processes are still running |
+| `--quiet` | `-q` | Suppress periodic status, only print exits and final result |
+| `--in [<dir>]` | `-i` | Filter by directory |
+| `--by <name>` | `-b` | Filter by process name |
+| `--json` | `-j` | Output as JSON |
+| `--verbose` | `-v` | Show extra details |
 
-## examples
+## Examples
 
 ```bash
 # wait for node processes to finish
@@ -51,6 +51,6 @@ proc wait node --in .
 proc wait node --json --timeout 120 || echo "still running"
 ```
 
-## see also
+## See also
 
 [watch](watch) for real-time interactive monitoring, [free](free) to kill and verify port freed, [by](by) to find processes by name.

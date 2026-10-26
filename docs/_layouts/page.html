@@ -1,12 +1,23 @@
 ---
 layout: default
 ---
-<div class="page-header">
-  <h1>{{ page.title }}</h1>
-  {% if page.description %}
-  <p class="post-description">{{ page.description }}</p>
+{% assign is_docs = false %}
+{% if page.url contains "/commands" %}{% assign is_docs = true %}{% endif %}
+<div class="page{% if is_docs %} page-docs{% endif %}">
+  {% if is_docs %}
+  <aside class="page-aside">
+    {% include commands-nav.html %}
+  </aside>
   {% endif %}
-</div>
-<div class="post-content">
-  {{ content }}
+  <article class="page-body">
+    <header class="page-header">
+      <h1>{{ page.title }}</h1>
+      {% if page.description %}
+      <p class="page-lede">{{ page.description }}</p>
+      {% endif %}
+    </header>
+    <div class="prose">
+      {{ content }}
+    </div>
+  </article>
 </div>

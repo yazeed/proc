@@ -1,11 +1,11 @@
 ---
 layout: page
 title: proc on
-description: "bidirectional port/process lookup."
+description: "Bidirectional port/process lookup."
 permalink: /commands/on
 ---
 
-port/process lookup — works both ways. alias: `:`.
+Port/process lookup — works both ways. Alias: `:`.
 
 ```bash
 proc on :3000          # what's on port 3000?
@@ -14,18 +14,18 @@ proc on 1234           # what ports is PID 1234 using?
 proc on :3000,:8080    # multiple targets
 ```
 
-every view shows the process's directory and uptime.
+Every view shows the process's directory and uptime.
 
-## options
+## Options
 
-| flag | short | description |
+| Flag | Short | Description |
 |------|-------|-------------|
-| `--in [<dir>]` | `-i` | filter by directory |
-| `--by <name>` | `-b` | filter by process name |
-| `--json` | `-j` | output as JSON |
-| `--verbose` | `-v` | show full command line |
+| `--in [<dir>]` | `-i` | Filter by directory |
+| `--by <name>` | `-b` | Filter by process name |
+| `--json` | `-j` | Output as JSON |
+| `--verbose` | `-v` | Show full command line |
 
-## examples
+## Examples
 
 ```bash
 # what's running on port 3000?
@@ -41,6 +41,6 @@ proc on node --in .
 proc on :3000 --json
 ```
 
-## see also
+## See also
 
 [info](info) for detailed process information, [ports](ports) to list all listening ports.

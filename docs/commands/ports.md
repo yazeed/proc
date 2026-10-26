@@ -1,11 +1,11 @@
 ---
 layout: page
 title: proc ports
-description: "list all listening ports."
+description: "List all listening ports."
 permalink: /commands/ports
 ---
 
-show all listening ports on the system. alias: `p`.
+Show all listening ports on the system. Alias: `p`.
 
 ```bash
 proc ports                 # all listening ports
@@ -13,21 +13,21 @@ proc ports --by node       # ports used by node
 proc ports --exposed       # network-exposed only
 ```
 
-## options
+## Options
 
-| flag | short | description |
+| Flag | Short | Description |
 |------|-------|-------------|
-| `--by <name>` | `-b` | filter by process name |
-| `--in [<dir>]` | `-i` | filter by directory |
-| `--exposed` | `-e` | only network-exposed ports (0.0.0.0, ::) |
-| `--local` | `-l` | only localhost ports (127.0.0.1, ::1) |
-| `--range <start-end>` | `-r` | filter by port range (e.g., 3000-9000) |
-| `--sort <key>` | `-s` | sort by: port, pid, name (default: port) |
-| `--limit <n>` | `-n` | limit results |
-| `--json` | `-j` | output as JSON |
-| `--verbose` | `-v` | show executable path |
+| `--by <name>` | `-b` | Filter by process name |
+| `--in [<dir>]` | `-i` | Filter by directory |
+| `--exposed` | `-e` | Only network-exposed ports (0.0.0.0, ::) |
+| `--local` | `-l` | Only localhost ports (127.0.0.1, ::1) |
+| `--range <start-end>` | `-r` | Filter by port range (e.g., 3000-9000) |
+| `--sort <key>` | `-s` | Sort by: port, pid, name (default: port) |
+| `--limit <n>` | `-n` | Limit results |
+| `--json` | `-j` | Output as JSON |
+| `--verbose` | `-v` | Show executable path |
 
-## examples
+## Examples
 
 ```bash
 # all ports, sorted by process name
@@ -43,6 +43,6 @@ proc ports --exposed
 proc ports --in .
 ```
 
-## see also
+## See also
 
 [on](on) for looking up a specific port.

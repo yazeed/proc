@@ -1,5 +1,5 @@
 ---
-title: "zombie processes, orphans, and stuck processes: a debugging guide"
+title: "Zombie processes, orphans, and stuck processes: a debugging guide"
 description: "What zombie, orphan, and stuck processes actually are, how to find them with ps and awk, and how to deal with each type."
 date: 2026-03-06
 ---

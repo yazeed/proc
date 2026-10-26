@@ -52,6 +52,7 @@ Update version in ALL of these files:
 - [ ] `pkg/npm/package.json` — version field
 - [ ] `flake.nix` — version field
 - [ ] `.claude-plugin/marketplace.json` — `metadata.version` field
+- [ ] `docs/_data/release.yml` — `version` field (the website's header, footer, install page and structured data read it)
 
 ## 4. Documentation
 
@@ -118,6 +119,7 @@ cd - && rm -rf /tmp/proc-skill-check
 
 Also verify:
 - [ ] https://docs.rs/proc-cli — Rust docs updated
+- [ ] https://proc-cli.com/install — the header pill and the install page show the new version (GitHub Pages rebuilds a minute or two after the push)
 - [ ] `proc --version` — Shows new version
 - [ ] `proc manpage` — Includes new commands
 - [ ] `proc completions bash` — Includes new commands

@@ -1,11 +1,11 @@
 ---
 layout: page
 title: proc watch
-description: "real-time process monitoring."
+description: "Real-time process monitoring."
 permalink: /commands/watch
 ---
 
-live-updating process table. aliases: `w`, `top`.
+Live-updating process table. Aliases: `w`, `top`.
 
 ```bash
 proc watch                 # watch all processes
@@ -14,33 +14,33 @@ proc watch node            # watch node processes
 proc watch :3000           # watch process on port
 ```
 
-press `q`, `Esc`, or `Ctrl+C` to exit. terminal is always restored cleanly.
+Press `q`, `Esc`, or `Ctrl+C` to exit. Terminal is always restored cleanly.
 
-the table has the same columns as `proc list`, including uptime on terminals at least 100 columns wide.
+The table has the same columns as `proc list`, including uptime on terminals at least 100 columns wide.
 
-## options
+## Options
 
-| flag | short | description |
+| Flag | Short | Description |
 |------|-------|-------------|
-| `--interval <secs>` | `-n` | refresh interval (default: 2) |
-| `--sort <key>` | `-s` | sort by: cpu, mem, pid, name (default: cpu) |
-| `--limit <n>` | `-l` | limit results shown |
-| `--in [<dir>]` | `-i` | filter by directory |
-| `--by <name>` | `-b` | filter by process name |
-| `--min-cpu <n>` | | minimum CPU % |
-| `--min-mem <n>` | | minimum memory (MB) |
+| `--interval <secs>` | `-n` | Refresh interval (default: 2) |
+| `--sort <key>` | `-s` | Sort by: cpu, mem, pid, name (default: cpu) |
+| `--limit <n>` | `-l` | Limit results shown |
+| `--in [<dir>]` | `-i` | Filter by directory |
+| `--by <name>` | `-b` | Filter by process name |
+| `--min-cpu <n>` | | Minimum CPU % |
+| `--min-mem <n>` | | Minimum memory (MB) |
 | `--json` | `-j` | NDJSON output (one object per refresh) |
-| `--verbose` | `-v` | show extra details |
+| `--verbose` | `-v` | Show extra details |
 
-## modes
+## Modes
 
-**terminal (default)**: alternate screen with auto-refresh. adapts to terminal size.
+**Terminal (default)**: Alternate screen with auto-refresh. Adapts to terminal size.
 
-**json** (`--json`): newline-delimited JSON, one object per refresh cycle. pipe to `jq` or other tools.
+**JSON** (`--json`): Newline-delimited JSON, one object per refresh cycle. Pipe to `jq` or other tools.
 
-**non-TTY**: when stdout is not a terminal (piped), prints a single snapshot and exits.
+**Non-TTY**: When stdout is not a terminal (piped), prints a single snapshot and exits.
 
-## examples
+## Examples
 
 ```bash
 # watch top 10 by memory, refresh every second
@@ -56,6 +56,6 @@ proc watch node --json | jq '.processes[].name'
 proc watch node | head -20
 ```
 
-## see also
+## See also
 
 [list](list) for a one-time snapshot, [by](by) for filtered listing.

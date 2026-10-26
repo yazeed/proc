@@ -1,5 +1,5 @@
 ---
-title: "eaddrinuse: what it means and how to fix it"
+title: "EADDRINUSE: what it means and how to fix it"
 description: "What EADDRINUSE means at the OS level, how to find what's using your port, and why ports stay busy after a crash (TIME_WAIT, SO_REUSEADDR)."
 date: 2026-03-10
 ---

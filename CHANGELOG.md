@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Website redesign ([proc-cli.com](https://proc-cli.com)).** A new layout and type built for reading: a 42rem text column, Atkinson Hyperlegible Next and JetBrains Mono, light and dark themes. Code blocks are dark terminals with copy buttons and spacing above and below, so the text after a block no longer sits against it. The home page leads with an interactive example of each target type. Command pages have a sidebar listing every command. The header and the install page show the latest version, read from `docs/_data/release.yml`, which RELEASE.md now bumps with the others
+- **Sentence case across the site**: page titles, headings, tables and post titles
+
+### Added
+
+- **[FAQ page](https://proc-cli.com/faq)**: 16 answers to the most searched process and port questions ("address already in use", killing a process on a port on Mac and Windows, zombies, orphans, pausing a process), each with the proc command and the classic alternative
+- **Blog post**: [What's new in proc](https://proc-cli.com/posts/whats-new-in-proc), covering the releases since March
+- **Structured data**: SoftwareApplication on the home page, FAQPage on the FAQ, BreadcrumbList on posts and command pages, and an author (`yazeed`, linked to GitHub) on posts, shown with an avatar next to the date. Every page also has a social card image
+
 ## [1.14.5] - 2026-10-25
 
 ### Changed

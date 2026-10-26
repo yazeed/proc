@@ -1,11 +1,11 @@
 ---
 layout: page
 title: proc kill
-description: "force kill processes."
+description: "Force kill processes."
 permalink: /commands/kill
 ---
 
-send SIGKILL to processes. asks for confirmation unless `--yes`. alias: `k`.
+Send SIGKILL to processes. Asks for confirmation unless `--yes`. Alias: `k`.
 
 ```bash
 proc kill :3000            # kill process on port 3000
@@ -13,19 +13,19 @@ proc kill node             # kill all node processes
 proc kill :3000,:8080,node # kill multiple targets
 ```
 
-## options
+## Options
 
-| flag | short | description |
+| Flag | Short | Description |
 |------|-------|-------------|
-| `--yes` | `-y` | skip confirmation |
-| `--dry-run` | | show what would be killed |
-| `--graceful` | `-g` | send SIGTERM instead of SIGKILL |
-| `--in [<dir>]` | `-i` | filter by directory |
-| `--by <name>` | `-b` | filter by process name |
-| `--json` | `-j` | output as JSON |
-| `--verbose` | `-v` | show extra details |
+| `--yes` | `-y` | Skip confirmation |
+| `--dry-run` | | Show what would be killed |
+| `--graceful` | `-g` | Send SIGTERM instead of SIGKILL |
+| `--in [<dir>]` | `-i` | Filter by directory |
+| `--by <name>` | `-b` | Filter by process name |
+| `--json` | `-j` | Output as JSON |
+| `--verbose` | `-v` | Show extra details |
 
-## examples
+## Examples
 
 ```bash
 # preview before killing
@@ -44,6 +44,6 @@ proc kill node --in .
 proc kill :3000,:8080,node
 ```
 
-## see also
+## See also
 
 [stop](stop) for graceful shutdown with timeout, [unstick](unstick) for stuck processes.

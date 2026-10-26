@@ -1,11 +1,11 @@
 ---
 layout: page
 title: proc in
-description: "filter processes by working directory."
+description: "Filter processes by working directory."
 permalink: /commands/in
 ---
 
-find processes running in a specific directory.
+Find processes running in a specific directory.
 
 ```bash
 proc in .                  # processes in current directory
@@ -15,22 +15,22 @@ proc in . --by node        # node processes in cwd
 
 The directory can be one that was deleted, such as a removed git worktree: processes still running there are listed. A path that doesn't exist and has nothing running in it is treated as a typo and exits 4.
 
-## options
+## Options
 
-| flag | short | description |
+| Flag | Short | Description |
 |------|-------|-------------|
-| `--by <name>` | `-b` | filter by process name |
-| `--min-cpu <n>` | | minimum CPU % |
-| `--min-mem <n>` | | minimum memory (MB) |
-| `--status <s>` | | filter by status: running, sleeping, stopped, zombie |
-| `--min-uptime <s>` | | minimum uptime in seconds |
-| `--parent <pid>` | | only children of this parent PID |
-| `--sort <key>` | `-s` | sort by: cpu, mem, pid, name (default: cpu) |
-| `--limit <n>` | `-n` | limit results |
-| `--json` | `-j` | output as JSON |
-| `--verbose` | `-v` | show command line, cwd, parent PID, uptime |
+| `--by <name>` | `-b` | Filter by process name |
+| `--min-cpu <n>` | | Minimum CPU % |
+| `--min-mem <n>` | | Minimum memory (MB) |
+| `--status <s>` | | Filter by status: running, sleeping, stopped, zombie |
+| `--min-uptime <s>` | | Minimum uptime in seconds |
+| `--parent <pid>` | | Only children of this parent PID |
+| `--sort <key>` | `-s` | Sort by: cpu, mem, pid, name (default: cpu) |
+| `--limit <n>` | `-n` | Limit results |
+| `--json` | `-j` | Output as JSON |
+| `--verbose` | `-v` | Show command line, cwd, parent PID, uptime |
 
-## examples
+## Examples
 
 ```bash
 # everything running in current project
@@ -46,6 +46,6 @@ proc in ~/Sites/myapp --min-cpu 10
 proc in . --json
 ```
 
-## see also
+## See also
 
 [by](by) to start from a name, [list](list) for all processes.

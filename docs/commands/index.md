@@ -1,54 +1,54 @@
 ---
 layout: page
 title: commands
-description: "complete reference for all proc commands."
+description: "Complete reference for all proc commands."
 permalink: /commands
 ---
 
-## discovery
+## Discovery
 
-| command | aliases | description |
+| Command | Aliases | Description |
 |---------|---------|-------------|
-| [on](on) | `:` | port/process lookup (bidirectional) |
-| [why](why) | | trace why a port is busy or show process ancestry |
-| [for](for) | `f` | find processes by file path |
-| [by](by) | `b` | filter processes by name |
-| [in](in) | | filter processes by working directory |
-| [list](list) | `l`, `ps` | list processes |
-| [info](info) | `i`, `inspect` | show detailed process information |
-| [ports](ports) | `p` | list all listening ports |
-| [tree](tree) | `t` | show process tree |
-| [watch](watch) | `w`, `top` | real-time process monitoring |
-| [stuck](stuck) | `x` | find stuck/hung processes |
-| [orphans](orphans) | `o` | find orphaned processes |
+| [on](on) | `:` | Port/process lookup (bidirectional) |
+| [why](why) | | Trace why a port is busy or show process ancestry |
+| [for](for) | `f` | Find processes by file path |
+| [by](by) | `b` | Filter processes by name |
+| [in](in) | | Filter processes by working directory |
+| [list](list) | `l`, `ps` | List processes |
+| [info](info) | `i`, `inspect` | Show detailed process information |
+| [ports](ports) | `p` | List all listening ports |
+| [tree](tree) | `t` | Show process tree |
+| [watch](watch) | `w`, `top` | Real-time process monitoring |
+| [stuck](stuck) | `x` | Find stuck/hung processes |
+| [orphans](orphans) | `o` | Find orphaned processes |
 
-## lifecycle
+## Lifecycle
 
-| command | aliases | description |
+| Command | Aliases | Description |
 |---------|---------|-------------|
-| [kill](kill) | `k` | force kill processes (SIGKILL) |
-| [stop](stop) | `s` | graceful stop with --signal support (SIGTERM, then SIGKILL) |
-| [freeze](freeze) | | pause processes (SIGSTOP) |
-| [thaw](thaw) | | resume frozen processes (SIGCONT) |
-| [free](free) | | free ports by killing the occupying process |
-| [wait](wait) | | block until process(es) exit |
-| [unstick](unstick) | `u` | attempt to recover stuck processes |
+| [kill](kill) | `k` | Force kill processes (SIGKILL) |
+| [stop](stop) | `s` | Graceful stop with --signal support (SIGTERM, then SIGKILL) |
+| [freeze](freeze) | | Pause processes (SIGSTOP) |
+| [thaw](thaw) | | Resume frozen processes (SIGCONT) |
+| [free](free) | | Free ports by killing the occupying process |
+| [wait](wait) | | Block until process(es) exit |
+| [unstick](unstick) | `u` | Attempt to recover stuck processes |
 
-## common options
+## Common options
 
-most commands support these flags (check individual command pages for details):
+Most commands support these flags (check individual command pages for details):
 
-| flag | short | description |
+| Flag | Short | Description |
 |------|-------|-------------|
-| `--json` | `-j` | output as JSON |
-| `--verbose` | `-v` | show extra details |
-| `--in <dir>` | `-i` | filter by directory |
-| `--by <name>` | `-b` | filter by process name |
-| `--help` | `-h` | show help |
+| `--json` | `-j` | Output as JSON |
+| `--verbose` | `-v` | Show extra details |
+| `--in <dir>` | `-i` | Filter by directory |
+| `--by <name>` | `-b` | Filter by process name |
+| `--help` | `-h` | Show help |
 
-## target syntax
+## Target syntax
 
-targets work the same way everywhere:
+Targets work the same way everywhere:
 
 ```bash
 proc on :3000          # port
@@ -57,16 +57,16 @@ proc on node           # name
 proc kill :3000,:8080  # multiple (comma-separated)
 ```
 
-## scripting
+## Scripting
 
-with `--json`, every command prints one JSON document with `action` (the command name) and `success`. `proc watch --json` streams one per refresh. errors, including invalid flags, are JSON too.
+With `--json`, every command prints one JSON document with `action` (the command name) and `success`. `proc watch --json` streams one per refresh. Errors, including invalid flags, are JSON too.
 
-| exit code | meaning |
+| Exit code | Meaning |
 |-----------|---------|
-| `0` | success |
-| `1` | error, or not fully successful: a process failed, a port stayed busy, `wait` timed out |
-| `2` | process or port not found |
-| `3` | permission denied |
-| `4` | invalid input (unknown flag, bad argument, invalid signal) |
+| `0` | Success |
+| `1` | Error, or not fully successful: a process failed, a port stayed busy, `wait` timed out |
+| `2` | Process or port not found |
+| `3` | Permission denied |
+| `4` | Invalid input (unknown flag, bad argument, invalid signal) |
 
 `"success": false` always comes with a non-zero exit code.

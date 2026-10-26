@@ -1,11 +1,11 @@
 ---
 layout: page
 title: proc why
-description: "trace why a port is busy or show process ancestry."
+description: "Trace why a port is busy or show process ancestry."
 permalink: /commands/why
 ---
 
-explain why a port is in use or trace the ancestry of a process. read-only — no confirmation needed.
+Explain why a port is in use or trace the ancestry of a process. Read-only — no confirmation needed.
 
 ```bash
 proc why :3000     # trace why port 3000 is busy
@@ -13,16 +13,16 @@ proc why node      # show ancestry of node processes
 proc why 1234      # show ancestry of PID 1234
 ```
 
-each step of the chain shows how long that process has been running (`up 2d 4h`), so a long-lived parent such as a forgotten `tmux` session stands out; `--json` includes `uptime_secs`.
+Each step of the chain shows how long that process has been running (`up 2d 4h`), so a long-lived parent such as a forgotten `tmux` session stands out; `--json` includes `uptime_secs`.
 
-## options
+## Options
 
-| flag | short | description |
+| Flag | Short | Description |
 |------|-------|-------------|
-| `--json` | `-j` | output as JSON |
-| `--verbose` | `-v` | show extra details |
+| `--json` | `-j` | Output as JSON |
+| `--verbose` | `-v` | Show extra details |
 
-## examples
+## Examples
 
 ```bash
 # find out why port 3000 is busy
@@ -38,6 +38,6 @@ proc why 1234
 proc why :3000 --json
 ```
 
-## see also
+## See also
 
 [on](on) for port/process lookup, [tree](tree) with `--ancestors` for full process tree.

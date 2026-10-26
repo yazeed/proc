@@ -1,11 +1,11 @@
 ---
 layout: page
 title: proc stop
-description: "gracefully stop processes."
+description: "Gracefully stop processes."
 permalink: /commands/stop
 ---
 
-send SIGTERM, wait for exit, then SIGKILL after timeout. alias: `s`.
+Send SIGTERM, wait for exit, then SIGKILL after timeout. Alias: `s`.
 
 ```bash
 proc stop :3000            # gracefully stop port 3000
@@ -13,20 +13,20 @@ proc stop node             # stop all node processes
 proc stop node --timeout 5 # 5s before force kill
 ```
 
-## options
+## Options
 
-| flag | short | description |
+| Flag | Short | Description |
 |------|-------|-------------|
-| `--yes` | `-y` | skip confirmation |
-| `--dry-run` | | show what would be stopped |
-| `--timeout <secs>` | `-t` | seconds before force kill (default: 10) |
-| `--signal <name>` | `-S` | send a specific signal instead of SIGTERM (macOS and Linux; exits 4 on Windows) |
-| `--in [<dir>]` | `-i` | filter by directory |
-| `--by <name>` | `-b` | filter by process name |
-| `--json` | `-j` | output as JSON |
-| `--verbose` | `-v` | show extra details |
+| `--yes` | `-y` | Skip confirmation |
+| `--dry-run` | | Show what would be stopped |
+| `--timeout <secs>` | `-t` | Seconds before force kill (default: 10) |
+| `--signal <name>` | `-S` | Send a specific signal instead of SIGTERM (macOS and Linux; exits 4 on Windows) |
+| `--in [<dir>]` | `-i` | Filter by directory |
+| `--by <name>` | `-b` | Filter by process name |
+| `--json` | `-j` | Output as JSON |
+| `--verbose` | `-v` | Show extra details |
 
-## examples
+## Examples
 
 ```bash
 # graceful stop with 5-second timeout
@@ -48,6 +48,6 @@ proc stop nginx --signal HUP
 proc stop worker --signal USR1
 ```
 
-## see also
+## See also
 
 [kill](kill) for immediate SIGKILL, [unstick](unstick) for stuck processes, [freeze](freeze)/[thaw](thaw) to pause and resume.

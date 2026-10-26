@@ -1,19 +1,21 @@
 ---
 layout: page
-title: install
-description: "install proc on macOS, Linux, or Windows."
+title: Install
+description: "Install proc on macOS, Linux or Windows. One binary, no dependencies."
 permalink: /install
 ---
 
+The latest version is **{{ site.data.release.version }}** ([what's new](changelog)). Every method below installs the same single binary, called `proc`.
+
 ## macOS
 
-### homebrew
+With [Homebrew](https://brew.sh). The command adds the `yazeed/proc` tap for you.
 
 ```bash
 brew install yazeed/proc/proc
 ```
 
-### shell script
+Or with the install script, which downloads the release binary for your Mac:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/yazeed/proc-cli/main/install.sh | bash
@@ -21,116 +23,81 @@ curl -fsSL https://raw.githubusercontent.com/yazeed/proc-cli/main/install.sh | b
 
 ## Linux
 
-### shell script
+The install script works on any distribution, including Alpine and older releases such as Debian 10 and Ubuntu 20.04, because the binaries are static:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/yazeed/proc-cli/main/install.sh | bash
 ```
 
-### cargo
-
-```bash
-cargo install proc-cli
-```
-
-### npm
-
-```bash
-npm install -g proc-cli
-```
+Homebrew on Linux works too: `brew install yazeed/proc/proc`.
 
 ## Windows
 
-### scoop
+With [Scoop](https://scoop.sh):
 
 ```bash
 scoop bucket add proc https://github.com/yazeed/scoop-bucket-proc
 scoop install proc
 ```
 
-### cargo
+## Any platform
 
-```bash
-cargo install proc-cli
-```
+### npm or bun
 
-## cross-platform
-
-### cargo
-
-```bash
-cargo install proc-cli
-```
-
-### cargo-binstall
-
-Pre-built binaries, no compilation.
-
-```bash
-cargo binstall proc-cli
-```
-
-### npm / bun
+The package downloads the binary for your platform the first time you run `proc`, and checks its SHA-256 checksum.
 
 ```bash
 npm install -g proc-cli
-# or
 bun install -g proc-cli
 ```
 
-### nix
+### Cargo
+
+From source with [Rust](https://rustup.rs), or as a pre-built binary with [cargo-binstall](https://github.com/cargo-bins/cargo-binstall):
+
+```bash
+cargo install proc-cli
+cargo binstall proc-cli
+```
+
+### Nix
 
 ```bash
 nix profile install github:yazeed/proc-cli
 ```
 
-### docker
+### Docker
 
-Runs with the host PID and network namespaces: `--pid=host` shows the host's processes, and `--net=host` shows its ports (`on :port`, `ports`, `free`).
+`--pid=host` lets proc see the host's processes, and `--net=host` its ports (for `on :port`, `ports` and `free`).
 
 ```bash
 docker run --rm -it --pid=host --net=host yazeed/proc-cli
 ```
 
-## verify
+## Check it works
 
 ```bash
 proc --version
-proc on :3000
-proc --help
+proc ports
 ```
 
-## agent skill
+## Teach your coding agent
 
-Teach your coding agent (Claude Code, Codex, Cursor, Gemini CLI and others) to use proc with structured JSON output.
+The [agent skill](skill) teaches Claude Code, Codex, Cursor, Gemini CLI and others when to reach for proc:
 
 ```bash
 npx skills add yazeed/proc-cli
 ```
 
-Or, in Claude Code, as a plugin:
-
-```text
-/plugin marketplace add yazeed/proc-cli
-/plugin install proc-cli@proc-cli
-```
-
-see [agent skill](skill) for what it teaches, updating, and prompts to try.
-
-## shell completions
+## Shell completions
 
 ```bash
-# bash
-proc completions bash > /etc/bash_completion.d/proc
-
-# zsh
-proc completions zsh > ~/.zsh/completions/_proc
-
-# fish
-proc completions fish > ~/.config/fish/completions/proc.fish
+proc completions bash > /etc/bash_completion.d/proc          # bash
+proc completions zsh > ~/.zsh/completions/_proc               # zsh
+proc completions fish > ~/.config/fish/completions/proc.fish  # fish
 ```
 
-## man page
+## Man page
 
 ```bash
 proc manpage | sudo tee /usr/local/share/man/man1/proc.1 > /dev/null

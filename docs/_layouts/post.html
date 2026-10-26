@@ -1,16 +1,25 @@
 ---
 layout: default
 ---
-<article>
-  <div class="post-header">
-    <a href="{{ site.baseurl }}/" class="post-back">&larr; posts</a>
-    <h1>{{ page.title }}</h1>
-    <div class="post-meta">{{ page.date | date: "%B %d, %Y" }}</div>
-    {% if page.description %}
-    <p class="post-description">{{ page.description }}</p>
-    {% endif %}
-  </div>
-  <div class="post-content">
-    {{ content }}
-  </div>
-</article>
+<div class="page">
+  <article class="page-body post">
+    <header class="page-header">
+      <a href="{{ '/posts' | relative_url }}" class="post-back">All posts</a>
+      <h1>{{ page.title }}</h1>
+      <p class="post-meta">
+        <a class="post-author" href="{{ site.author.url }}" rel="author"><img src="https://github.com/yazeed.png?size=64" alt="" width="28" height="28">{{ site.author.name }}</a>
+        <time datetime="{{ page.date | date_to_xmlschema }}">{{ page.date | date: "%B %-d, %Y" }}</time>
+        {% assign words = content | number_of_words %}<span>{{ words | divided_by: 220 | plus: 1 }} min read</span>
+      </p>
+      {% if page.description %}
+      <p class="page-lede">{{ page.description }}</p>
+      {% endif %}
+    </header>
+    <div class="prose">
+      {{ content }}
+    </div>
+    <footer class="post-footer">
+      <p>proc is a free, open-source CLI for macOS, Linux and Windows. <a href="{{ '/install' | relative_url }}">Install it</a>, or read the <a href="{{ '/commands' | relative_url }}">command reference</a>.</p>
+    </footer>
+  </article>
+</div>

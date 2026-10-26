@@ -1,11 +1,11 @@
 ---
 layout: page
 title: proc stuck
-description: "find stuck/hung processes."
+description: "Find stuck/hung processes."
 permalink: /commands/stuck
 ---
 
-find processes that appear stuck or hung. alias: `x`.
+Find processes that appear stuck or hung. Alias: `x`.
 
 ```bash
 proc stuck                 # find all stuck processes
@@ -13,20 +13,20 @@ proc stuck --kill          # find and kill them
 proc stuck --by node       # only stuck node processes
 ```
 
-## options
+## Options
 
-| flag | short | description |
+| Flag | Short | Description |
 |------|-------|-------------|
-| `--timeout <secs>` | `-t` | seconds to consider stuck (default: 300) |
-| `--kill` | `-k` | kill found stuck processes |
-| `--dry-run` | | show what would be killed |
-| `--yes` | `-y` | skip confirmation when killing |
-| `--in [<dir>]` | `-i` | filter by directory |
-| `--by <name>` | `-b` | filter by process name |
-| `--json` | `-j` | output as JSON |
-| `--verbose` | `-v` | show extra details |
+| `--timeout <secs>` | `-t` | Seconds to consider stuck (default: 300) |
+| `--kill` | `-k` | Kill found stuck processes |
+| `--dry-run` | | Show what would be killed |
+| `--yes` | `-y` | Skip confirmation when killing |
+| `--in [<dir>]` | `-i` | Filter by directory |
+| `--by <name>` | `-b` | Filter by process name |
+| `--json` | `-j` | Output as JSON |
+| `--verbose` | `-v` | Show extra details |
 
-## examples
+## Examples
 
 ```bash
 # find stuck processes (5-minute threshold)
@@ -45,6 +45,6 @@ proc stuck --kill --dry-run
 proc stuck --by node --in .
 ```
 
-## see also
+## See also
 
 [unstick](unstick) for recovery attempts before killing, [kill](kill) for direct termination.

@@ -1,11 +1,11 @@
 ---
 layout: page
 title: proc orphans
-description: "find orphaned processes."
+description: "Find orphaned processes."
 permalink: /commands/orphans
 ---
 
-find processes whose parent has exited, leaving them orphaned (reparented to PID 1). alias: `o`.
+Find processes whose parent has exited, leaving them orphaned (reparented to PID 1). Alias: `o`.
 
 ```bash
 proc orphans                 # list all orphaned processes
@@ -13,19 +13,19 @@ proc orphans --kill --yes    # kill all orphans without confirmation
 proc orphans --by node       # find orphaned node processes
 ```
 
-## options
+## Options
 
-| flag | short | description |
+| Flag | Short | Description |
 |------|-------|-------------|
-| `--kill` | `-k` | kill orphaned processes |
-| `--yes` | `-y` | skip confirmation (with --kill) |
-| `--dry-run` | | show what would be killed (with --kill) |
-| `--in [<dir>]` | `-i` | filter by directory |
-| `--by <name>` | `-b` | filter by process name |
-| `--json` | `-j` | output as JSON |
-| `--verbose` | `-v` | show extra details |
+| `--kill` | `-k` | Kill orphaned processes |
+| `--yes` | `-y` | Skip confirmation (with --kill) |
+| `--dry-run` | | Show what would be killed (with --kill) |
+| `--in [<dir>]` | `-i` | Filter by directory |
+| `--by <name>` | `-b` | Filter by process name |
+| `--json` | `-j` | Output as JSON |
+| `--verbose` | `-v` | Show extra details |
 
-## examples
+## Examples
 
 ```bash
 # list all orphaned processes
@@ -44,6 +44,6 @@ proc orphans --kill --dry-run
 proc orphans --kill --yes
 ```
 
-## see also
+## See also
 
 [stuck](stuck) for hung processes, [unstick](unstick) to recover stuck processes.

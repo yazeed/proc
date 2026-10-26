@@ -5,6 +5,18 @@ baseurl: ""
 
 permalink: /posts/:title/
 
+# Author of the posts, and the site's social profile (jekyll-seo-tag puts both
+# in the JSON-LD). GitHub username only.
+author:
+  name: yazeed
+  url: https://github.com/yazeed
+social:
+  name: yazeed
+  links:
+    - https://github.com/yazeed
+# Default social card for pages without their own image
+image: /assets/social-card.png
+
 # Internal design docs live under docs/ but are not part of the published site.
 exclude:
   - superpowers
@@ -18,6 +30,7 @@ defaults:
       type: "posts"
     values:
       layout: "post"
+      image: /assets/social-card.png
   - scope:
       path: ""
       type: "pages"

@@ -1,11 +1,11 @@
 ---
 layout: page
 title: proc list
-description: "list processes with filters and sorting."
+description: "List processes with filters and sorting."
 permalink: /commands/list
 ---
 
-list all processes, with optional filters. aliases: `l`, `ps`.
+List all processes, with optional filters. Aliases: `l`, `ps`.
 
 ```bash
 proc list                      # all processes
@@ -13,25 +13,25 @@ proc list node                 # filter by name
 proc list --sort cpu --limit 10  # top 10 by CPU
 ```
 
-the table shows PID, directory, name, arguments, CPU, memory and status, plus uptime on terminals at least 100 columns wide. `--verbose` and `--json` always include uptime.
+The table shows PID, directory, name, arguments, CPU, memory and status, plus uptime on terminals at least 100 columns wide. `--verbose` and `--json` always include uptime.
 
-## options
+## Options
 
-| flag | short | description |
+| Flag | Short | Description |
 |------|-------|-------------|
-| `--in [<dir>]` | `-i` | filter by directory |
-| `--path <path>` | `-p` | filter by executable path |
-| `--min-cpu <n>` | | minimum CPU % |
-| `--min-mem <n>` | | minimum memory (MB) |
-| `--status <s>` | | filter by status: running, sleeping, stopped, zombie |
-| `--min-uptime <s>` | | minimum uptime in seconds |
-| `--parent <pid>` | | only children of this parent PID |
-| `--sort <key>` | `-s` | sort by: cpu, mem, pid, name (default: cpu) |
-| `--limit <n>` | `-n` | limit results |
-| `--json` | `-j` | output as JSON |
-| `--verbose` | `-v` | show command line, cwd, parent PID, uptime |
+| `--in [<dir>]` | `-i` | Filter by directory |
+| `--path <path>` | `-p` | Filter by executable path |
+| `--min-cpu <n>` | | Minimum CPU % |
+| `--min-mem <n>` | | Minimum memory (MB) |
+| `--status <s>` | | Filter by status: running, sleeping, stopped, zombie |
+| `--min-uptime <s>` | | Minimum uptime in seconds |
+| `--parent <pid>` | | Only children of this parent PID |
+| `--sort <key>` | `-s` | Sort by: cpu, mem, pid, name (default: cpu) |
+| `--limit <n>` | `-n` | Limit results |
+| `--json` | `-j` | Output as JSON |
+| `--verbose` | `-v` | Show command line, cwd, parent PID, uptime |
 
-## examples
+## Examples
 
 ```bash
 # top 10 processes by CPU
@@ -47,6 +47,6 @@ proc list --in . --min-mem 100
 proc list --status running --sort mem
 ```
 
-## see also
+## See also
 
 [by](by) and [in](in) for targeted filtering, [watch](watch) for real-time monitoring.

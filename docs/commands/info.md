@@ -1,11 +1,11 @@
 ---
 layout: page
 title: proc info
-description: "show detailed process information."
+description: "Show detailed process information."
 permalink: /commands/info
 ---
 
-detailed information about specific processes. aliases: `i`, `inspect`.
+Detailed information about specific processes. Aliases: `i`, `inspect`.
 
 ```bash
 proc info :3000            # info for process on port 3000
@@ -14,20 +14,20 @@ proc info node             # info for all node processes
 proc info :3000,:8080      # multiple targets
 ```
 
-## options
+## Options
 
-| flag | short | description |
+| Flag | Short | Description |
 |------|-------|-------------|
-| `--in [<dir>]` | `-i` | filter by directory |
-| `--by <name>` | `-b` | filter by process name |
-| `--json` | `-j` | output as JSON |
-| `--verbose` | `-v` | show extra details |
+| `--in [<dir>]` | `-i` | Filter by directory |
+| `--by <name>` | `-b` | Filter by process name |
+| `--json` | `-j` | Output as JSON |
+| `--verbose` | `-v` | Show extra details |
 
-## output
+## Output
 
-shows for each process: name, PID, directory, executable path, user, parent PID, status, CPU %, memory, and uptime.
+Shows for each process: name, PID, directory, executable path, user, parent PID, status, CPU %, memory, and uptime.
 
-## examples
+## Examples
 
 ```bash
 # what's on port 3000? (detailed)
@@ -40,6 +40,6 @@ proc info :3000,1234,node
 proc info node --json
 ```
 
-## see also
+## See also
 
 [on](on) for quick port lookup, [list](list) for tabular overview.

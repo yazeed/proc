@@ -1,0 +1,15 @@
+{% assign groups = "Discovery:on why for by in list info ports tree orphans stuck|Action:kill stop free freeze thaw unstick|Monitoring:watch wait" | split: "|" %}
+<nav class="docs-nav" aria-label="Commands">
+  <a class="docs-nav-all" href="{{ '/commands' | relative_url }}"{% if page.url == "/commands" %} aria-current="page"{% endif %}>All commands</a>
+  {% for group in groups %}
+  {% assign parts = group | split: ":" %}
+  <p class="docs-nav-group">{{ parts[0] }}</p>
+  <ul>
+    {% assign cmds = parts[1] | split: " " %}
+    {% for cmd in cmds %}
+    {% capture cmd_url %}/commands/{{ cmd }}{% endcapture %}
+    <li><a href="{{ cmd_url | relative_url }}"{% if page.url == cmd_url %} aria-current="page"{% endif %}><span class="docs-nav-proc">proc</span> {{ cmd }}</a></li>
+    {% endfor %}
+  </ul>
+  {% endfor %}
+</nav>

@@ -1,11 +1,11 @@
 ---
 layout: page
 title: proc thaw
-description: "resume frozen processes with SIGCONT."
+description: "Resume frozen processes with SIGCONT."
 permalink: /commands/thaw
 ---
 
-send SIGCONT to resume processes paused by `proc freeze`. asks for confirmation unless `--yes`.
+Send SIGCONT to resume processes paused by `proc freeze`. Asks for confirmation unless `--yes`.
 
 ```bash
 proc thaw node             # resume all frozen node processes
@@ -13,18 +13,18 @@ proc thaw :3000            # resume frozen process on port 3000
 proc thaw :3000,:8080,node # resume multiple targets
 ```
 
-## options
+## Options
 
-| flag | short | description |
+| Flag | Short | Description |
 |------|-------|-------------|
-| `--yes` | `-y` | skip confirmation |
-| `--dry-run` | | show what would be resumed |
-| `--in [<dir>]` | `-i` | filter by directory |
-| `--by <name>` | `-b` | filter by process name |
-| `--json` | `-j` | output as JSON |
-| `--verbose` | `-v` | show extra details |
+| `--yes` | `-y` | Skip confirmation |
+| `--dry-run` | | Show what would be resumed |
+| `--in [<dir>]` | `-i` | Filter by directory |
+| `--by <name>` | `-b` | Filter by process name |
+| `--json` | `-j` | Output as JSON |
+| `--verbose` | `-v` | Show extra details |
 
-## examples
+## Examples
 
 ```bash
 # resume all frozen node processes
@@ -40,6 +40,6 @@ proc thaw node --dry-run
 proc thaw :3000 --yes
 ```
 
-## see also
+## See also
 
 [freeze](freeze) to pause processes, [stop](stop) for graceful shutdown.

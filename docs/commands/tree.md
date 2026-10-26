@@ -1,11 +1,11 @@
 ---
 layout: page
 title: proc tree
-description: "show process tree."
+description: "Show process tree."
 permalink: /commands/tree
 ---
 
-display process hierarchy. alias: `t`.
+Display process hierarchy. Alias: `t`.
 
 ```bash
 proc tree                  # full process tree
@@ -14,25 +14,25 @@ proc tree :3000            # tree from port 3000's process
 proc tree 1234 --ancestors # path up to root
 ```
 
-each line shows the process's status, name, PID, CPU, memory and uptime (`up 3m 12s`); `--json` includes `uptime_secs`.
+Each line shows the process's status, name, PID, CPU, memory and uptime (`up 3m 12s`); `--json` includes `uptime_secs`.
 
-## options
+## Options
 
-| flag | short | description |
+| Flag | Short | Description |
 |------|-------|-------------|
-| `--ancestors` | `-a` | show path up to root instead of descendants |
-| `--depth <n>` | `-d` | max depth to display (default: 10) |
-| `--compact` | `-C` | show PIDs only |
-| `--min-cpu <n>` | | minimum CPU % |
-| `--min-mem <n>` | | minimum memory (MB) |
-| `--status <s>` | | filter by status |
-| `--min-uptime <s>` | | minimum uptime in seconds |
-| `--in [<dir>]` | `-i` | filter by directory |
-| `--by <name>` | `-b` | filter by process name |
-| `--json` | `-j` | output as JSON |
-| `--verbose` | `-v` | show extra details |
+| `--ancestors` | `-a` | Show path up to root instead of descendants |
+| `--depth <n>` | `-d` | Max depth to display (default: 10) |
+| `--compact` | `-C` | Show PIDs only |
+| `--min-cpu <n>` | | Minimum CPU % |
+| `--min-mem <n>` | | Minimum memory (MB) |
+| `--status <s>` | | Filter by status |
+| `--min-uptime <s>` | | Minimum uptime in seconds |
+| `--in [<dir>]` | `-i` | Filter by directory |
+| `--by <name>` | `-b` | Filter by process name |
+| `--json` | `-j` | Output as JSON |
+| `--verbose` | `-v` | Show extra details |
 
-## examples
+## Examples
 
 ```bash
 # show node's process tree
@@ -48,6 +48,6 @@ proc tree node --depth 2
 proc tree node --compact
 ```
 
-## see also
+## See also
 
 [list](list) for flat process listing, [info](info) for detailed single-process view.

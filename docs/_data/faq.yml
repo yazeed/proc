@@ -1,0 +1,138 @@
+# Questions people actually search for (DataForSEO, US, October 2026: Google
+# volumes and "People Also Ask"). Rendered by faq.md and, as FAQPage JSON-LD,
+# by _includes/schema.html. Answers are Markdown.
+
+- q: How do I kill the process running on a port?
+  id: kill-process-on-port
+  a: |
+    Run `proc free` with the port. It asks the process to exit, forces it after a few seconds if it doesn't, and then checks that the port is actually free:
+
+    ```bash
+    proc free :3000
+    ```
+
+    Without proc, on macOS or Linux: `lsof -ti :3000 | xargs kill`. On Windows: find the PID with `netstat -ano | findstr :3000`, then `taskkill /PID <pid> /F`.
+
+- q: How do I find what process is using a port?
+  id: find-process-using-port
+  a: |
+    `proc on` shows the process listening on a port: its name and PID, the folder it was started in, the executable, CPU, memory and how long it has been running.
+
+    ```bash
+    proc on :8080
+    ```
+
+    Without proc: `lsof -i :8080` on macOS, `ss -ltnp 'sport = :8080'` on Linux, or `netstat -ano | findstr :8080` on Windows.
+
+- q: How do I check if a port is already in use?
+  id: check-port-in-use
+  a: |
+    `proc on :8080` prints what's listening, or says nothing is. In scripts, check the exit code: `0` means the port is taken, `2` means nothing is listening.
+
+    ```bash
+    if proc on :8080 --json > /dev/null; then echo "8080 is taken"; fi
+    ```
+
+- q: How do I fix "address already in use" (EADDRINUSE)?
+  id: address-already-in-use
+  a: |
+    Something else is already listening on the port your program wants. Find out what it is and where it came from, then free the port, or start your program on another port:
+
+    ```bash
+    proc on :3000     # what's listening
+    proc why :3000    # what started it (often an old terminal or tmux session)
+    proc free :3000   # stop it and wait until the port is free
+    ```
+
+    The same fix applies to Python's `OSError: [Errno 48/98] Address already in use`, Java's `BindException` and Go's `bind: address already in use`.
+
+- q: Why is the port still in use after I killed the process?
+  id: port-still-in-use
+  a: |
+    Two common reasons. A child process may have inherited the listening socket, so killing the parent leaves the child holding the port: `proc why :3000` shows who holds it now. Or the old connection is in TCP's `TIME_WAIT` state for a short while. `proc free` waits until the port is really free (up to 10 seconds, or `--wait`) and tells you if it isn't.
+
+- q: How do I kill a process on a port on Mac?
+  id: kill-port-mac
+  a: |
+    Install proc with `brew install yazeed/proc/proc`, then run `proc free :3000`. Without proc: `lsof -ti :3000 | xargs kill`. Add `-9` to `kill` only if the process ignores the normal signal.
+
+- q: How do I kill a process on a port on Windows?
+  id: kill-port-windows
+  a: |
+    proc works on Windows too (`scoop install proc`, `npm install -g proc-cli` or `cargo install proc-cli`), with the same command: `proc free :3000`. Without proc, run `netstat -ano | findstr :3000` to get the PID in the last column, then `taskkill /PID <pid> /F`.
+
+- q: How do I list all open or listening ports?
+  id: list-listening-ports
+  a: |
+    `proc ports` lists every listening port with the process behind it. `--exposed` shows only ports reachable from other machines, and `--local` only those bound to localhost.
+
+    ```bash
+    proc ports
+    proc ports --exposed
+    ```
+
+    Without proc: `ss -ltnp` on Linux, `lsof -iTCP -sTCP:LISTEN -n -P` on macOS.
+
+- q: How do I find a process by name?
+  id: find-process-by-name
+  a: |
+    `proc by` matches the name and the full command line, so `proc by node` also finds `nodemon` and `node server.js`. Add `--in .` to keep only processes started in the current folder.
+
+    ```bash
+    proc by node --in .
+    ```
+
+    The classic equivalents are `pgrep -fl node` and `ps aux | grep node`.
+
+- q: How do I kill all Node processes?
+  id: kill-all-node-processes
+  a: |
+    Preview first, then confirm. `--in .` limits it to the current project, so editors and other projects' servers are left alone.
+
+    ```bash
+    proc kill node --in . --dry-run
+    proc kill node --in . --yes
+    ```
+
+    Without proc: `pkill node` (or `pkill -f node` to match the full command line), which kills every match without asking.
+
+- q: What is a zombie process, and how do I get rid of one?
+  id: zombie-process
+  a: |
+    A zombie is a process that has already exited but whose parent hasn't collected its exit status yet. It uses no CPU or memory, and you can't kill it, because it's already dead. Find zombies with `proc list --status zombie`, then stop or restart their parent (shown in `parent_pid`), which clears them.
+
+- q: What is an orphan process, and how do I find leftovers?
+  id: orphan-process
+  a: |
+    An orphan is a process whose parent has exited, so the system adopted it. Dev servers, file watchers and headless browsers left behind by a closed terminal or a coding agent often end up this way. `proc orphans --in .` lists the ones started in your project, and `--kill` cleans them up after asking.
+
+- q: How do I pause and resume a process?
+  id: pause-resume-process
+  a: |
+    `proc freeze` pauses a process without ending it, and `proc thaw` resumes it. This is handy for a CPU-heavy build while you need the machine for something else (macOS and Linux).
+
+    ```bash
+    proc freeze :3000
+    proc thaw :3000
+    ```
+
+    These send `SIGSTOP` and `SIGCONT`, the same as `kill -STOP <pid>` and `kill -CONT <pid>`.
+
+- q: How do I find out what started a process?
+  id: what-started-a-process
+  a: |
+    `proc why` traces the chain of parent processes, with how long each has been running, so you can see whether a server came from an old terminal tab, a tmux session or your editor:
+
+    ```bash
+    proc why :3000
+    ```
+
+- q: What's the difference between proc kill, proc stop and proc free?
+  id: kill-stop-free
+  a: |
+    `proc stop` asks a process to exit (`SIGTERM`) and only forces it after a timeout, so it can clean up. `proc kill` ends it immediately (`SIGKILL`). `proc free` takes a port, stops whatever holds it, and then checks the port is free. All three ask before acting unless you pass `--yes`, and all take `--dry-run`.
+
+- q: Is proc free, and where does it run?
+  id: about-proc
+  a: |
+    Yes. proc is free and open source under the MIT license, written in Rust, and runs on macOS, Linux and Windows as a single binary. See [install](install) for every option.

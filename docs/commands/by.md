@@ -1,11 +1,11 @@
 ---
 layout: page
 title: proc by
-description: "filter processes by name."
+description: "Filter processes by name."
 permalink: /commands/by
 ---
 
-find processes matching a name pattern. alias: `b`.
+Find processes matching a name pattern. Alias: `b`.
 
 ```bash
 proc by node               # all node processes
@@ -13,24 +13,24 @@ proc by python --in .      # python in current directory
 proc by node --min-cpu 5   # node using >5% CPU
 ```
 
-`by` takes one pattern, matched as a case-insensitive substring of the name or the full command line. for several patterns, use `proc list node,python`. the table includes uptime on terminals at least 100 columns wide; `--verbose` and `--json` always include it.
+`by` takes one pattern, matched as a case-insensitive substring of the name or the full command line. For several patterns, use `proc list node,python`. The table includes uptime on terminals at least 100 columns wide; `--verbose` and `--json` always include it.
 
-## options
+## Options
 
-| flag | short | description |
+| Flag | Short | Description |
 |------|-------|-------------|
-| `--in [<dir>]` | `-i` | filter by directory |
-| `--min-cpu <n>` | | minimum CPU % |
-| `--min-mem <n>` | | minimum memory (MB) |
-| `--status <s>` | | filter by status: running, sleeping, stopped, zombie |
-| `--min-uptime <s>` | | minimum uptime in seconds |
-| `--parent <pid>` | | only children of this parent PID |
-| `--sort <key>` | `-s` | sort by: cpu, mem, pid, name (default: cpu) |
-| `--limit <n>` | `-n` | limit results |
-| `--json` | `-j` | output as JSON |
-| `--verbose` | `-v` | show command line, cwd, parent PID, uptime |
+| `--in [<dir>]` | `-i` | Filter by directory |
+| `--min-cpu <n>` | | Minimum CPU % |
+| `--min-mem <n>` | | Minimum memory (MB) |
+| `--status <s>` | | Filter by status: running, sleeping, stopped, zombie |
+| `--min-uptime <s>` | | Minimum uptime in seconds |
+| `--parent <pid>` | | Only children of this parent PID |
+| `--sort <key>` | `-s` | Sort by: cpu, mem, pid, name (default: cpu) |
+| `--limit <n>` | `-n` | Limit results |
+| `--json` | `-j` | Output as JSON |
+| `--verbose` | `-v` | Show command line, cwd, parent PID, uptime |
 
-## examples
+## Examples
 
 ```bash
 # node processes in current project
@@ -46,6 +46,6 @@ proc by worker --status sleeping
 proc by node --sort mem --limit 5
 ```
 
-## see also
+## See also
 
 [in](in) to start from a directory, [list](list) for all processes.
