@@ -1,12 +1,13 @@
 ---
 layout: default
 ---
-{% assign is_docs = false %}
-{% if page.url contains "/commands" %}{% assign is_docs = true %}{% endif %}
-<div class="page{% if is_docs %} page-docs{% endif %}">
-  {% if is_docs %}
+{% assign aside = nil %}
+{% if page.url contains "/commands" %}{% assign aside = "commands" %}{% endif %}
+{% if page.url == "/changelog" %}{% assign aside = "changelog" %}{% endif %}
+<div class="page{% if aside %} page-docs page-{{ aside }}{% endif %}">
+  {% if aside %}
   <aside class="page-aside">
-    {% include commands-nav.html %}
+    {% include {{ aside }}-nav.html %}
   </aside>
   {% endif %}
   <article class="page-body">

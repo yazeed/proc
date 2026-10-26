@@ -1,0 +1,28 @@
+{%- comment -%}
+  Built from the rendered changelog's "## X.Y.Z — YYYY-MM-DD" headings, grouped by minor version,
+  so a new release section appears here without editing this file.
+{%- endcomment -%}
+{% assign sections = content | split: '<h2 id="' %}
+{% assign latest_year = sections[1] | split: '</h2>' | first | split: " — " | last | strip | date: "%Y" %}
+<nav class="docs-nav" aria-label="Versions" data-spy>
+  <a class="docs-nav-all" href="https://github.com/yazeed/proc-cli/releases">Releases on GitHub</a>
+  {% assign minor = "" %}
+  {% for section in sections offset: 1 %}
+  {% assign id = section | split: '"' | first %}
+  {% assign heading = section | split: '</h2>' | first | split: '">' | last %}
+  {% assign version = heading | split: " — " | first | strip %}
+  {% assign released = heading | split: " — " | last | strip %}
+  {% assign parts = version | split: "." %}
+  {% capture this_minor %}{{ parts[0] }}.{{ parts[1] }}{% endcapture %}
+  {% if this_minor != minor %}
+  {% unless forloop.first %}</ul>{% endunless %}
+  <p class="docs-nav-group">{{ this_minor }}</p>
+  <ul>
+  {% assign minor = this_minor %}
+  {% endif %}
+  {% assign year = released | date: "%Y" %}
+  {% if year == latest_year %}{% assign date_format = "%b %-d" %}{% else %}{% assign date_format = "%b %-d, %Y" %}{% endif %}
+    <li><a href="#{{ id }}"><span>{{ version }}</span><time class="docs-nav-date" datetime="{{ released }}">{{ released | date: date_format }}</time></a></li>
+  {% if forloop.last %}</ul>{% endif %}
+  {% endfor %}
+</nav>

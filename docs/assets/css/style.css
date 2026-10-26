@@ -223,7 +223,7 @@ code, kbd, pre { font-family: var(--font-mono); }
   letter-spacing: -0.02em;
 }
 
-.page-docs .page-header h1 {
+.page-commands .page-header h1 {
   font-family: var(--font-mono);
   font-weight: 700;
   letter-spacing: -0.03em;
@@ -263,7 +263,8 @@ code, kbd, pre { font-family: var(--font-mono); }
   font-size: 0.88rem;
 }
 .docs-nav a:hover { background: var(--paper-sunk); color: var(--ink); }
-.docs-nav a[aria-current="page"] {
+.docs-nav a[aria-current="page"],
+.docs-nav a[aria-current="location"] {
   background: var(--paper-sunk);
   color: var(--ink);
   font-weight: 700;
@@ -276,6 +277,21 @@ code, kbd, pre { font-family: var(--font-mono); }
 }
 
 .docs-nav-proc { color: var(--muted); font-weight: 400; }
+
+/* changelog: version on the left, release date on the right */
+.page-changelog .docs-nav li a {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+.docs-nav-date {
+  font-family: var(--font-text);
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: var(--muted);
+  white-space: nowrap;
+}
 
 .docs-nav-group {
   margin: 0 0 0.35rem;

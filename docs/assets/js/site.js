@@ -1,4 +1,4 @@
-// proc website: copy buttons, heading anchors, and the target reader on the home page.
+// proc website: copy buttons, heading anchors, sidebar scroll tracking, and the target reader on the home page.
 (function () {
   "use strict";
 
@@ -50,6 +50,60 @@
       a.setAttribute("aria-label", "Link to this section");
       h.appendChild(a);
     });
+  }
+
+  // Sidebars with data-spy mark the section being read, and keep that link in view
+  function setupScrollSpy() {
+    var nav = document.querySelector(".docs-nav[data-spy]");
+    if (!nav) return;
+    var aside = nav.closest(".page-aside");
+    var links = {};
+    nav.querySelectorAll('a[href^="#"]').forEach(function (a) {
+      links[decodeURIComponent(a.getAttribute("href").slice(1))] = a;
+    });
+    var headings = Array.prototype.filter.call(document.querySelectorAll(".prose h2[id]"), function (h) {
+      return links[h.id];
+    });
+    if (!headings.length) return;
+    var current = null;
+    function mark(id) {
+      if (id === current) return;
+      if (current && links[current]) links[current].removeAttribute("aria-current");
+      current = id;
+      var a = links[id];
+      a.setAttribute("aria-current", "location");
+      // scroll the sidebar itself, never the page
+      if (aside && (a.offsetTop < aside.scrollTop || a.offsetTop + a.offsetHeight > aside.scrollTop + aside.clientHeight)) {
+        aside.scrollTop = a.offsetTop - aside.clientHeight / 3;
+      }
+    }
+    // the current section is the last heading that has scrolled past the top fifth of the screen;
+    // at the very bottom it's the last one, since short final sections never reach that line
+    function update() {
+      var id = headings[0].id;
+      var bottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+      if (bottom) {
+        id = headings[headings.length - 1].id;
+      } else {
+        var line = window.innerHeight / 5;
+        for (var i = 0; i < headings.length; i++) {
+          if (headings[i].getBoundingClientRect().top <= line) id = headings[i].id;
+          else break;
+        }
+      }
+      mark(id);
+    }
+    var queued = false;
+    window.addEventListener("scroll", function () {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(function () {
+        queued = false;
+        update();
+      });
+    }, { passive: true });
+    window.addEventListener("hashchange", update);
+    update();
   }
 
   // The target reader: shows how proc reads each kind of target
@@ -109,6 +163,7 @@
   document.addEventListener("DOMContentLoaded", function () {
     addCopyButtons();
     addHeadingAnchors();
+    setupScrollSpy();
     setupReader();
   });
 })();

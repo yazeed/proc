@@ -306,4 +306,4 @@ A consistent JSON and exit-code contract: every command prints one JSON document
 
 ---
 
-[full changelog on github](https://github.com/yazeed/proc-cli/blob/main/CHANGELOG.md)
+[Full changelog on GitHub](https://github.com/yazeed/proc-cli/blob/main/CHANGELOG.md), including unreleased changes
