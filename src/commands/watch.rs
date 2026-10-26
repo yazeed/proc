@@ -28,14 +28,27 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use sysinfo::{Pid, System};
 
+/// A refresh interval must be a real number of seconds, and not so small that
+/// watch spins in a busy loop (0, NaN, infinity and negatives used to panic or spin)
+fn parse_interval(s: &str) -> std::result::Result<f64, String> {
+    let secs: f64 = s
+        .parse()
+        .map_err(|_| format!("'{s}' is not a number of seconds"))?;
+    if !secs.is_finite() || secs < 0.1 {
+        return Err(format!("must be at least 0.1 seconds, got '{s}'"));
+    }
+    Ok(secs)
+}
+
 /// Watch processes in real-time
 #[derive(Args, Debug)]
 pub struct WatchCommand {
     /// Target(s): PID, :port, or name (optional — omit for all processes)
+    #[arg(value_parser = crate::core::validate_target_arg)]
     pub target: Option<String>,
 
-    /// Refresh interval in seconds
-    #[arg(long = "interval", short = 'n', default_value = "2")]
+    /// Refresh interval in seconds (at least 0.1)
+    #[arg(long = "interval", short = 'n', default_value = "2", value_parser = parse_interval)]
     pub interval: f64,
 
     /// Filter by directory

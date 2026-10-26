@@ -18,7 +18,7 @@ use clap::Args;
 #[derive(Args, Debug)]
 pub struct StopCommand {
     /// Target(s): process name, PID, or :port (comma-separated for multiple)
-    #[arg(required = true)]
+    #[arg(required = true, value_parser = crate::core::validate_target_arg)]
     target: String,
 
     /// Skip confirmation prompt
@@ -104,8 +104,9 @@ impl StopCommand {
             return Ok(());
         }
 
-        // Stop processes
-        let mut stopped = Vec::new();
+        // Ask every process first, then wait for them together, so several
+        // processes share one --timeout instead of taking one each
+        let mut signalled = Vec::new();
         let mut failed = Vec::new();
 
         for proc in &processes {
@@ -119,20 +120,23 @@ impl StopCommand {
             let send_result = proc.terminate();
 
             match send_result {
-                Ok(()) => {
-                    // Wait for process to exit
-                    let stopped_gracefully = self.wait_for_exit(proc);
-                    if stopped_gracefully {
-                        stopped.push(proc.clone());
-                    } else {
-                        // Force kill after timeout - use kill_and_wait for reliability
-                        match proc.kill_and_wait() {
-                            Ok(_) => stopped.push(proc.clone()),
-                            Err(e) => failed.push((proc.clone(), e.to_string())),
-                        }
-                    }
-                }
+                Ok(()) => signalled.push(proc.clone()),
                 Err(e) => failed.push((proc.clone(), e.to_string())),
+            }
+        }
+
+        let outlived = self.wait_for_exit(&signalled);
+
+        // Force kill whatever outlived the timeout
+        let mut stopped = Vec::new();
+        for proc in signalled {
+            if !outlived.contains(&proc.pid) {
+                stopped.push(proc);
+                continue;
+            }
+            match proc.kill_and_wait() {
+                Ok(()) => stopped.push(proc),
+                Err(e) => failed.push((proc, e.to_string())),
             }
         }
 
@@ -140,17 +144,18 @@ impl StopCommand {
         printer.print_action_result("stop", &stopped, &failed)
     }
 
-    fn wait_for_exit(&self, proc: &Process) -> bool {
+    /// Wait up to --timeout for the processes to exit; returns the PIDs still running.
+    fn wait_for_exit(&self, processes: &[Process]) -> Vec<u32> {
         let start = std::time::Instant::now();
         let timeout = std::time::Duration::from_secs(self.timeout);
+        let mut running: Vec<&Process> = processes.iter().collect();
 
-        while start.elapsed() < timeout {
-            if !proc.is_running() {
-                return true;
+        loop {
+            running.retain(|p| p.is_running());
+            if running.is_empty() || start.elapsed() >= timeout {
+                return running.iter().map(|p| p.pid).collect();
             }
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
-
-        false
     }
 }

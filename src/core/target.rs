@@ -20,6 +20,22 @@ pub enum TargetType {
     Name(String),
 }
 
+/// clap value parser for target arguments: a target that starts with ':' must be
+/// a port from 1 to 65535. Without this, ":70000" fell through to a name search
+/// and reported "not found" instead of a typo.
+pub fn validate_target_arg(s: &str) -> std::result::Result<String, String> {
+    for target in parse_targets(s) {
+        if let Some(port) = target.strip_prefix(':') {
+            if !matches!(port.parse::<u16>(), Ok(p) if p > 0) {
+                return Err(format!(
+                    "'{target}' is not a port; ports go from :1 to :65535"
+                ));
+            }
+        }
+    }
+    Ok(s.to_string())
+}
+
 /// Parse a target string and determine its type
 pub fn parse_target(target: &str) -> TargetType {
     let target = target.trim();

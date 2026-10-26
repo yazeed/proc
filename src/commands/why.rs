@@ -21,7 +21,7 @@ use std::collections::HashMap;
 #[derive(Args, Debug)]
 pub struct WhyCommand {
     /// Target(s): :port, PID, or process name (comma-separated for multiple)
-    #[arg(required = true)]
+    #[arg(required = true, value_parser = crate::core::validate_target_arg)]
     pub target: String,
 
     /// Output as JSON

@@ -18,7 +18,7 @@ proc wait node,python          # wait for all to exit
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--interval <secs>` | `-n` | Poll interval in seconds (default: 5) |
+| `--interval <secs>` | `-n` | Seconds between status lines (default: 5); exits are noticed within a quarter second |
 | `--timeout <secs>` | `-t` | Max wait time, 0 = no timeout (default: 0). Exits 1 if processes are still running |
 | `--quiet` | `-q` | Suppress periodic status, only print exits and final result |
 | `--in [<dir>]` | `-i` | Filter by directory |

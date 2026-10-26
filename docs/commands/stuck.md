@@ -17,7 +17,7 @@ proc stuck --by node       # only stuck node processes
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--timeout <secs>` | `-t` | Seconds to consider stuck (default: 300) |
+| `--timeout <secs>` | `-t` | Only processes running longer than this, and over 50% CPU (default: 300) |
 | `--kill` | `-k` | Kill found stuck processes |
 | `--dry-run` | | Show what would be killed |
 | `--yes` | `-y` | Skip confirmation when killing |

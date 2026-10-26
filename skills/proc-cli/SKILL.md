@@ -141,7 +141,7 @@ proc list 'headless,ms-playwright,puppeteer' --json   # headless browsers
 ```bash
 proc list --sort cpu --limit 10 --json
 proc list --min-mem 1000 --sort mem --json   # over 1 GB
-proc stuck --json                             # sustained high CPU
+proc stuck --json                             # >50% CPU now, running > 5 min
 ```
 
 Report what you find with each process's `cwd`, `uptime_secs` and `parent_pid`, and let the user decide what to stop.

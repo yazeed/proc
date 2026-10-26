@@ -64,9 +64,10 @@ impl PortInfo {
 
     #[cfg(target_os = "macos")]
     fn get_listening_macos() -> Result<Vec<PortInfo>> {
-        // Use lsof on macOS - only TCP LISTEN sockets
+        // Use lsof on macOS - only TCP LISTEN sockets. `+c 0` prints the whole
+        // command name; by default lsof cuts it to 9 characters
         let output = Command::new("lsof")
-            .args(["-iTCP", "-sTCP:LISTEN", "-P", "-n"])
+            .args(["+c", "0", "-iTCP", "-sTCP:LISTEN", "-P", "-n"])
             .output()
             .map_err(|e| ProcError::SystemError(format!("Failed to run lsof: {}", e)))?;
 
@@ -88,6 +89,27 @@ impl PortInfo {
         Ok(ports)
     }
 
+    /// lsof writes characters it can't print in a column, spaces included, as
+    /// \xNN, so "Activity Monitor" arrives as "Activity\x20Monitor"
+    #[cfg(target_os = "macos")]
+    fn unescape_lsof(name: &str) -> String {
+        let bytes = name.as_bytes();
+        let mut out = Vec::with_capacity(bytes.len());
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i] == b'\\' && bytes.get(i + 1) == Some(&b'x') && i + 3 < bytes.len() {
+                if let Ok(b) = u8::from_str_radix(&name[i + 2..i + 4], 16) {
+                    out.push(b);
+                    i += 4;
+                    continue;
+                }
+            }
+            out.push(bytes[i]);
+            i += 1;
+        }
+        String::from_utf8_lossy(&out).into_owned()
+    }
+
     #[cfg(target_os = "macos")]
     fn parse_lsof_line(line: &str) -> Option<PortInfo> {
         // lsof output format:
@@ -98,7 +120,7 @@ impl PortInfo {
             return None;
         }
 
-        let process_name = parts[0].to_string();
+        let process_name = Self::unescape_lsof(parts[0]);
         let pid: u32 = parts[1].parse().ok()?;
 
         // Find the NAME column - it's after the NODE (TCP/UDP) column
@@ -134,10 +156,17 @@ impl PortInfo {
     #[cfg(target_os = "linux")]
     fn get_listening_linux() -> Result<Vec<PortInfo>> {
         // Use ss on Linux (more modern than netstat)
-        let output = Command::new("ss")
-            .args(["-tlnp"])
-            .output()
-            .map_err(|e| ProcError::SystemError(format!("Failed to run ss: {}", e)))?;
+        let output = Command::new("ss").args(["-tlnp"]).output().map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                ProcError::SystemError(
+                    "Port lookups on Linux need `ss`, from the iproute2 package \
+                     (e.g. apt install iproute2, apk add iproute2)"
+                        .to_string(),
+                )
+            } else {
+                ProcError::SystemError(format!("Failed to run ss: {}", e))
+            }
+        })?;
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let mut ports = Vec::new();
@@ -294,6 +323,18 @@ mod tests {
     fn test_parse_port_invalid() {
         assert!(parse_port("abc").is_err());
         assert!(parse_port("").is_err());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_parse_lsof_line_keeps_the_full_name() {
+        // With `+c 0` lsof prints the whole name, escaping spaces as \x20; the
+        // default 9-character column used to turn python3.14 into "python3.1"
+        let line = "Activity\\x20Monitor  644  zee  8u  IPv4 0x3cc8c443bf3e8f62  0t0  TCP 127.0.0.1:7768 (LISTEN)";
+        let info = PortInfo::parse_lsof_line(line).unwrap();
+        assert_eq!(info.process_name, "Activity Monitor");
+        assert_eq!(info.pid, 644);
+        assert_eq!(info.port, 7768);
     }
 
     #[test]

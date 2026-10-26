@@ -18,5 +18,5 @@ pub use process::parse_signal_name;
 pub use process::{is_thread, Process, ProcessStatus};
 pub use target::{
     find_ports_for_pid, parse_target, parse_targets, resolve_target, resolve_target_single,
-    resolve_targets, resolve_targets_excluding_self, TargetType,
+    resolve_targets, resolve_targets_excluding_self, validate_target_arg, TargetType,
 };

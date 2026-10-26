@@ -22,6 +22,7 @@ use std::path::PathBuf;
 #[derive(Args, Debug)]
 pub struct OnCommand {
     /// Target(s): :port, PID, or process name (comma-separated for multiple)
+    #[arg(value_parser = crate::core::validate_target_arg)]
     pub target: String,
 
     /// Filter by directory (defaults to current directory if no path given)

@@ -16,6 +16,23 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+/// An inclusive port range, START-END, such as 8000-9000
+fn parse_port_range(s: &str) -> std::result::Result<(u16, u16), String> {
+    let usage = || format!("'{s}' is not a range of ports; use START-END, e.g. 8000-9000");
+    let (start, end) = s.split_once('-').ok_or_else(usage)?;
+    let port = |p: &str| p.trim().parse::<u16>().ok().filter(|&p| p > 0);
+    let (start, end) = match (port(start), port(end)) {
+        (Some(start), Some(end)) => (start, end),
+        _ => return Err(format!("{}; ports go from 1 to 65535", usage())),
+    };
+    if start > end {
+        return Err(format!(
+            "'{s}' starts after it ends; did you mean {end}-{start}?"
+        ));
+    }
+    Ok((start, end))
+}
+
 /// List all listening ports
 #[derive(Args, Debug)]
 pub struct PortsCommand {
@@ -52,8 +69,8 @@ pub struct PortsCommand {
     pub limit: Option<usize>,
 
     /// Filter ports by range (e.g., 8000-9000)
-    #[arg(long, short = 'r')]
-    pub range: Option<String>,
+    #[arg(long, short = 'r', value_parser = parse_port_range)]
+    pub range: Option<(u16, u16)>,
 }
 
 impl PortsCommand {
@@ -101,15 +118,9 @@ impl PortsCommand {
             });
         }
 
-        // Filter by port range (e.g., "3000-9000")
-        if let Some(ref range) = self.range {
-            if let Some((start, end)) = range.split_once('-') {
-                if let (Ok(start), Ok(end)) =
-                    (start.trim().parse::<u16>(), end.trim().parse::<u16>())
-                {
-                    ports.retain(|p| p.port >= start && p.port <= end);
-                }
-            }
+        // Filter by port range (e.g., "3000-9000"), validated when parsed
+        if let Some((start, end)) = self.range {
+            ports.retain(|p| p.port >= start && p.port <= end);
         }
 
         // Sort ports

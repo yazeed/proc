@@ -34,9 +34,10 @@ use nix::unistd::Pid;
 #[derive(Args, Debug)]
 pub struct UnstickCommand {
     /// Target: PID, :port, or name (optional - finds all stuck if omitted)
+    #[arg(value_parser = crate::core::validate_target_arg)]
     target: Option<String>,
 
-    /// Minimum seconds of high CPU before considered stuck (for auto-discovery)
+    /// Without a target: only processes running longer than this many seconds (and over 50% CPU)
     #[arg(long, short, default_value = "300")]
     timeout: u64,
 

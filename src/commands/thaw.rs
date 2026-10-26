@@ -17,7 +17,7 @@ use clap::Args;
 #[derive(Args, Debug)]
 pub struct ThawCommand {
     /// Target(s): process name, PID, or :port (comma-separated for multiple)
-    #[arg(required = true)]
+    #[arg(required = true, value_parser = crate::core::validate_target_arg)]
     pub target: String,
 
     /// Skip confirmation prompt

@@ -19,7 +19,7 @@ use serde::Serialize;
 #[derive(Args, Debug)]
 pub struct FreeCommand {
     /// Port target(s): :port (comma-separated for multiple, e.g. :3000,:8080)
-    #[arg(required = true)]
+    #[arg(required = true, value_parser = crate::core::validate_target_arg)]
     pub target: String,
 
     /// Skip confirmation prompt
@@ -177,8 +177,12 @@ impl FreeCommand {
         let mut freed: Vec<u16> = Vec::new();
         let mut still_busy: Vec<u16> = Vec::new();
 
-        let poll_start = std::time::Instant::now();
-        let poll_timeout = std::time::Duration::from_secs(self.wait);
+        // --wait covers the whole run, graceful exit included, so it is a real
+        // maximum; after a force kill the port still gets a second to be released
+        let poll_deadline = std::cmp::max(
+            start + std::time::Duration::from_secs(self.wait),
+            std::time::Instant::now() + std::time::Duration::from_secs(1),
+        );
 
         let target_ports: Vec<u16> = port_processes.iter().map(|(port, _)| *port).collect();
 
@@ -197,7 +201,7 @@ impl FreeCommand {
                 }
             }
 
-            if all_free || poll_start.elapsed() >= poll_timeout {
+            if all_free || std::time::Instant::now() >= poll_deadline {
                 break;
             }
 

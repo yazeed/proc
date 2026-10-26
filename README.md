@@ -205,7 +205,7 @@ Filters can be combined with discovery and lifecycle commands:
 | `--ancestors/-a` | Show ancestry path to root (`tree`) |
 | `--depth/-d <n>` | Maximum tree depth (default: 10) |
 | `--compact/-C` | Show PIDs only in compact view (`tree`) |
-| `--timeout/-t <s>` | Seconds before considered stuck (default: 300) |
+| `--timeout/-t <s>` | `stuck`, `unstick`: only processes running longer than this, and over 50% CPU (default: 300) |
 
 ### Options
 
@@ -220,7 +220,7 @@ Filters can be combined with discovery and lifecycle commands:
 | `--signal` | `-S` | Custom signal: HUP, INT, USR1, etc. (`stop`) |
 | `--kill` | `-k` | Kill found processes (`stuck`, `orphans`) |
 | `--wait` | | Max seconds to wait for port to free (`free`) |
-| `--interval` | `-n` | Poll/refresh interval in seconds (`wait`, `watch`) |
+| `--interval` | `-n` | Seconds between status lines (`wait`) or refreshes (`watch`) |
 | `--timeout` | `-t` | Max seconds to wait before giving up (`wait`, `stop`) |
 | `--quiet` | `-q` | Suppress periodic status messages (`wait`) |
 

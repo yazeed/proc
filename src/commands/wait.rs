@@ -3,10 +3,10 @@
 //! Examples:
 //!   proc wait node                   # Wait until all node processes exit
 //!   proc wait 1234                   # Wait for PID 1234 to exit
-//!   proc wait :3000                  # Wait until port 3000 is free
+//!   proc wait :3000                  # Wait for whatever is on port 3000 to exit
 //!   proc wait node,python            # Wait for all to exit
 //!   proc wait node --timeout 3600    # Timeout after 1 hour
-//!   proc wait node --interval 10     # Check every 10 seconds
+//!   proc wait node --interval 10     # Status line every 10 seconds
 
 use crate::core::{apply_filters, parse_targets, resolve_targets, Process};
 use crate::error::{ExitCode, ProcError, Result};
@@ -19,10 +19,10 @@ use serde::Serialize;
 #[derive(Args, Debug)]
 pub struct WaitCommand {
     /// Target(s): process name, PID, or :port (comma-separated for multiple)
-    #[arg(required = true)]
+    #[arg(required = true, value_parser = crate::core::validate_target_arg)]
     target: String,
 
-    /// Poll interval in seconds
+    /// Seconds between status lines (exits are noticed within a quarter second)
     #[arg(long, short = 'n', default_value = "5")]
     interval: u64,
 
@@ -103,14 +103,49 @@ impl WaitCommand {
         let mut tracking: Vec<(Process, Option<u64>)> =
             processes.into_iter().map(|p| (p, None)).collect();
 
-        // Poll loop
+        // Exits are checked every quarter second; --interval only sets how often
+        // the status line is printed. The timeout is checked after the exits, so a
+        // process that exited at the last moment is never reported as running.
+        let tick = std::time::Duration::from_millis(250);
+        let status_every = std::time::Duration::from_secs(interval);
+        let deadline =
+            (self.timeout > 0).then(|| start + std::time::Duration::from_secs(self.timeout));
+        let mut next_status = start + status_every;
+
         loop {
-            std::thread::sleep(std::time::Duration::from_secs(interval));
+            let now = std::time::Instant::now();
+            let nap = match deadline {
+                Some(d) => tick.min(d.saturating_duration_since(now)),
+                None => tick,
+            };
+            std::thread::sleep(nap);
 
             let elapsed = start.elapsed().as_secs();
 
+            // Check which processes have exited
+            for (proc, exited_at) in tracking.iter_mut() {
+                if exited_at.is_none() && !proc.is_running() {
+                    *exited_at = Some(elapsed);
+                    if !self.json {
+                        println!(
+                            "{} {} [PID {}] exited after {}",
+                            "✓".green().bold(),
+                            proc.name.white(),
+                            proc.pid.to_string().cyan(),
+                            format_duration(elapsed)
+                        );
+                    }
+                }
+            }
+
+            let still_running_count = tracking.iter().filter(|(_, t)| t.is_none()).count();
+
+            if still_running_count == 0 {
+                break;
+            }
+
             // Check timeout
-            if self.timeout > 0 && elapsed >= self.timeout {
+            if deadline.is_some_and(|d| std::time::Instant::now() >= d) {
                 // Mark still-running processes
                 let exited: Vec<ExitedProcess> = tracking
                     .iter()
@@ -163,29 +198,11 @@ impl WaitCommand {
                 return Err(ProcError::Timeout(message));
             }
 
-            // Check which processes have exited
-            for (proc, exited_at) in tracking.iter_mut() {
-                if exited_at.is_none() && !proc.is_running() {
-                    *exited_at = Some(elapsed);
-                    if !self.json {
-                        println!(
-                            "{} {} [PID {}] exited after {}",
-                            "✓".green().bold(),
-                            proc.name.white(),
-                            proc.pid.to_string().cyan(),
-                            format_duration(elapsed)
-                        );
-                    }
-                }
+            // Print periodic status every --interval (unless quiet or json)
+            if std::time::Instant::now() < next_status {
+                continue;
             }
-
-            let still_running_count = tracking.iter().filter(|(_, t)| t.is_none()).count();
-
-            if still_running_count == 0 {
-                break;
-            }
-
-            // Print periodic status (unless quiet or json)
+            next_status += status_every;
             if !self.quiet && !self.json {
                 let names: Vec<String> = tracking
                     .iter()

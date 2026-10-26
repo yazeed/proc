@@ -20,6 +20,93 @@ fn user_name(uid: &Uid) -> String {
         .unwrap_or_else(|| uid.to_string())
 }
 
+/// macOS: sysinfo drops zombies, because they have no executable path or arguments
+/// left to read, so `proc list --status zombie` could never find one. Read every
+/// process from the kernel, as `ps` does, and keep the zombies sysinfo didn't return.
+#[cfg(target_os = "macos")]
+fn macos_zombies(known: &std::collections::HashSet<u32>) -> Vec<Process> {
+    // libc has no kinfo_proc for macOS, so read the few fields we need at their
+    // offsets in the 64-bit layout (checked against a live process's known values)
+    const KINFO_PROC_SIZE: usize = 648;
+    const P_STARTTIME_SEC: usize = 0;
+    const P_STAT: usize = 36;
+    const P_PID: usize = 40;
+    const P_COMM: usize = 243; // MAXCOMLEN + 1 bytes
+    const P_RUID: usize = 392;
+    const E_PPID: usize = 560;
+    const SZOMB: u8 = 5;
+
+    let mut mib = [libc::CTL_KERN, libc::KERN_PROC, libc::KERN_PROC_ALL, 0];
+    let mut size: libc::size_t = 0;
+    let mut buf: Vec<u8> = Vec::new();
+    // SAFETY: the first call only reports the size needed; the second fills a
+    // buffer of the size we pass, with room for processes started in between
+    unsafe {
+        let null = std::ptr::null_mut();
+        if libc::sysctl(mib.as_mut_ptr(), 4, null, &mut size, null, 0) != 0 {
+            return Vec::new();
+        }
+        size += 64 * KINFO_PROC_SIZE;
+        buf.resize(size, 0);
+        if libc::sysctl(
+            mib.as_mut_ptr(),
+            4,
+            buf.as_mut_ptr().cast(),
+            &mut size,
+            null,
+            0,
+        ) != 0
+        {
+            return Vec::new();
+        }
+    }
+    buf.truncate(size);
+    if !buf.len().is_multiple_of(KINFO_PROC_SIZE) {
+        return Vec::new(); // a layout we don't know; better to show nothing than garbage
+    }
+
+    let read_u32 = |p: &[u8], at: usize| u32::from_ne_bytes(p[at..at + 4].try_into().unwrap());
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
+    buf.chunks_exact(KINFO_PROC_SIZE)
+        .filter(|p| p[P_STAT] == SZOMB)
+        .filter_map(|p| {
+            let pid = read_u32(p, P_PID);
+            if pid == 0 || known.contains(&pid) {
+                return None;
+            }
+            let comm = &p[P_COMM..P_COMM + 17];
+            let comm = &comm[..comm.iter().position(|&c| c == 0).unwrap_or(comm.len())];
+            let name = String::from_utf8_lossy(comm).into_owned();
+            let start =
+                u64::from_ne_bytes(p[P_STARTTIME_SEC..P_STARTTIME_SEC + 8].try_into().unwrap());
+            Some(Process {
+                pid,
+                name: if name.is_empty() {
+                    "<defunct>".to_string()
+                } else {
+                    name
+                },
+                exe_path: None,
+                cwd: None,
+                command: None,
+                cpu_percent: 0.0,
+                memory_mb: 0.0,
+                status: ProcessStatus::Zombie,
+                user: Uid::try_from(read_u32(p, P_RUID) as usize)
+                    .ok()
+                    .map(|uid| user_name(&uid)),
+                parent_pid: Some(read_u32(p, E_PPID)),
+                start_time: (start > 0).then_some(start),
+                uptime_secs: (start > 0).then(|| now.saturating_sub(start)),
+            })
+        })
+        .collect()
+}
+
 /// On Linux, sysinfo lists every thread of a process as an entry of its own,
 /// with the process's command line, so a node server shows up a dozen times.
 /// Process listings skip them; `thread_kind` is always `None` elsewhere.
@@ -183,12 +270,19 @@ impl Process {
         sys.refresh_all();
 
         let self_pid = sysinfo::Pid::from_u32(std::process::id());
-        let processes: Vec<Process> = sys
+        #[allow(unused_mut)]
+        let mut processes: Vec<Process> = sys
             .processes()
             .iter()
             .filter(|(pid, proc)| **pid != self_pid && !is_thread(proc))
             .map(|(pid, proc)| Process::from_sysinfo(*pid, proc))
             .collect();
+
+        #[cfg(target_os = "macos")]
+        {
+            let known: std::collections::HashSet<u32> = processes.iter().map(|p| p.pid).collect();
+            processes.extend(macos_zombies(&known));
+        }
 
         Ok(processes)
     }
@@ -307,22 +401,28 @@ impl Process {
         }
     }
 
-    /// Force kill and wait for process to terminate
-    /// Returns the exit status if available
-    pub fn kill_and_wait(&self) -> Result<Option<std::process::ExitStatus>> {
-        let mut sys = System::new();
-        sys.refresh_processes(
-            sysinfo::ProcessesToUpdate::Some(&[Pid::from_u32(self.pid)]),
-            true,
-        );
-
-        if let Some(proc) = sys.process(Pid::from_u32(self.pid)) {
-            proc.kill_and_wait().map_err(|e| {
-                ProcError::SignalError(format!("Failed to kill process {}: {:?}", self.pid, e))
-            })
-        } else {
-            Err(ProcError::ProcessNotFound(self.pid.to_string()))
+    /// Force kill and wait up to 5 seconds for the process to be gone.
+    ///
+    /// Never blocks forever (sysinfo's own kill_and_wait polls with no limit and
+    /// never ends for a zombie). A process still alive after 5 seconds, such as
+    /// one stuck in the kernel, is an error.
+    pub fn kill_and_wait(&self) -> Result<()> {
+        match self.kill() {
+            // it exited on its own just before the kill
+            Err(ProcError::ProcessNotFound(_)) => return Ok(()),
+            other => other?,
         }
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while std::time::Instant::now() < deadline {
+            if !self.is_running() {
+                return Ok(());
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        Err(ProcError::SignalError(format!(
+            "Process {} is still running 5 seconds after SIGKILL",
+            self.pid
+        )))
     }
 
     /// Send SIGTERM for graceful termination (Unix) or taskkill (Windows)
@@ -407,14 +507,21 @@ impl Process {
         false
     }
 
-    /// Check if the process still exists
+    /// Check if the process is still alive. A zombie (exited, not yet reaped by
+    /// its parent) has exited, and a process with a different start time is a new
+    /// one that reused the PID, so neither counts.
     pub fn exists(&self) -> bool {
         let mut sys = System::new();
-        sys.refresh_processes(
-            sysinfo::ProcessesToUpdate::Some(&[Pid::from_u32(self.pid)]),
-            true,
-        );
-        sys.process(Pid::from_u32(self.pid)).is_some()
+        let pid = Pid::from_u32(self.pid);
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+        match sys.process(pid) {
+            None => false,
+            Some(current) if current.status() == SysProcessStatus::Zombie => false,
+            Some(current) => match self.start_time {
+                Some(ours) if current.start_time() > 0 => current.start_time().abs_diff(ours) <= 1,
+                _ => true,
+            },
+        }
     }
 
     /// Check if the process is still running (alias for exists for compatibility)
@@ -517,6 +624,17 @@ mod tests {
         let pid = std::process::id();
         let process = Process::find_by_pid(pid).unwrap();
         assert!(process.is_some(), "Should find own process");
+    }
+
+    #[test]
+    fn test_is_running_tells_a_reused_pid_apart() {
+        let mut me = Process::find_by_pid(std::process::id()).unwrap().unwrap();
+        assert!(me.is_running());
+        // Same PID, different start time: a new process that reused the PID
+        if let Some(start) = me.start_time {
+            me.start_time = Some(start - 3600);
+            assert!(!me.is_running(), "a reused PID counted as the same process");
+        }
     }
 
     #[test]

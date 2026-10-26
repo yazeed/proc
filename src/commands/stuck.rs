@@ -1,8 +1,11 @@
 //! `proc stuck` - Find stuck/hung processes
 //!
+//! A process counts as stuck when it has been running longer than --timeout and
+//! is using more than 50% CPU, measured over half a second.
+//!
 //! Examples:
-//!   proc stuck              # Find processes stuck > 5 minutes
-//!   proc stuck --timeout 60 # Find processes stuck > 1 minute
+//!   proc stuck              # Running over 5 minutes and using >50% CPU now
+//!   proc stuck --timeout 60 # The same, for processes running over 1 minute
 //!   proc stuck --kill       # Find and kill stuck processes
 
 use crate::core::{apply_filters, Process};
@@ -15,7 +18,7 @@ use std::time::Duration;
 /// Find stuck/hung processes
 #[derive(Args, Debug)]
 pub struct StuckCommand {
-    /// Timeout in seconds to consider a process stuck (default: 300 = 5 minutes)
+    /// Only processes running longer than this many seconds (and over 50% CPU)
     #[arg(long, short = 't', default_value = "300")]
     pub timeout: u64,
 
@@ -49,7 +52,7 @@ pub struct StuckCommand {
 }
 
 impl StuckCommand {
-    /// Executes the stuck command, finding processes in uninterruptible states.
+    /// Executes the stuck command, finding long-running processes using high CPU.
     pub fn execute(&self) -> Result<()> {
         let printer = Printer::from_flags(self.json, self.verbose);
 

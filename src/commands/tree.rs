@@ -24,6 +24,7 @@ use std::path::PathBuf;
 #[derive(Args, Debug)]
 pub struct TreeCommand {
     /// Target: process name, :port, or PID (shows full tree if omitted)
+    #[arg(value_parser = crate::core::validate_target_arg)]
     target: Option<String>,
 
     /// Show ancestry (path UP to root) instead of descendants

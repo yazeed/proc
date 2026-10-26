@@ -11,6 +11,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Website redesign ([proc-cli.com](https://proc-cli.com)).** A new layout and type built for reading: a 42rem text column, Atkinson Hyperlegible Next and JetBrains Mono, light and dark themes. Code blocks are dark terminals with copy buttons and spacing above and below, so the text after a block no longer sits against it. The home page leads with an interactive command reader: pick any of the 19 commands and one of its targets, and it says what that exact command does and how proc reads the target (58 examples, in `docs/_data/reader.yml`). "Target" in the headline uses the same colour as the target in the reader. Command pages have a sidebar listing every command, and the changelog has one listing every version with its release date, grouped by minor version and marking the one you're reading. The header and the install page show the latest version, read from `docs/_data/release.yml`, which RELEASE.md now bumps with the others
 - **Sentence case across the site**: page titles, headings, tables and post titles
+- **`proc wait` notices an exit within a quarter second.** It used to check only every `--interval` (5 seconds by default), so it could return 5 seconds late. `--interval` now sets how often the status line is printed
+- **`proc stop` asks every process at once and waits for them together**, so several processes share one `--timeout`. They used to be handled one after another: five processes that ignore SIGTERM took 50 seconds instead of 10
+- **`proc ports` and `proc on :port` show full process names on macOS** (`python3.12`, `ControlCenter`, `OpenCode Helper`). lsof cut them to 9 characters, so a helper process could look like the app itself
+- **Accurate `stuck` descriptions.** A process counts as stuck when it has been running longer than `--timeout` and is using over 50% CPU in a half-second sample; the help and docs used to describe it as hung or in an uninterruptible state
+- **A missing `ss` on Linux is explained.** Port lookups on Linux use `ss`; without it, proc now says to install iproute2 instead of "Failed to run ss: No such file or directory"
+
+### Fixed
+
+- **`proc stop`, `orphans --kill` and `stuck --kill` could hang forever** when a killed process became a zombie whose parent didn't reap it (seen on Linux: `proc stop` never returned). Waiting after SIGKILL is now limited to 5 seconds
+- **A zombie (exited, not yet reaped) counted as running** on Linux, so `wait` timed out on processes that had already exited, and `stop`, `free` and `unstick` waited out their timeouts on them
+- **Zombies were never listed on macOS**, so `proc list --status zombie` found nothing; they are now read from the kernel, as `ps` does
+- **A reused PID counted as the original process**: `wait`, `stop` and the others now compare the start time too
+- **`proc wait --timeout` overshot by up to `--interval`**: `--timeout 1` took 5 seconds. A process that exited at the last moment could also be reported as still running
+- **`proc free --wait` wasn't a maximum**: the wait for the port started again after the force kill, so `--wait 10` could take 15 seconds
+- **`proc watch --interval` with `nan`, `inf` or a negative number crashed**, and `0` refreshed in a busy loop using a full CPU core. It now needs at least 0.1 seconds, and anything else exits 4
+- **`proc ports --range` ignored a range it couldn't read** (`abc`, `70000-80000`) and listed every port; a reversed range (`9000-8000`) matched nothing. Both now exit 4 and say why
+- **A mistyped port such as `:70000` was searched for as a process name** and reported "not found" (exit 2). Every command now rejects it as invalid input (exit 4): ports go from `:1` to `:65535`
 
 ### Added
 

@@ -131,7 +131,7 @@ groups:
         examples:
           - t: ""
             kind: none
-            text: "Finds processes that have used more than half a CPU for over 5 minutes."
+            text: "Finds processes that have been running for over 5 minutes and are using more than half a CPU right now."
           - t: "--kill"
             rule: "<code>--kill</code> acts on what was found, and asks first like <code>proc kill</code>."
             text: "Ends the stuck processes, after showing the list and asking."

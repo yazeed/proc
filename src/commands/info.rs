@@ -18,7 +18,7 @@ use serde::Serialize;
 #[derive(Args, Debug)]
 pub struct InfoCommand {
     /// Target(s): PID, :port, or name (comma-separated for multiple)
-    #[arg(required = true)]
+    #[arg(required = true, value_parser = crate::core::validate_target_arg)]
     targets: Vec<String>,
 
     /// Output as JSON
