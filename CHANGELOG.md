@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.14.5] - 2026-10-25
+
 ### Changed
 
 - **Uptime in every process view.** It was missing from several:
@@ -21,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **npm package: no install script.** The binary is now downloaded the first time you run `proc`, which is already what happened on npm 12 and newer (they skip install scripts). Its checksum is verified either way. `node install.js` in the package directory still downloads it ahead of time, for example in an image that will run offline. This removes the "install scripts" supply-chain alert that scanners such as Socket raise
 - **Socket badge** in the README
 - **Website: an [agent skill](https://proc-cli.com/skill) page.** It covers installing the skill (`npx skills add`, `bunx`, the Claude Code plugin), updating it, what it teaches agents, and prompts to try. It's linked from the navigation, the install page and the README
+- **Demo recording** re-rendered, so `proc why` shows the uptime of each process in the chain
 
 ### Fixed
 
@@ -697,7 +700,8 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 
 ---
 
-[Unreleased]: https://github.com/yazeed/proc-cli/compare/v1.14.4...HEAD
+[Unreleased]: https://github.com/yazeed/proc-cli/compare/v1.14.5...HEAD
+[1.14.5]: https://github.com/yazeed/proc-cli/compare/v1.14.4...v1.14.5
 [1.14.4]: https://github.com/yazeed/proc-cli/compare/v1.14.3...v1.14.4
 [1.14.3]: https://github.com/yazeed/proc-cli/compare/v1.14.2...v1.14.3
 [1.14.2]: https://github.com/yazeed/proc-cli/compare/v1.14.1...v1.14.2

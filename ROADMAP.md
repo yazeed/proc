@@ -6,7 +6,7 @@ The goal is not to accumulate features, but to cover the process and port manage
 
 See [PHILOSOPHY.md](PHILOSOPHY.md) for our full manifesto.
 
-## Current Release (v1.14.4)
+## Current Release (v1.14.5)
 
 The core commands are complete, with process lifecycle control, diagnostics, real-time monitoring, the Proc Query Language, shell completions, file lookup, consistent filtering, terminal-adaptive tables, a consistent JSON and exit-code contract, an agent skill, and full CI/CD automation:
 
@@ -16,6 +16,12 @@ The core commands are complete, with process lifecycle control, diagnostics, rea
 | Monitoring | `watch` (alias: `top`) — real-time process monitoring; `wait` — block until exit | ✅ |
 | Lifecycle | `kill`, `stop`, `unstick`, `freeze`, `thaw`, `free` (all support multi-target + filters) | ✅ |
 | Tooling | `completions`, `manpage`, agent skill (`npx skills add yazeed/proc-cli`) | ✅ |
+
+### v1.14.5 Highlights
+
+- **Uptime in every process view**: `on`, `tree`, `why` and `watch` show it, and every command's JSON has `uptime_secs`
+- **No more 56-year uptimes** for other users' processes on macOS, and `--status` rejects typos instead of matching everything
+- **npm package without an install script**, and an [agent skill](https://proc-cli.com/skill) page on the website
 
 ### v1.14.4 Highlights
 
