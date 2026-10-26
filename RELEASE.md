@@ -97,12 +97,12 @@ npm info proc-cli version                 # npm
 npm install --prefix /tmp/proc-npm-check proc-cli && /tmp/proc-npm-check/node_modules/.bin/proc --version  # npm installer works
 brew update && brew info yazeed/proc/proc # Homebrew
 brew upgrade yazeed/proc/proc && proc --version  # upgrades only proc, nothing else
-docker pull yazeed/proc                   # Docker
+docker pull yazeed/proc-cli               # Docker (the same image is also pushed as yazeed/proc)
 
 # Linux binaries are static (musl): they must run on an older distro and on Alpine
 mkdir -p /tmp/proc-linux && cd /tmp/proc-linux
-curl -fsSL https://github.com/yazeed/proc/releases/latest/download/proc-linux-x86_64.tar.gz | tar xz
-curl -fsSL https://github.com/yazeed/proc/releases/latest/download/proc-linux-aarch64.tar.gz | tar xz
+curl -fsSL https://github.com/yazeed/proc-cli/releases/latest/download/proc-linux-x86_64.tar.gz | tar xz
+curl -fsSL https://github.com/yazeed/proc-cli/releases/latest/download/proc-linux-aarch64.tar.gz | tar xz
 for img in debian:bullseye-slim alpine; do
   docker run --rm --platform linux/amd64 -v "$PWD":/w $img /w/proc-linux-x86_64 --version
   docker run --rm --platform linux/arm64 -v "$PWD":/w $img /w/proc-linux-aarch64 --version
@@ -112,7 +112,7 @@ cd -
 # Agent skill: skills.sh doesn't watch the repo. It re-reads main only when someone
 # installs the skill with telemetry on, and its pages are cached, so trigger it once.
 mkdir -p /tmp/proc-skill-check && cd /tmp/proc-skill-check
-bunx skills add yazeed/proc --skill proc-cli -a claude-code -y   # installs into this folder only
+bunx skills add yazeed/proc-cli --skill proc-cli -a claude-code -y   # installs into this folder only
 cd - && rm -rf /tmp/proc-skill-check
 ```
 
@@ -121,7 +121,7 @@ Also verify:
 - [ ] `proc --version` — Shows new version
 - [ ] `proc manpage` — Includes new commands
 - [ ] `proc completions bash` — Includes new commands
-- [ ] https://www.skills.sh/yazeed/proc/proc-cli — shows the new skill text (allow time for its cache to refresh after the install above)
+- [ ] https://www.skills.sh/yazeed/proc-cli/proc-cli — shows the new skill text (allow time for its cache to refresh after the install above)
 
 ## 8. Cleanup
 
@@ -141,7 +141,7 @@ On tag push, GitHub Actions handles:
 4. **npm**: Publish proc-cli package
 5. **Homebrew**: Update yazeed/homebrew-proc tap
 6. **Scoop**: Update yazeed/scoop-bucket-proc bucket
-7. **Docker**: Push to yazeed/proc on Docker Hub
+7. **Docker**: Push to yazeed/proc-cli on Docker Hub, and the same build to yazeed/proc (the image's original name)
 
 ## Required Secrets
 
@@ -154,7 +154,11 @@ Configure in GitHub repo settings → Secrets:
 | `DOCKERHUB_USERNAME` | Docker Hub username |
 | `DOCKERHUB_TOKEN` | Docker Hub access token |
 
-npm needs no secret. It publishes through **Trusted Publishing (OIDC)**, configured on npmjs.com under `proc-cli` → Settings → Trusted Publisher: GitHub Actions, `yazeed` / `proc`, workflow `release.yml`, no environment, **Allow npm publish** checked. The `publish-npm` job needs `id-token: write` and npm 11.5.1 or newer. If the workflow file is renamed, the trusted publisher must be recreated.
+npm and crates.io need no secret. Both publish through **Trusted Publishing (OIDC)**:
+- **npm:** configured on npmjs.com under `proc-cli` → Settings → Trusted Publisher: GitHub Actions, `yazeed` / `proc-cli`, workflow `release.yml`, no environment, **Allow npm publish** checked. The `publish-npm` job needs `id-token: write` and npm 11.5.1 or newer.
+- **crates.io:** configured under the `proc-cli` crate → Settings → Trusted Publishing: GitHub, `yazeed` / `proc-cli`, workflow `release.yml`, no environment.
+
+If the repository or the workflow file is renamed, both trusted publishers must be recreated. A new npm trusted publisher expires unless a publish succeeds within 2 days, so add it shortly before tagging.
 
 ## Package Distribution
 
@@ -164,5 +168,5 @@ npm needs no secret. It publishes through **Trusted Publishing (OIDC)**, configu
 | npm | proc-cli | `npm install -g proc-cli` |
 | Homebrew | proc | `brew install yazeed/proc/proc` |
 | Scoop | proc | `scoop bucket add proc https://github.com/yazeed/scoop-bucket-proc && scoop install proc` |
-| Docker | yazeed/proc | `docker run yazeed/proc` |
-| Nix | — | `nix profile install github:yazeed/proc` |
+| Docker | yazeed/proc-cli (also yazeed/proc) | `docker run yazeed/proc-cli` |
+| Nix | — | `nix profile install github:yazeed/proc-cli` |

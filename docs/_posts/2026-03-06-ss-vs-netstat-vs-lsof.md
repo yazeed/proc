@@ -199,7 +199,7 @@ The decision is mostly made for you by your platform and use case:
 
 ## Or abstract the differences
 
-[proc](https://github.com/yazeed/proc) handles the platform detection for you. Same command on macOS and Linux, same output format:
+[proc](https://github.com/yazeed/proc-cli) handles the platform detection for you. Same command on macOS and Linux, same output format:
 
 ```bash
 proc on :3000            # What's listening on port 3000
@@ -217,4 +217,4 @@ cargo install proc-cli            # Rust
 npm install -g proc-cli           # npm/bun
 ```
 
-See the [GitHub repo](https://github.com/yazeed/proc) for all installation options.
+See the [GitHub repo](https://github.com/yazeed/proc-cli) for all installation options.

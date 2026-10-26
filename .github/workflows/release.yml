@@ -179,7 +179,7 @@ jobs:
           npm --version
 
       # Authenticates through the trusted publisher configured on npmjs.com
-      # (yazeed/proc, release.yml), using this job's id-token permission
+      # (yazeed/proc-cli, release.yml), using this job's id-token permission
       - name: Publish to npm
         working-directory: pkg/npm
         run: |
@@ -213,7 +213,7 @@ jobs:
 
       - name: Download checksums
         run: |
-          gh release download ${{ github.ref_name }} --repo yazeed/proc --pattern "checksums.txt" --output checksums.txt
+          gh release download ${{ github.ref_name }} --repo yazeed/proc-cli --pattern "checksums.txt" --output checksums.txt
           cat checksums.txt
         env:
           GH_TOKEN: ${{ github.token }}
@@ -231,26 +231,26 @@ jobs:
           cat > Formula/proc.rb << EOF
           class Proc < Formula
             desc "Semantic CLI tool for process management"
-            homepage "https://github.com/yazeed/proc"
+            homepage "https://github.com/yazeed/proc-cli"
             version "${VERSION}"
             license "MIT"
 
             on_macos do
               if Hardware::CPU.arm?
-                url "https://github.com/yazeed/proc/releases/download/v#{version}/proc-darwin-aarch64.tar.gz"
+                url "https://github.com/yazeed/proc-cli/releases/download/v#{version}/proc-darwin-aarch64.tar.gz"
                 sha256 "${DARWIN_ARM64}"
               else
-                url "https://github.com/yazeed/proc/releases/download/v#{version}/proc-darwin-x86_64.tar.gz"
+                url "https://github.com/yazeed/proc-cli/releases/download/v#{version}/proc-darwin-x86_64.tar.gz"
                 sha256 "${DARWIN_X86}"
               end
             end
 
             on_linux do
               if Hardware::CPU.arm?
-                url "https://github.com/yazeed/proc/releases/download/v#{version}/proc-linux-aarch64.tar.gz"
+                url "https://github.com/yazeed/proc-cli/releases/download/v#{version}/proc-linux-aarch64.tar.gz"
                 sha256 "${LINUX_ARM64}"
               else
-                url "https://github.com/yazeed/proc/releases/download/v#{version}/proc-linux-x86_64.tar.gz"
+                url "https://github.com/yazeed/proc-cli/releases/download/v#{version}/proc-linux-x86_64.tar.gz"
                 sha256 "${LINUX_X86}"
               end
             end
@@ -290,7 +290,7 @@ jobs:
 
       - name: Download checksums
         run: |
-          gh release download ${{ github.ref_name }} --repo yazeed/proc --pattern "checksums.txt" --output checksums.txt
+          gh release download ${{ github.ref_name }} --repo yazeed/proc-cli --pattern "checksums.txt" --output checksums.txt
           cat checksums.txt
         env:
           GH_TOKEN: ${{ github.token }}
@@ -305,11 +305,11 @@ jobs:
           {
               "version": "VERSION_PLACEHOLDER",
               "description": "Semantic CLI tool for process management. Target by port, PID, name or path.",
-              "homepage": "https://github.com/yazeed/proc",
+              "homepage": "https://github.com/yazeed/proc-cli",
               "license": "MIT",
               "architecture": {
                   "64bit": {
-                      "url": "https://github.com/yazeed/proc/releases/download/vVERSION_PLACEHOLDER/proc-windows-x86_64.exe.zip",
+                      "url": "https://github.com/yazeed/proc-cli/releases/download/vVERSION_PLACEHOLDER/proc-windows-x86_64.exe.zip",
                       "hash": "HASH_PLACEHOLDER"
                   }
               },
@@ -318,7 +318,7 @@ jobs:
               "autoupdate": {
                   "architecture": {
                       "64bit": {
-                          "url": "https://github.com/yazeed/proc/releases/download/v$version/proc-windows-x86_64.exe.zip"
+                          "url": "https://github.com/yazeed/proc-cli/releases/download/v$version/proc-windows-x86_64.exe.zip"
                       }
                   }
               }

@@ -7,7 +7,11 @@ on:
 
 env:
   REGISTRY: docker.io
-  IMAGE_NAME: yazeed/proc
+  IMAGE_NAME: yazeed/proc-cli
+  # The image's original name. Docker Hub can't rename repositories, so the
+  # same build is pushed here too and existing `docker pull yazeed/proc` users
+  # keep getting updates.
+  LEGACY_IMAGE_NAME: yazeed/proc
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -45,6 +49,8 @@ jobs:
           tags: |
             ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}
             ${{ env.IMAGE_NAME }}:latest
+            ${{ env.LEGACY_IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}
+            ${{ env.LEGACY_IMAGE_NAME }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -56,4 +62,14 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
           repository: ${{ env.IMAGE_NAME }}
           short-description: "Semantic CLI tool for process management. Target by port, PID, name or path."
+          readme-filepath: ./README.md
+
+      - name: Update Docker Hub description (original image name)
+        uses: peter-evans/dockerhub-description@v4
+        continue-on-error: true
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ env.LEGACY_IMAGE_NAME }}
+          short-description: "Now published as yazeed/proc-cli (same image). Semantic CLI tool for process management."
           readme-filepath: ./README.md

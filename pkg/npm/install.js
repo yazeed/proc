@@ -8,7 +8,7 @@ const crypto = require("crypto");
 const { execFileSync } = require("child_process");
 
 const VERSION = require("./package.json").version;
-const REPO = "yazeed/proc";
+const REPO = "yazeed/proc-cli";
 
 // Only follow redirects to trusted GitHub domains.
 // GitHub serves release downloads from release-assets.githubusercontent.com;

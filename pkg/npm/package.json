@@ -11,13 +11,13 @@
   ],
   "author": "Yazeed Al Oyoun <me@yazeed.com>",
   "license": "MIT",
-  "homepage": "https://github.com/yazeed/proc",
+  "homepage": "https://github.com/yazeed/proc-cli",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yazeed/proc.git"
+    "url": "git+https://github.com/yazeed/proc-cli.git"
   },
   "bugs": {
-    "url": "https://github.com/yazeed/proc/issues"
+    "url": "https://github.com/yazeed/proc-cli/issues"
   },
   "bin": {
     "proc": "run.js"

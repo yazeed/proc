@@ -15,7 +15,7 @@ use std::process;
 
 const VERSION_INFO: &str = concat!(
     env!("CARGO_PKG_VERSION"),
-    "\nhttps://github.com/yazeed/proc",
+    "\nhttps://github.com/yazeed/proc-cli",
     "\nLicense: MIT"
 );
 
@@ -26,7 +26,7 @@ const VERSION_INFO: &str = concat!(
 #[command(propagate_version = true)]
 #[command(
     after_help = "Targets: :port, PID, or process name. Comma-separate for multiple.
-Run 'proc --help' for examples or visit https://github.com/yazeed/proc"
+Run 'proc --help' for examples or visit https://github.com/yazeed/proc-cli"
 )]
 #[command(after_long_help = "EXAMPLES:
 
@@ -92,7 +92,7 @@ Run 'proc --help' for examples or visit https://github.com/yazeed/proc"
     proc stop nginx --signal HUP   Send custom signal (config reload)
 
 Targets: :port, PID, or process name. Comma-separate for multiple.
-For more information, visit: https://github.com/yazeed/proc")]
+For more information, visit: https://github.com/yazeed/proc-cli")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,

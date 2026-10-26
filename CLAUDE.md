@@ -22,7 +22,7 @@ proc is a semantic CLI tool for process management written in Rust. It provides 
 
 **Tagline (use exactly):** "Semantic CLI tool for process management. Target by port, PID, name or path."
 
-**Repository:** https://github.com/yazeed/proc
+**Repository:** https://github.com/yazeed/proc-cli
 
 ## Architecture
 

@@ -447,7 +447,7 @@ Shorter, but still a meaningful amount of shell for what is fundamentally: stop 
 
 ## proc's JSON mode
 
-If you have [proc](https://github.com/yazeed/proc) installed, the process inspection parts get simpler -- and structured.
+If you have [proc](https://github.com/yazeed/proc-cli) installed, the process inspection parts get simpler -- and structured.
 
 Check what's on a port and get JSON back:
 
@@ -485,4 +485,4 @@ cargo install proc-cli            # Rust
 npm install -g proc-cli           # npm/bun
 ```
 
-See the [GitHub repo](https://github.com/yazeed/proc) for all installation options.
+See the [GitHub repo](https://github.com/yazeed/proc-cli) for all installation options.

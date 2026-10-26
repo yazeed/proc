@@ -263,7 +263,7 @@ On macOS, the equivalent is `sudo sample <pid>` or `sudo spindump <pid>`.
 
 ## proc's approach
 
-[proc](https://github.com/yazeed/proc) has two built-in commands for this: `proc stuck` finds problem processes, and `proc unstick` attempts to recover them.
+[proc](https://github.com/yazeed/proc-cli) has two built-in commands for this: `proc stuck` finds problem processes, and `proc unstick` attempts to recover them.
 
 Find all stuck processes (default threshold is 5 minutes):
 
@@ -308,4 +308,4 @@ cargo install proc-cli            # Rust
 npm install -g proc-cli           # npm/bun
 ```
 
-See the [GitHub repo](https://github.com/yazeed/proc) for all installation options.
+See the [GitHub repo](https://github.com/yazeed/proc-cli) for all installation options.

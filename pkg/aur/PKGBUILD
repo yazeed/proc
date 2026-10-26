@@ -4,11 +4,11 @@ pkgver=1.3.3
 pkgrel=1
 pkgdesc="Semantic CLI tool for process management. Target by port, PID, name or path."
 arch=('x86_64' 'aarch64')
-url="https://github.com/yazeed/proc"
+url="https://github.com/yazeed/proc-cli"
 license=('MIT')
 depends=('gcc-libs')
 makedepends=('rust' 'cargo')
-source=("$pkgname-$pkgver.tar.gz::https://github.com/yazeed/proc/archive/v$pkgver.tar.gz")
+source=("$pkgname-$pkgver.tar.gz::https://github.com/yazeed/proc-cli/archive/v$pkgver.tar.gz")
 sha256sums=('a912bf9b2f8d4efbb217c619609fd155220dbbd7ffa898f7f897f07ead79e97c')
 
 build() {

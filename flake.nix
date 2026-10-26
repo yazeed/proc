@@ -19,7 +19,7 @@
           
           meta = with pkgs.lib; {
             description = "Semantic CLI tool for process management. Target by port, PID, name or path.";
-            homepage = "https://github.com/yazeed/proc";
+            homepage = "https://github.com/yazeed/proc-cli";
             license = licenses.mit;
             maintainers = [];
             mainProgram = "proc";

@@ -201,7 +201,7 @@ Note: signal numbers vary by platform (the above are for macOS/BSD). Linux uses 
 
 ## with proc
 
-[proc](https://github.com/yazeed/proc)'s `stop` command sends SIGTERM first with a configurable timeout, then escalates to SIGKILL. `proc stuck` identifies processes consuming >50% CPU, and `proc unstick` sends recovery signals (SIGCONT, then SIGINT) before escalating.
+[proc](https://github.com/yazeed/proc-cli)'s `stop` command sends SIGTERM first with a configurable timeout, then escalates to SIGKILL. `proc stuck` identifies processes consuming >50% CPU, and `proc unstick` sends recovery signals (SIGCONT, then SIGINT) before escalating.
 
 ```bash
 proc stop node                 # SIGTERM, wait, then SIGKILL
@@ -218,4 +218,4 @@ cargo install proc-cli            # Rust
 npm install -g proc-cli           # npm/bun
 ```
 
-See the [GitHub repo](https://github.com/yazeed/proc) for all installation options.
+See the [GitHub repo](https://github.com/yazeed/proc-cli) for all installation options.

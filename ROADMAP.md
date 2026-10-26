@@ -15,7 +15,7 @@ The core commands are complete, with process lifecycle control, diagnostics, rea
 | Discovery | `on`, `for`, `by`, `in`, `ports`, `list`, `info`, `tree`, `stuck`, `why`, `orphans` | ✅ |
 | Monitoring | `watch` (alias: `top`) — real-time process monitoring; `wait` — block until exit | ✅ |
 | Lifecycle | `kill`, `stop`, `unstick`, `freeze`, `thaw`, `free` (all support multi-target + filters) | ✅ |
-| Tooling | `completions`, `manpage`, agent skill (`npx skills add yazeed/proc`) | ✅ |
+| Tooling | `completions`, `manpage`, agent skill (`npx skills add yazeed/proc-cli`) | ✅ |
 
 ### v1.14.2 Highlights
 
@@ -237,4 +237,4 @@ These are outside proc's scope. See [PHILOSOPHY.md](PHILOSOPHY.md) for why.
 
 ---
 
-Have an idea? Open a [discussion](https://github.com/yazeed/proc/discussions).
+Have an idea? Open a [discussion](https://github.com/yazeed/proc-cli/discussions).

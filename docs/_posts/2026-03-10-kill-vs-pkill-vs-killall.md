@@ -145,7 +145,7 @@ Neither `kill` nor `pkill` has this built in.
 
 ## with proc
 
-[proc](https://github.com/yazeed/proc) handles name matching, port targeting, and multi-target resolution with deduplication and confirmation prompts:
+[proc](https://github.com/yazeed/proc-cli) handles name matching, port targeting, and multi-target resolution with deduplication and confirmation prompts:
 
 ```bash
 proc kill node            # kill all node processes (with confirmation)
@@ -164,4 +164,4 @@ cargo install proc-cli            # Rust
 npm install -g proc-cli           # npm/bun
 ```
 
-See the [GitHub repo](https://github.com/yazeed/proc) for all installation options.
+See the [GitHub repo](https://github.com/yazeed/proc-cli) for all installation options.

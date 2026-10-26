@@ -44,5 +44,5 @@ CMD ["--help"]
 # Labels
 LABEL org.opencontainers.image.title="proc"
 LABEL org.opencontainers.image.description="Semantic CLI tool for process management. Target by port, PID, name or path."
-LABEL org.opencontainers.image.source="https://github.com/yazeed/proc"
+LABEL org.opencontainers.image.source="https://github.com/yazeed/proc-cli"
 LABEL org.opencontainers.image.licenses="MIT"

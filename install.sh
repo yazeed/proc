@@ -1,10 +1,10 @@
 #!/bin/bash
 # proc installer script
-# Usage: curl -fsSL https://raw.githubusercontent.com/yazeed/proc/main/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/yazeed/proc-cli/main/install.sh | bash
 
 set -e
 
-REPO="yazeed/proc"
+REPO="yazeed/proc-cli"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 BINARY_NAME="proc"
 

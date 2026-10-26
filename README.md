@@ -1,13 +1,13 @@
 # proc
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/yazeed/proc/main/demo.gif" alt="proc demo" width="800" />
+  <img src="https://raw.githubusercontent.com/yazeed/proc-cli/main/demo.gif" alt="proc demo" width="800" />
 </p>
 
-[![CI](https://github.com/yazeed/proc/workflows/CI/badge.svg)](https://github.com/yazeed/proc/actions)
+[![CI](https://github.com/yazeed/proc-cli/workflows/CI/badge.svg)](https://github.com/yazeed/proc-cli/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Crates.io](https://img.shields.io/crates/v/proc-cli.svg)](https://crates.io/crates/proc-cli)
-[![Docker](https://img.shields.io/docker/v/yazeed/proc?label=docker)](https://hub.docker.com/r/yazeed/proc)
+[![Docker](https://img.shields.io/docker/v/yazeed/proc-cli?label=docker)](https://hub.docker.com/r/yazeed/proc-cli)
 [![npm](https://img.shields.io/npm/v/proc-cli)](https://www.npmjs.com/package/proc-cli)
 [![Changelog](https://img.shields.io/crates/v/proc-cli?label=changelog&color=blue)](CHANGELOG.md)
 [![Downloads](https://img.shields.io/crates/d/proc-cli.svg)](https://crates.io/crates/proc-cli)
@@ -52,9 +52,9 @@ One syntax. One tool. [Full comparison &rarr;](https://proc-cli.com/posts/proc-v
 | Windows | `scoop bucket add proc https://github.com/yazeed/scoop-bucket-proc && scoop install proc` |
 | Rust | `cargo install proc-cli` |
 | npm/bun | `npm install -g proc-cli` |
-| Nix | `nix profile install github:yazeed/proc` |
-| Docker | `docker run --rm -it --pid=host --net=host yazeed/proc` |
-| Shell | `curl -fsSL https://raw.githubusercontent.com/yazeed/proc/main/install.sh \| bash` |
+| Nix | `nix profile install github:yazeed/proc-cli` |
+| Docker | `docker run --rm -it --pid=host --net=host yazeed/proc-cli` |
+| Shell | `curl -fsSL https://raw.githubusercontent.com/yazeed/proc-cli/main/install.sh \| bash` |
 
 <details>
 <summary>More options</summary>
@@ -68,23 +68,23 @@ One syntax. One tool. [Full comparison &rarr;](https://proc-cli.com/posts/proc-v
 
 ```bash
 # macOS (Apple Silicon)
-curl -fsSL https://github.com/yazeed/proc/releases/latest/download/proc-darwin-aarch64.tar.gz | tar xz
+curl -fsSL https://github.com/yazeed/proc-cli/releases/latest/download/proc-darwin-aarch64.tar.gz | tar xz
 sudo mv proc-darwin-aarch64 /usr/local/bin/proc
 
 # macOS (Intel)
-curl -fsSL https://github.com/yazeed/proc/releases/latest/download/proc-darwin-x86_64.tar.gz | tar xz
+curl -fsSL https://github.com/yazeed/proc-cli/releases/latest/download/proc-darwin-x86_64.tar.gz | tar xz
 sudo mv proc-darwin-x86_64 /usr/local/bin/proc
 
 # Linux (x86_64)
-curl -fsSL https://github.com/yazeed/proc/releases/latest/download/proc-linux-x86_64.tar.gz | tar xz
+curl -fsSL https://github.com/yazeed/proc-cli/releases/latest/download/proc-linux-x86_64.tar.gz | tar xz
 sudo mv proc-linux-x86_64 /usr/local/bin/proc
 
 # Linux (ARM64)
-curl -fsSL https://github.com/yazeed/proc/releases/latest/download/proc-linux-aarch64.tar.gz | tar xz
+curl -fsSL https://github.com/yazeed/proc-cli/releases/latest/download/proc-linux-aarch64.tar.gz | tar xz
 sudo mv proc-linux-aarch64 /usr/local/bin/proc
 
 # Windows (PowerShell)
-Invoke-WebRequest -Uri https://github.com/yazeed/proc/releases/latest/download/proc-windows-x86_64.exe.zip -OutFile proc.zip
+Invoke-WebRequest -Uri https://github.com/yazeed/proc-cli/releases/latest/download/proc-windows-x86_64.exe.zip -OutFile proc.zip
 Expand-Archive proc.zip -DestinationPath .
 Move-Item proc-windows-x86_64.exe C:\Windows\System32\proc.exe
 ```
@@ -96,13 +96,13 @@ Move-Item proc-windows-x86_64.exe C:\Windows\System32\proc.exe
 Teach your coding agent (Claude Code, Codex, Cursor, Gemini CLI and others) to use proc with structured JSON output:
 
 ```bash
-npx skills add yazeed/proc
+npx skills add yazeed/proc-cli
 ```
 
 In Claude Code you can also install it as a plugin:
 
 ```text
-/plugin marketplace add yazeed/proc
+/plugin marketplace add yazeed/proc-cli
 /plugin install proc-cli@proc-cli
 ```
 
@@ -346,8 +346,8 @@ proc manpage | sudo tee /usr/local/share/man/man1/proc.1 > /dev/null
 ## Building from Source
 
 ```bash
-git clone https://github.com/yazeed/proc
-cd proc
+git clone https://github.com/yazeed/proc-cli
+cd proc-cli
 cargo build --release
 ```
 

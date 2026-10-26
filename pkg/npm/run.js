@@ -48,7 +48,7 @@ resolveBinary()
   .catch((err) => {
     console.error(`Failed to install proc: ${err.message}`);
     console.error(
-      "You can install manually from: https://github.com/yazeed/proc/releases"
+      "You can install manually from: https://github.com/yazeed/proc-cli/releases"
     );
     process.exit(1);
   });

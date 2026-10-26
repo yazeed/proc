@@ -163,7 +163,7 @@ const server = app.listen(0, () => {
 
 ## with proc
 
-If you have [proc](https://github.com/yazeed/proc) installed, `proc on :3000` shows what's on the port and `proc kill :3000` handles cleanup in one step.
+If you have [proc](https://github.com/yazeed/proc-cli) installed, `proc on :3000` shows what's on the port and `proc kill :3000` handles cleanup in one step.
 
 ```bash
 proc on :3000             # what's using this port?
@@ -179,4 +179,4 @@ cargo install proc-cli            # Rust
 npm install -g proc-cli           # npm/bun
 ```
 
-See the [GitHub repo](https://github.com/yazeed/proc) for all installation options.
+See the [GitHub repo](https://github.com/yazeed/proc-cli) for all installation options.

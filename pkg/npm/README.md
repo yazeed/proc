@@ -21,7 +21,7 @@ proc by node --in .     # node processes in current directory
 
 ## Documentation
 
-**[Full documentation on GitHub](https://github.com/yazeed/proc)**
+**[Full documentation on GitHub](https://github.com/yazeed/proc-cli)**
 
 ## About
 

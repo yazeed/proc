@@ -99,4 +99,4 @@ We carefully vet all dependencies:
 
 For security concerns: me at yazeed.com
 
-For general questions: [GitHub Issues](https://github.com/yazeed/proc/issues)
+For general questions: [GitHub Issues](https://github.com/yazeed/proc-cli/issues)

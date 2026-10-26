@@ -10,7 +10,7 @@ By participating in this project, you agree to abide by our [Code of Conduct](CO
 
 ### Reporting Bugs
 
-Before creating a bug report, please check the [existing issues](https://github.com/yazeed/proc/issues) to see if the problem has already been reported.
+Before creating a bug report, please check the [existing issues](https://github.com/yazeed/proc-cli/issues) to see if the problem has already been reported.
 
 When creating a bug report, please include:
 
@@ -42,8 +42,8 @@ Feature suggestions are welcome! Please create an issue with:
 
 2. **Set up the development environment**:
    ```bash
-   git clone https://github.com/yazeed/proc
-   cd proc
+   git clone https://github.com/yazeed/proc-cli
+   cd proc-cli
    cargo build
    ```
 
@@ -219,7 +219,7 @@ Releases are managed by maintainers. The process:
 
 ## Questions?
 
-- Open a [Discussion](https://github.com/yazeed/proc/discussions) for questions
+- Open a [Discussion](https://github.com/yazeed/proc-cli/discussions) for questions
 - Join our community chat (if available)
 - Reach out to maintainers
 

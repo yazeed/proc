@@ -16,7 +16,7 @@ brew install yazeed/proc/proc
 ### shell script
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yazeed/proc/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/yazeed/proc-cli/main/install.sh | bash
 ```
 
 ## Linux
@@ -24,7 +24,7 @@ curl -fsSL https://raw.githubusercontent.com/yazeed/proc/main/install.sh | bash
 ### shell script
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yazeed/proc/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/yazeed/proc-cli/main/install.sh | bash
 ```
 
 ### cargo
@@ -81,7 +81,7 @@ bun install -g proc-cli
 ### nix
 
 ```bash
-nix profile install github:yazeed/proc
+nix profile install github:yazeed/proc-cli
 ```
 
 ### docker
@@ -89,7 +89,7 @@ nix profile install github:yazeed/proc
 Runs with the host PID and network namespaces: `--pid=host` shows the host's processes, and `--net=host` shows its ports (`on :port`, `ports`, `free`).
 
 ```bash
-docker run --rm -it --pid=host --net=host yazeed/proc
+docker run --rm -it --pid=host --net=host yazeed/proc-cli
 ```
 
 ## verify
@@ -105,13 +105,13 @@ proc --help
 Teach your coding agent (Claude Code, Codex, Cursor, Gemini CLI and others) to use proc with structured JSON output.
 
 ```bash
-npx skills add yazeed/proc
+npx skills add yazeed/proc-cli
 ```
 
 Or, in Claude Code, as a plugin:
 
 ```text
-/plugin marketplace add yazeed/proc
+/plugin marketplace add yazeed/proc-cli
 /plugin install proc-cli@proc-cli
 ```
 

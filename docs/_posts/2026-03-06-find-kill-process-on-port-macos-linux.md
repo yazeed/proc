@@ -419,7 +419,7 @@ If you see an entry in `lsof` or `netstat` with no PID and a state of TIME_WAIT,
 
 All of the above works. But if you're doing this regularly — killing dev servers, checking what's on a port, freeing up ports — it's a lot of flags to remember, and the commands are different on macOS vs Linux.
 
-[proc](https://github.com/yazeed/proc) is a cross-platform CLI that handles this with a consistent syntax:
+[proc](https://github.com/yazeed/proc-cli) is a cross-platform CLI that handles this with a consistent syntax:
 
 ```bash
 # What's on port 3000?
@@ -445,4 +445,4 @@ cargo install proc-cli            # Rust
 npm install -g proc-cli           # npm/bun
 ```
 
-See the [GitHub repo](https://github.com/yazeed/proc) for all installation options.
+See the [GitHub repo](https://github.com/yazeed/proc-cli) for all installation options.
