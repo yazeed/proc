@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`proc watch --interval` with `nan`, `inf` or a negative number crashed**, and `0` refreshed in a busy loop using a full CPU core. It now needs at least 0.1 seconds, and anything else exits 4
 - **`proc ports --range` ignored a range it couldn't read** (`abc`, `70000-80000`) and listed every port; a reversed range (`9000-8000`) matched nothing. Both now exit 4 and say why
 - **A mistyped port such as `:70000` was searched for as a process name** and reported "not found" (exit 2). Every command now rejects it as invalid input (exit 4): ports go from `:1` to `:65535`
+- **IPv6 listen addresses were cut short on Linux and Windows**: `[::1]:631` was reported as `1]` and `[::]:80` as `]`, so `proc ports --local` left out IPv6 loopback listeners and `--exposed` left out ports open on every IPv6 address. The address is now read the same way on every platform and reported without brackets (`::1`, `::`), which also changes macOS, where it was `[::1]`
 
 ### Added
 

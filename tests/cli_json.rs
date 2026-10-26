@@ -553,6 +553,29 @@ mod linux {
         tx.send(()).unwrap();
         worker.join().unwrap();
     }
+
+    #[test]
+    fn ipv6_loopback_listener_keeps_its_address() {
+        // ss prints [::1]:PORT; the address used to come back as "1]", so
+        // `proc ports --local` left IPv6 loopback listeners out
+        let Ok(listener) = std::net::TcpListener::bind("[::1]:0") else {
+            return; // no IPv6 on this machine
+        };
+        let port = listener.local_addr().unwrap().port();
+
+        let (json, code) = run_json(&["on", &format!(":{port}"), "--json"]);
+        assert_eq!(code, 0, "{json}");
+        assert_eq!(json["address"], "::1", "{json}");
+
+        let (json, code) = run_json(&["ports", "--local", "--json"]);
+        assert_eq!(code, 0, "{json}");
+        let listed = json["ports"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p["port"] == port && p["address"] == "::1");
+        assert!(listed, "[::1]:{port} missing from ports --local: {json}");
+    }
 }
 
 #[cfg(windows)]

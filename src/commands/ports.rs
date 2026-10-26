@@ -113,7 +113,7 @@ impl PortsCommand {
             ports.retain(|p| {
                 p.address
                     .as_ref()
-                    .map(|a| a == "127.0.0.1" || a == "::1" || a.starts_with("[::1]"))
+                    .map(|a| a == "127.0.0.1" || a == "::1")
                     .unwrap_or(false)
             });
         }

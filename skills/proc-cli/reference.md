@@ -63,6 +63,8 @@ Status is one of: `running`, `sleeping`, `stopped`, `zombie`, `dead`, `unknown` 
 }
 ```
 
+`address` is the bind address, with IPv6 written without brackets: `0.0.0.0` or `::` for every address (a `*` bind is reported as `0.0.0.0`), `127.0.0.1` or `::1` for loopback.
+
 ## Command Output Shapes
 
 ### proc list / proc by / proc in / proc stuck / proc orphans --json

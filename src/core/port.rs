@@ -132,24 +132,14 @@ impl PortInfo {
         let addr_port =
             name_col.trim_end_matches(|c: char| c == ')' || c.is_alphabetic() || c == '(');
 
-        // Split address and port
-        let last_colon = addr_port.rfind(':')?;
-        let port_str = &addr_port[last_colon + 1..];
-        let port: u16 = port_str.parse().ok()?;
-
-        let addr_part = &addr_port[..last_colon];
-        let address = Some(if addr_part == "*" || addr_part.is_empty() {
-            "0.0.0.0".to_string()
-        } else {
-            addr_part.to_string()
-        });
+        let (address, port) = split_listen_address(addr_port)?;
 
         Some(PortInfo {
             port,
             protocol: Protocol::Tcp,
             pid,
             process_name,
-            address,
+            address: Some(address),
         })
     }
 
@@ -187,18 +177,8 @@ impl PortInfo {
             return None;
         }
 
-        // Local address is typically in column 4 (e.g., "0.0.0.0:22" or "*:80")
-        let local_addr = parts[3];
-        let port_str = local_addr.rsplit(':').next()?;
-        let port: u16 = port_str.parse().ok()?;
-
-        let address = local_addr.rsplit(':').nth(1).map(|s| {
-            if s == "*" {
-                "0.0.0.0".to_string()
-            } else {
-                s.to_string()
-            }
-        });
+        // Local address is typically in column 4 (e.g., "0.0.0.0:22", "*:80" or "[::1]:631")
+        let (address, port) = split_listen_address(parts[3])?;
 
         // Process info is in the last column, format: users:(("name",pid=1234,fd=5))
         let proc_info = parts.last()?;
@@ -211,7 +191,7 @@ impl PortInfo {
             protocol: Protocol::Tcp,
             pid,
             process_name,
-            address,
+            address: Some(address),
         })
     }
 
@@ -263,12 +243,8 @@ impl PortInfo {
             return None;
         }
 
-        // Local address is column 2 (e.g., "0.0.0.0:135")
-        let local_addr = parts[1];
-        let port_str = local_addr.rsplit(':').next()?;
-        let port: u16 = port_str.parse().ok()?;
-
-        let address = local_addr.rsplit(':').nth(1).map(String::from);
+        // Local address is column 2 (e.g., "0.0.0.0:135" or "[::]:135")
+        let (address, port) = split_listen_address(parts[1])?;
 
         // PID is the last column
         let pid: u32 = parts.last()?.parse().ok()?;
@@ -282,7 +258,7 @@ impl PortInfo {
             protocol: Protocol::Tcp,
             pid,
             process_name,
-            address,
+            address: Some(address),
         })
     }
 
@@ -298,6 +274,25 @@ impl PortInfo {
         let name = line.split(',').next()?;
         Some(name.trim_matches('"').to_string())
     }
+}
+
+/// Split a listening socket's local address, as ss, lsof and netstat print it,
+/// into the bind address and the port. IPv6 addresses come in brackets
+/// (`[::1]:631`, `[fe80::1%eth0]:22`) and are returned without them; `*`, every
+/// address, is returned as `0.0.0.0`.
+fn split_listen_address(local: &str) -> Option<(String, u16)> {
+    let (host, port) = local.rsplit_once(':')?;
+    let port = port.parse().ok()?;
+    let host = host
+        .strip_prefix('[')
+        .and_then(|h| h.strip_suffix(']'))
+        .unwrap_or(host);
+    let address = if host.is_empty() || host == "*" {
+        "0.0.0.0"
+    } else {
+        host
+    };
+    Some((address.to_string(), port))
 }
 
 /// Parse a port from various formats (":3000", "3000", etc.)
@@ -325,6 +320,31 @@ mod tests {
         assert!(parse_port("").is_err());
     }
 
+    #[test]
+    fn test_split_listen_address() {
+        for (local, address, port) in [
+            ("0.0.0.0:22", "0.0.0.0", 22),
+            ("127.0.0.1:8080", "127.0.0.1", 8080),
+            ("*:80", "0.0.0.0", 80),
+            ("[::]:80", "::", 80),
+            ("[::1]:631", "::1", 631),
+            ("[::ffff:127.0.0.1]:8080", "::ffff:127.0.0.1", 8080),
+            ("[fe80::1%eth0]:22", "fe80::1%eth0", 22),
+            ("127.0.0.53%lo:53", "127.0.0.53%lo", 53),
+            // Older ss versions print IPv6 without brackets
+            (":::22", "::", 22),
+        ] {
+            assert_eq!(
+                split_listen_address(local),
+                Some((address.to_string(), port)),
+                "{local}"
+            );
+        }
+        for bad in ["[::1]", "[::1]:http", "3000", ""] {
+            assert_eq!(split_listen_address(bad), None, "{bad}");
+        }
+    }
+
     #[cfg(target_os = "macos")]
     #[test]
     fn test_parse_lsof_line_keeps_the_full_name() {
@@ -335,6 +355,62 @@ mod tests {
         assert_eq!(info.process_name, "Activity Monitor");
         assert_eq!(info.pid, 644);
         assert_eq!(info.port, 7768);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_parse_lsof_line_ipv6_has_no_brackets() {
+        // lsof brackets IPv6 addresses, as ss and netstat do; the address is
+        // reported without them on every platform, so --local matches "::1"
+        let line =
+            "python3.12  4242  zee  3u  IPv6 0x3cc8c443bf3e8f62  0t0  TCP [::1]:8000 (LISTEN)";
+        let info = PortInfo::parse_lsof_line(line).unwrap();
+        assert_eq!(info.address.as_deref(), Some("::1"));
+        assert_eq!(info.port, 8000);
+        assert_eq!(info.pid, 4242);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_parse_ss_line_keeps_the_whole_ipv6_address() {
+        // The address used to be the text between the last two colons, so
+        // [::1]:39081 came back as "1]" and [::]:80 as "]"
+        let loopback = r#"LISTEN 0      128            [::1]:39081         [::]:*    users:(("python3",pid=2897694,fd=3))"#;
+        let info = PortInfo::parse_ss_line(loopback).unwrap();
+        assert_eq!(info.address.as_deref(), Some("::1"));
+        assert_eq!(info.port, 39081);
+        assert_eq!(info.pid, 2897694);
+        assert_eq!(info.process_name, "python3");
+
+        let any = r#"LISTEN 0      511               [::]:80            [::]:*    users:(("nginx",pid=1201,fd=7))"#;
+        let info = PortInfo::parse_ss_line(any).unwrap();
+        assert_eq!(info.address.as_deref(), Some("::"));
+        assert_eq!(info.port, 80);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_parse_ss_line_ipv4_address() {
+        let loopback = r#"LISTEN 0      128        127.0.0.1:43171      0.0.0.0:*    users:(("python3",pid=2897694,fd=4))"#;
+        let info = PortInfo::parse_ss_line(loopback).unwrap();
+        assert_eq!(info.address.as_deref(), Some("127.0.0.1"));
+        assert_eq!(info.port, 43171);
+
+        // `*` is every address, IPv4 and IPv6
+        let any = r#"LISTEN 0      4096               *:8080             *:*    users:(("node",pid=4242,fd=21))"#;
+        let info = PortInfo::parse_ss_line(any).unwrap();
+        assert_eq!(info.address.as_deref(), Some("0.0.0.0"));
+        assert_eq!(info.port, 8080);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn test_parse_netstat_line_keeps_the_whole_ipv6_address() {
+        let line = "  TCP    [::]:135               [::]:0                 LISTENING       1092";
+        let info = PortInfo::parse_netstat_line(line).unwrap();
+        assert_eq!(info.address.as_deref(), Some("::"));
+        assert_eq!(info.port, 135);
+        assert_eq!(info.pid, 1092);
     }
 
     #[test]
