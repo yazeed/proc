@@ -66,7 +66,7 @@ impl OrphansCommand {
         ));
 
         if !self.kill {
-            printer.print_processes_as("orphans", &processes, None);
+            printer.print_processes_under_headline("orphans", &processes);
             return Ok(());
         }
 
@@ -86,7 +86,7 @@ impl OrphansCommand {
 
         // Kill: JSON prints a single action result; humans see the list first
         if !self.json {
-            printer.print_processes_as("orphans", &processes, None);
+            printer.print_processes_under_headline("orphans", &processes);
         }
 
         if !self.yes && !self.json {

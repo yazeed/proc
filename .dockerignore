@@ -1,0 +1,11 @@
+# Both images copy only Cargo.toml, Cargo.lock, src/ and (for the demo) demo/,
+# so keep the build context small; target/ alone can be several GB.
+target/
+.git/
+pkg/npm/node_modules/
+docs/
+plan/
+.scratch/
+.claude/
+*.gif
+*.mp4

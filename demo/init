@@ -1,0 +1,3 @@
+#!/bin/bash
+# PID 1 of the demo container: adopts the "forgotten" processes and records the tape
+cd /vhs && vhs demo.tape

@@ -20,6 +20,13 @@ fn user_name(uid: &Uid) -> String {
         .unwrap_or_else(|| uid.to_string())
 }
 
+/// On Linux, sysinfo lists every thread of a process as an entry of its own,
+/// with the process's command line, so a node server shows up a dozen times.
+/// Process listings skip them; `thread_kind` is always `None` elsewhere.
+pub fn is_thread(proc: &sysinfo::Process) -> bool {
+    proc.thread_kind().is_some()
+}
+
 /// Linux reports a working directory that was deleted as "/path (deleted)".
 /// Strip that marker so the cwd matches `--in` and reads the same as on macOS;
 /// a real directory with that name still exists, so it is kept as is.
@@ -126,8 +133,8 @@ impl Process {
             .processes()
             .iter()
             .filter_map(|(pid, proc)| {
-                // Exclude self and ancestor shells
-                if ancestor_pids.contains(pid) {
+                // Exclude self, ancestor shells, and Linux threads
+                if ancestor_pids.contains(pid) || is_thread(proc) {
                     return None;
                 }
 
@@ -179,7 +186,7 @@ impl Process {
         let processes: Vec<Process> = sys
             .processes()
             .iter()
-            .filter(|(pid, _)| **pid != self_pid)
+            .filter(|(pid, proc)| **pid != self_pid && !is_thread(proc))
             .map(|(pid, proc)| Process::from_sysinfo(*pid, proc))
             .collect();
 
@@ -259,6 +266,9 @@ impl Process {
             .processes()
             .iter()
             .filter_map(|(pid, proc)| {
+                if is_thread(proc) {
+                    return None;
+                }
                 let cpu = proc.cpu_usage();
                 let run_time = proc.run_time();
 

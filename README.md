@@ -1,7 +1,7 @@
 # proc
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/yazeed/proc-cli/main/demo.gif" alt="proc demo" width="800" />
+  <img src="https://raw.githubusercontent.com/yazeed/proc-cli/main/demo.gif" alt="proc demo: npm run dev fails because port 3000 is taken; proc on, why and free find the old tmux session holding it and free the port; proc orphans finds and cleans up leftover processes" width="800" />
 </p>
 
 [![CI](https://github.com/yazeed/proc-cli/workflows/CI/badge.svg)](https://github.com/yazeed/proc-cli/actions)

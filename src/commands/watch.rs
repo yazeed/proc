@@ -142,7 +142,7 @@ impl WatchCommand {
         if targets.is_empty() {
             // No target: all processes
             for (pid, proc) in sys.processes() {
-                if *pid == self_pid {
+                if *pid == self_pid || crate::core::is_thread(proc) {
                     continue;
                 }
                 if seen_pids.insert(pid.as_u32()) {
@@ -173,7 +173,7 @@ impl WatchCommand {
                     TargetType::Name(name) => {
                         let pattern_lower = name.to_lowercase();
                         for (pid, proc) in sys.processes() {
-                            if *pid == self_pid {
+                            if *pid == self_pid || crate::core::is_thread(proc) {
                                 continue;
                             }
                             let proc_name = proc.name().to_string_lossy().to_string();

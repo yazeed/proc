@@ -1,0 +1,2 @@
+# Prompt for the demo recording: project path, then a pink chevron
+PS1='\[\033[38;5;117m\]\w\[\033[0m\] \[\033[38;5;212m\]❯\[\033[0m\] '

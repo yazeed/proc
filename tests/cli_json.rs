@@ -301,3 +301,42 @@ mod unix {
         assert_eq!(json["failed_count"], 0);
     }
 }
+
+#[cfg(target_os = "linux")]
+mod linux {
+    use super::*;
+
+    #[test]
+    fn list_shows_processes_not_their_threads() {
+        // Keep an extra thread alive so this test process has more than one task
+        let (tx, rx) = std::sync::mpsc::channel::<()>();
+        let worker = std::thread::spawn(move || rx.recv().ok());
+
+        let me = std::process::id();
+        let thread_ids: Vec<u64> = std::fs::read_dir("/proc/self/task")
+            .unwrap()
+            .filter_map(|e| e.ok()?.file_name().to_str()?.parse().ok())
+            .filter(|tid| *tid != u64::from(me))
+            .collect();
+        assert!(!thread_ids.is_empty(), "test needs a second thread");
+
+        let (json, code) = run_json(&["list", "--json"]);
+        assert_eq!(code, 0);
+        let pids: Vec<u64> = json["processes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|p| p["pid"].as_u64())
+            .collect();
+        assert!(
+            pids.contains(&u64::from(me)),
+            "the test process itself is listed"
+        );
+        for tid in &thread_ids {
+            assert!(!pids.contains(tid), "thread {tid} was listed as a process");
+        }
+
+        tx.send(()).unwrap();
+        worker.join().unwrap();
+    }
+}

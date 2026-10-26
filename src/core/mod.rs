@@ -15,7 +15,7 @@ pub use filters::{
 pub use port::{parse_port, PortInfo, Protocol};
 #[cfg(unix)]
 pub use process::parse_signal_name;
-pub use process::{Process, ProcessStatus};
+pub use process::{is_thread, Process, ProcessStatus};
 pub use target::{
     find_ports_for_pid, parse_target, parse_targets, resolve_target, resolve_target_single,
     resolve_targets, resolve_targets_excluding_self, TargetType,

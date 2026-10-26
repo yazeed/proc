@@ -148,6 +148,24 @@ impl Printer {
         );
         println!();
 
+        self.print_process_rows(processes);
+    }
+
+    /// Like `print_processes_as`, for a caller that has printed its own headline
+    /// (`⚠ Found 2 orphaned processes`): the generic `✓ Found 2 processes` line
+    /// would repeat it, so only the table is printed.
+    pub fn print_processes_under_headline(&self, action: &str, processes: &[Process]) {
+        match self.format {
+            OutputFormat::Human => {
+                println!();
+                self.print_process_rows(processes);
+            }
+            OutputFormat::Json => self.print_processes_as(action, processes, None),
+        }
+    }
+
+    /// The process table (or the verbose list), without a headline
+    fn print_process_rows(&self, processes: &[Process]) {
         if self.verbose {
             // Verbose: full details, nothing truncated
             for proc in processes {
