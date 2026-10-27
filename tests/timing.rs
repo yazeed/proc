@@ -137,3 +137,22 @@ fn list_measures_cpu_once_for_all_processes() {
     let count = json["count"].as_u64().unwrap();
     assert!(took < 2.0, "list of {count} processes took {took:.1}s");
 }
+
+#[test]
+fn the_missing_yes_error_lists_processes_with_measured_cpu() {
+    // The error returned for `kill --json` without --yes carries the same
+    // process list as --dry-run, so its cpu_percent must be measured too. An
+    // idle sleeper reads 0 either way; a busy loop tells the two apart
+    let spinning = TestChild(
+        StdCommand::new("sh")
+            .args(["-c", "while :; do :; done"])
+            .spawn()
+            .unwrap(),
+    );
+    std::thread::sleep(Duration::from_millis(300));
+    let (json, code, took) = run_json_timed(&["kill", &spinning.pid(), "--json"], 30);
+    assert_eq!(code, Some(4), "after {took:.1}s: {json}");
+    assert_eq!(json["needs_confirmation"], true, "{json}");
+    let cpu = json["processes"][0]["cpu_percent"].as_f64().unwrap();
+    assert!(cpu > 50.0, "cpu_percent {cpu} was not measured: {json}");
+}

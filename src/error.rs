@@ -27,7 +27,7 @@ pub enum ProcError {
     /// A command that changes processes was run without `--yes` where nobody
     /// can be asked (`--json`, or no terminal). Carries the processes it would
     /// have changed so `--json` callers can see them in the error.
-    #[error("{message}")]
+    #[error("Invalid input: {message}")]
     ConfirmationRequired {
         /// What to pass to proceed
         message: String,

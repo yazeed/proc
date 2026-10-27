@@ -120,6 +120,12 @@ impl UnstickCommand {
             return Ok(());
         }
 
+        // Real CPU readings whenever the list is shown or returned (dry run,
+        // the prompt, or the error for a missing `--yes`); `--yes` acts at once
+        if self.dry_run || !self.yes {
+            Process::measure_cpu(&mut stuck);
+        }
+
         // Show stuck processes
         if !self.json {
             self.show_processes(&stuck);

@@ -93,7 +93,7 @@ impl FreeCommand {
         }
 
         // Deduplicate processes (multiple ports might be held by same process)
-        let processes: Vec<Process> = {
+        let mut processes: Vec<Process> = {
             let mut seen = std::collections::HashSet::new();
             port_processes
                 .iter()
@@ -101,6 +101,12 @@ impl FreeCommand {
                 .map(|(_, p)| p.clone())
                 .collect()
         };
+
+        // Real CPU readings whenever the list is shown or returned (dry run,
+        // the prompt, or the error for a missing `--yes`); `--yes` acts at once
+        if self.dry_run || !self.yes {
+            Process::measure_cpu(&mut processes);
+        }
 
         if self.dry_run {
             printer.print_dry_run_with(

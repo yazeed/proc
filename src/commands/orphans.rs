@@ -58,9 +58,9 @@ impl OrphansCommand {
         // Apply --in and --by filters
         apply_filters(&mut processes, &self.in_dir, &self.by_name);
 
-        // Real CPU readings for every view that shows the list; only
-        // `--kill --json` (no dry run) goes straight to killing
-        if !(self.kill && self.json && !self.dry_run) {
+        // Real CPU readings for every view that shows or returns the list; only
+        // `--kill --json --yes` (no dry run) goes straight to killing
+        if !(self.kill && self.json && self.yes && !self.dry_run) {
             Process::measure_cpu(&mut processes);
         }
 
