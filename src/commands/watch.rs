@@ -121,6 +121,53 @@ struct WatchJsonOutput {
     processes: Vec<Process>,
 }
 
+/// The PID of the process listening on `port`, if there is one
+fn port_owner(port: u16) -> Option<u32> {
+    crate::core::PortInfo::find_by_port(port)
+        .ok()
+        .flatten()
+        .map(|info| info.pid)
+}
+
+/// Put the terminal back the way it was: raw mode off, cursor shown, normal screen
+fn restore_terminal(out: &mut impl Write) {
+    let _ = terminal::disable_raw_mode();
+    let _ = execute!(out, cursor::Show, terminal::LeaveAlternateScreen);
+}
+
+/// Restore the terminal if watch panics, so the shell is not left in raw mode
+/// on the alternate screen, then run the hook that was there before
+fn install_panic_hook() {
+    let original_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic_info| {
+        restore_terminal(&mut io::stdout());
+        original_hook(panic_info);
+    }));
+}
+
+/// Whether a key press ends the watch: q, Esc or Ctrl+C (raw mode turns Ctrl+C
+/// into a key instead of a signal)
+fn is_quit_key(code: KeyCode, modifiers: KeyModifiers) -> bool {
+    match code {
+        KeyCode::Char('q') | KeyCode::Esc => true,
+        KeyCode::Char('c') => modifiers.contains(KeyModifiers::CONTROL),
+        _ => false,
+    }
+}
+
+/// Write one NDJSON line and flush it. Returns false once the reader is gone
+/// (a broken pipe), which ends the stream; a frame that cannot be serialized is
+/// reported on `err` and skipped.
+fn write_json_frame(out: &mut impl Write, err: &mut impl Write, frame: &impl Serialize) -> bool {
+    match serde_json::to_string(frame) {
+        Ok(json) => writeln!(out, "{}", json).is_ok() && out.flush().is_ok(),
+        Err(e) => {
+            let _ = writeln!(err, "JSON serialization error: {}", e);
+            true
+        }
+    }
+}
+
 impl WatchCommand {
     /// Execute the watch command — real-time process monitoring.
     pub fn execute(&self) -> Result<()> {
@@ -138,6 +185,13 @@ impl WatchCommand {
 
     /// Collect processes for one cycle using the persistent System instance
     fn collect_processes(&self, sys: &System) -> Vec<Process> {
+        self.collect_with(sys, port_owner)
+    }
+
+    /// `collect_processes` with the port lookup passed in: the owner of a port
+    /// is read at a different moment than `sys`, so it can be a process `sys`
+    /// has not seen
+    fn collect_with(&self, sys: &System, port_owner: impl Fn(u16) -> Option<u32>) -> Vec<Process> {
         let self_pid = Pid::from_u32(std::process::id());
         let in_dir_filter = resolve_in_dir(&self.in_dir);
 
@@ -171,10 +225,10 @@ impl WatchCommand {
             for target in &targets {
                 match target {
                     TargetType::Port(port) => {
-                        if let Ok(Some(port_info)) = crate::core::PortInfo::find_by_port(*port) {
-                            let pid = Pid::from_u32(port_info.pid);
+                        if let Some(owner) = port_owner(*port) {
+                            let pid = Pid::from_u32(owner);
                             if let Some(proc) = sys.process(pid) {
-                                if seen_pids.insert(port_info.pid) {
+                                if seen_pids.insert(owner) {
                                     processes.push(Process::from_sysinfo(pid, proc));
                                 }
                             }
@@ -255,13 +309,7 @@ impl WatchCommand {
     fn run_tui_loop(&self) -> Result<()> {
         let mut stdout = io::stdout();
 
-        // Install panic hook to restore terminal on crash
-        let original_hook = std::panic::take_hook();
-        std::panic::set_hook(Box::new(move |panic_info| {
-            let _ = terminal::disable_raw_mode();
-            let _ = execute!(io::stdout(), cursor::Show, terminal::LeaveAlternateScreen);
-            original_hook(panic_info);
-        }));
+        install_panic_hook();
 
         // Enter alternate screen + raw mode
         execute!(stdout, terminal::EnterAlternateScreen, cursor::Hide)
@@ -278,9 +326,7 @@ impl WatchCommand {
 
         let result = self.tui_event_loop(&mut sys, &mut stdout, interval);
 
-        // Restore terminal
-        let _ = terminal::disable_raw_mode();
-        let _ = execute!(stdout, cursor::Show, terminal::LeaveAlternateScreen);
+        restore_terminal(&mut stdout);
 
         result
     }
@@ -334,12 +380,8 @@ impl WatchCommand {
                     }) = event::read()
                         .map_err(|e| crate::error::ProcError::SystemError(e.to_string()))?
                     {
-                        match code {
-                            KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
-                            KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => {
-                                return Ok(())
-                            }
-                            _ => {}
+                        if is_quit_key(code, modifiers) {
+                            return Ok(());
                         }
                     }
                 }
@@ -534,9 +576,7 @@ impl WatchCommand {
                                 })
                                 .collect();
                             let result = args.join(" ");
-                            if result.is_empty() {
-                                "-".to_string()
-                            } else if self.wide {
+                            if self.wide {
                                 result
                             } else {
                                 truncate_string(&result, budget.args)
@@ -615,19 +655,8 @@ impl WatchCommand {
                 processes,
             };
 
-            match serde_json::to_string(&output) {
-                Ok(json) => {
-                    // Use writeln to detect broken pipe
-                    if writeln!(io::stdout(), "{}", json).is_err() {
-                        return Ok(()); // Broken pipe — exit cleanly
-                    }
-                    if io::stdout().flush().is_err() {
-                        return Ok(());
-                    }
-                }
-                Err(e) => {
-                    eprintln!("JSON serialization error: {}", e);
-                }
+            if !write_json_frame(&mut io::stdout(), &mut io::stderr(), &output) {
+                return Ok(()); // Broken pipe — exit cleanly
             }
 
             std::thread::sleep(interval);
@@ -643,21 +672,489 @@ impl WatchCommand {
 
         let processes = self.collect_processes(&sys);
 
-        if self.json {
-            let output = WatchJsonOutput {
-                action: "watch",
-                success: true,
-                count: processes.len(),
-                processes,
-            };
-            if let Ok(json) = serde_json::to_string_pretty(&output) {
-                println!("{}", json);
-            }
-        } else {
-            let printer = crate::ui::Printer::from_flags(false, self.verbose);
-            printer.print_processes(&processes);
-        }
+        let printer = crate::ui::Printer::from_flags(false, self.verbose);
+        printer.print_processes(&processes);
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::FailsAfter;
+    use serde::ser::Error as _;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+
+    fn watch_args() -> WatchCommand {
+        WatchCommand {
+            target: None,
+            interval: 2.0,
+            in_dir: None,
+            by_name: None,
+            min_cpu: None,
+            min_mem: None,
+            json: false,
+            verbose: false,
+            wide: false,
+            limit: None,
+            sort: WatchSortKey::Cpu,
+        }
+    }
+
+    fn process(pid: u32, name: &str) -> Process {
+        Process {
+            pid,
+            name: name.to_string(),
+            exe_path: None,
+            cwd: None,
+            command: None,
+            cpu_percent: 1.5,
+            memory_mb: 12.0,
+            status: ProcessStatus::Sleeping,
+            user: None,
+            parent_pid: None,
+            start_time: None,
+            uptime_secs: None,
+        }
+    }
+
+    /// The text of a frame without colour codes, which comfy-table adds only
+    /// when stdout is a terminal
+    fn plain(frame: &str) -> String {
+        let mut out = String::new();
+        let mut chars = frame.chars();
+        while let Some(c) = chars.next() {
+            if c == '\x1b' {
+                for end in chars.by_ref() {
+                    if end.is_ascii_alphabetic() {
+                        break;
+                    }
+                }
+            } else {
+                out.push(c);
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn colour_codes_are_stripped_from_a_frame() {
+        assert_eq!(
+            plain("\x1b[1;36m4242\x1b[0m  \x1b[32mRunning\x1b[0m"),
+            "4242  Running"
+        );
+    }
+
+    fn lines_with<'a>(frame: &'a str, needle: &str) -> Vec<&'a str> {
+        frame.lines().filter(|l| l.contains(needle)).collect()
+    }
+
+    // ---- keys ----
+
+    #[test]
+    fn q_escape_and_ctrl_c_quit() {
+        assert!(is_quit_key(KeyCode::Char('q'), KeyModifiers::NONE));
+        assert!(is_quit_key(KeyCode::Esc, KeyModifiers::NONE));
+        assert!(is_quit_key(KeyCode::Char('c'), KeyModifiers::CONTROL));
+    }
+
+    #[test]
+    fn other_keys_do_not_quit() {
+        assert!(!is_quit_key(KeyCode::Char('c'), KeyModifiers::NONE));
+        assert!(!is_quit_key(KeyCode::Char('x'), KeyModifiers::NONE));
+        assert!(!is_quit_key(KeyCode::Enter, KeyModifiers::CONTROL));
+        assert!(!is_quit_key(KeyCode::Char('x'), KeyModifiers::CONTROL));
+    }
+
+    // ---- the terminal ----
+
+    #[test]
+    fn restoring_shows_the_cursor_and_leaves_the_alternate_screen() {
+        let mut out = Vec::new();
+        restore_terminal(&mut out);
+        assert_eq!(String::from_utf8(out).unwrap(), "\x1b[?25h\x1b[?1049l");
+    }
+
+    #[test]
+    fn a_panic_runs_the_hook_that_was_there_before() {
+        let before = std::panic::take_hook();
+        let ran = Arc::new(AtomicBool::new(false));
+        let flag = Arc::clone(&ran);
+        std::panic::set_hook(Box::new(move |_| flag.store(true, Ordering::SeqCst)));
+
+        install_panic_hook();
+        let caught = std::panic::catch_unwind(|| panic!("watch crashed"));
+        // Drop ours, put back what the test run had
+        let _ = std::panic::take_hook();
+        std::panic::set_hook(before);
+
+        assert!(caught.is_err());
+        assert!(
+            ran.load(Ordering::SeqCst),
+            "the earlier hook runs after the terminal is restored"
+        );
+    }
+
+    // ---- the stream ----
+
+    struct FlushFails;
+
+    impl Write for FlushFails {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Err(io::Error::from(io::ErrorKind::BrokenPipe))
+        }
+    }
+
+    struct CannotSerialize;
+
+    impl Serialize for CannotSerialize {
+        fn serialize<S: serde::Serializer>(&self, _: S) -> std::result::Result<S::Ok, S::Error> {
+            Err(S::Error::custom("no frame today"))
+        }
+    }
+
+    fn frame_of(processes: Vec<Process>) -> WatchJsonOutput {
+        WatchJsonOutput {
+            action: "watch",
+            success: true,
+            count: processes.len(),
+            processes,
+        }
+    }
+
+    #[test]
+    fn a_frame_is_one_json_line() {
+        let mut out = Vec::new();
+        let mut err = Vec::new();
+        assert!(write_json_frame(
+            &mut out,
+            &mut err,
+            &frame_of(vec![process(7, "sh")])
+        ));
+        let text = String::from_utf8(out).unwrap();
+        assert!(text.ends_with('\n'));
+        assert_eq!(text.matches('\n').count(), 1);
+        let json: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(json["action"], "watch");
+        assert_eq!(json["count"], 1);
+        assert_eq!(json["processes"][0]["pid"], 7);
+        assert!(err.is_empty());
+    }
+
+    #[test]
+    fn a_closed_reader_ends_the_stream() {
+        let mut err = Vec::new();
+        let mut closed = FailsAfter {
+            left: 0,
+            written: Vec::new(),
+        };
+        assert!(!write_json_frame(&mut closed, &mut err, &frame_of(vec![])));
+        assert!(err.is_empty());
+    }
+
+    #[test]
+    fn a_reader_that_goes_away_during_the_flush_ends_the_stream() {
+        let mut err = Vec::new();
+        assert!(!write_json_frame(
+            &mut FlushFails,
+            &mut err,
+            &frame_of(vec![])
+        ));
+        assert!(err.is_empty());
+    }
+
+    #[test]
+    fn a_frame_that_cannot_be_serialized_is_reported_and_skipped() {
+        let mut out = Vec::new();
+        let mut err = Vec::new();
+        assert!(
+            write_json_frame(&mut out, &mut err, &CannotSerialize),
+            "the stream goes on"
+        );
+        assert!(out.is_empty());
+        assert_eq!(
+            String::from_utf8(err).unwrap(),
+            "JSON serialization error: no frame today\n"
+        );
+    }
+
+    // ---- the sort keys ----
+
+    #[test]
+    fn each_sort_key_maps_to_the_shared_one() {
+        assert!(matches!(SortKey::from(WatchSortKey::Cpu), SortKey::Cpu));
+        assert!(matches!(SortKey::from(WatchSortKey::Mem), SortKey::Mem));
+        assert!(matches!(SortKey::from(WatchSortKey::Pid), SortKey::Pid));
+        assert!(matches!(SortKey::from(WatchSortKey::Name), SortKey::Name));
+    }
+
+    // ---- the frame ----
+
+    #[test]
+    fn the_header_names_the_target_sort_and_refresh() {
+        let mut cmd = watch_args();
+        cmd.target = Some(":3000".into());
+        cmd.interval = 0.5;
+        for (sort, label) in [
+            (WatchSortKey::Cpu, "Sort: CPU"),
+            (WatchSortKey::Mem, "Sort: Memory"),
+            (WatchSortKey::Pid, "Sort: PID"),
+            (WatchSortKey::Name, "Sort: Name"),
+        ] {
+            cmd.sort = sort;
+            let frame = cmd.render_frame(&[process(1, "a"), process(2, "b")], 120, 40);
+            let first = frame.lines().next().unwrap();
+            assert_eq!(
+                first,
+                format!(" Watching :3000 | 2 processes | {label} | Refresh: 0.5s | q to exit")
+            );
+        }
+    }
+
+    #[test]
+    fn with_no_target_the_header_says_all() {
+        let frame = watch_args().render_frame(&[process(1, "a")], 120, 40);
+        assert!(
+            frame.starts_with(" Watching all | 1 processes |"),
+            "{frame}"
+        );
+    }
+
+    #[test]
+    fn no_processes_says_so() {
+        let frame = watch_args().render_frame(&[], 120, 40);
+        assert_eq!(
+            frame.lines().last().unwrap(),
+            " No matching processes found."
+        );
+        assert!(frame.contains("0 processes"));
+    }
+
+    #[test]
+    fn the_table_lists_each_process_with_its_columns() {
+        let mut p = process(4242, "server");
+        p.cwd = Some("/srv/app".into());
+        p.command = Some("/usr/bin/server --port 80".into());
+        p.uptime_secs = Some(3725);
+        p.cpu_percent = 12.34;
+        p.memory_mb = 256.0;
+        let frame = plain(&watch_args().render_frame(&[p], 120, 40));
+        let header = lines_with(&frame, "PID")[0];
+        for column in [
+            "PID", "DIR", "NAME", "ARGS", "CPU%", "MEM", "UPTIME", "STATUS",
+        ] {
+            assert!(header.contains(column), "{column} in {header:?}");
+        }
+        let row = lines_with(&frame, "4242")[0];
+        for cell in [
+            "/srv/app",
+            "server",
+            "--port 80",
+            "12.3",
+            "256.0MB",
+            "1h 2m",
+            "Sleeping",
+        ] {
+            assert!(row.contains(cell), "{cell} in {row:?}");
+        }
+    }
+
+    #[test]
+    fn a_narrow_terminal_drops_the_uptime_column() {
+        let mut p = process(4242, "server");
+        p.uptime_secs = Some(3725);
+        let narrow = plain(&watch_args().render_frame(&[p.clone()], 99, 40));
+        assert!(!narrow.contains("UPTIME"), "{narrow}");
+        assert!(!narrow.contains("1h 2m"), "{narrow}");
+        let wide = plain(&watch_args().render_frame(&[p], 100, 40));
+        assert!(wide.contains("UPTIME"), "{wide}");
+        assert!(wide.contains("1h 2m"), "{wide}");
+    }
+
+    #[test]
+    fn an_unknown_uptime_is_a_dash() {
+        let frame = plain(&watch_args().render_frame(&[process(4242, "server")], 120, 40));
+        let row = lines_with(&frame, "4242")[0];
+        // directory, args and uptime are all unknown
+        assert_eq!(
+            row.split_whitespace().collect::<Vec<_>>(),
+            ["4242", "-", "server", "-", "1.5", "12.0MB", "-", "Sleeping"]
+        );
+    }
+
+    #[test]
+    fn arguments_show_file_names_not_paths() {
+        let mut p = process(4242, "node");
+        p.command = Some("/usr/bin/node /srv/app/server.js --flag ./cfg/x.json plain".into());
+        let mut cmd = watch_args();
+        cmd.wide = true;
+        let frame = plain(&cmd.render_frame(&[p], 120, 40));
+        let row = lines_with(&frame, "4242")[0];
+        assert!(row.contains("server.js --flag x.json plain"), "{row:?}");
+        assert!(!row.contains("/srv/app"), "{row:?}");
+    }
+
+    #[test]
+    fn a_command_with_no_arguments_has_a_dash_for_args() {
+        let mut p = process(4242, "tool");
+        p.command = Some("/usr/bin/tool".into());
+        let frame = plain(&watch_args().render_frame(&[p], 120, 40));
+        let row = lines_with(&frame, "4242")[0];
+        let after_name = row.split("tool").nth(1).unwrap();
+        assert!(after_name.trim_start().starts_with('-'), "{row:?}");
+    }
+
+    #[test]
+    fn long_text_is_cut_to_the_terminal_unless_wide() {
+        let long_dir = format!("/{}/deep", "d".repeat(80));
+        let long_name = "n".repeat(40);
+        let long_arg = "a".repeat(80);
+        let mut p = process(4242, &long_name);
+        p.cwd = Some(long_dir.clone());
+        p.command = Some(format!("tool {long_arg}"));
+
+        let cut = plain(&watch_args().render_frame(&[p.clone()], 80, 40));
+        let row = lines_with(&cut, "4242")[0];
+        assert!(row.contains('…'), "{row:?}");
+        assert!(!row.contains(&long_name), "{row:?}");
+        assert!(!row.contains(&long_arg), "{row:?}");
+
+        let mut wide = watch_args();
+        wide.wide = true;
+        let full = plain(&wide.render_frame(&[p], 80, 40));
+        let row = lines_with(&full, "4242")[0];
+        assert!(row.contains(&long_dir), "{row:?}");
+        assert!(row.contains(&long_name), "{row:?}");
+        assert!(row.contains(&long_arg), "{row:?}");
+        assert!(!row.contains('…'), "{row:?}");
+    }
+
+    #[test]
+    fn every_status_is_spelled_out() {
+        for (status, word) in [
+            (ProcessStatus::Running, "Running"),
+            (ProcessStatus::Sleeping, "Sleeping"),
+            (ProcessStatus::Stopped, "Stopped"),
+            (ProcessStatus::Zombie, "Zombie"),
+            (ProcessStatus::Dead, "Dead"),
+            (ProcessStatus::Unknown, "Unknown"),
+        ] {
+            let mut p = process(4242, "x");
+            p.status = status;
+            let frame = plain(&watch_args().render_frame(&[p], 120, 40));
+            assert!(lines_with(&frame, "4242")[0].contains(word), "{word}");
+        }
+    }
+
+    #[test]
+    fn rows_beyond_the_screen_are_counted_not_drawn() {
+        let processes: Vec<Process> = (1..=10).map(|i| process(1000 + i, "p")).collect();
+        // 12 rows leave 7 for processes
+        let frame = plain(&watch_args().render_frame(&processes, 120, 12));
+        assert_eq!(lines_with(&frame, " p ").len(), 7, "{frame}");
+        assert_eq!(
+            frame.lines().last().unwrap(),
+            " ... and 3 more (use --limit to control)"
+        );
+        let all = plain(&watch_args().render_frame(&processes, 120, 40));
+        assert!(!all.contains("more"), "{all}");
+    }
+
+    #[test]
+    fn verbose_lists_every_field_of_each_process() {
+        let mut p = process(4242, "server");
+        p.status = ProcessStatus::Running;
+        p.user = Some("zee".into());
+        p.command = Some("/usr/bin/server --port 80".into());
+        p.exe_path = Some("/usr/bin/server".into());
+        p.cwd = Some("/srv/app".into());
+        p.uptime_secs = Some(65);
+        let mut cmd = watch_args();
+        cmd.verbose = true;
+        let frame = cmd.render_frame(&[p], 120, 40);
+        let lines: Vec<&str> = frame.lines().collect();
+        assert_eq!(
+            lines[2..],
+            [
+                " 4242 server [Running]  1.5% CPU  12.0MB  zee",
+                "    cmd: /usr/bin/server --port 80",
+                "    exe: /usr/bin/server",
+                "    cwd: /srv/app",
+                "    uptime: 1m 5s",
+                "",
+            ]
+        );
+    }
+
+    #[test]
+    fn verbose_leaves_out_what_a_process_does_not_have() {
+        let mut cmd = watch_args();
+        cmd.verbose = true;
+        let frame = cmd.render_frame(&[process(4242, "bare")], 120, 40);
+        let lines: Vec<&str> = frame.lines().collect();
+        assert_eq!(
+            lines[2..],
+            [" 4242 bare [Sleeping]  1.5% CPU  12.0MB  -", ""]
+        );
+    }
+
+    #[test]
+    fn verbose_counts_the_processes_that_do_not_fit() {
+        let processes: Vec<Process> = (1..=5).map(|i| process(1000 + i, "p")).collect();
+        let mut cmd = watch_args();
+        cmd.verbose = true;
+        // 7 rows leave 2 for processes
+        let frame = cmd.render_frame(&processes, 120, 7);
+        assert_eq!(lines_with(&frame, "[Sleeping]").len(), 2, "{frame}");
+        assert!(frame.ends_with(" ... and 3 more"), "{frame:?}");
+    }
+
+    // ---- what is collected ----
+
+    #[test]
+    fn collecting_applies_the_sort_and_the_limit() {
+        let mut sys = System::new_all();
+        sys.refresh_all();
+        let mut cmd = watch_args();
+        cmd.sort = WatchSortKey::Pid;
+        let all = cmd.collect_processes(&sys);
+        assert!(all.len() > 1);
+        assert!(all.windows(2).all(|w| w[0].pid <= w[1].pid));
+        assert!(all.iter().all(|p| p.pid != std::process::id()));
+
+        cmd.limit = Some(1);
+        let first = cmd.collect_processes(&sys);
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].pid, all[0].pid);
+    }
+
+    #[test]
+    fn a_port_owner_the_snapshot_has_not_seen_is_left_out() {
+        let mut sys = System::new_all();
+        sys.refresh_all();
+        let mut cmd = watch_args();
+        cmd.target = Some(":8080".into());
+        // This test's own process is in the snapshot; PID 4294967294 is not
+        let me = std::process::id();
+        let known = cmd.collect_with(&sys, |port| (port == 8080).then_some(me));
+        assert_eq!(known.iter().map(|p| p.pid).collect::<Vec<_>>(), [me]);
+        let unseen = cmd.collect_with(&sys, |_| Some(u32::MAX - 1));
+        assert!(unseen.is_empty(), "{unseen:?}");
+        let nobody = cmd.collect_with(&sys, |_| None);
+        assert!(nobody.is_empty(), "{nobody:?}");
+    }
+
+    #[test]
+    fn the_owner_of_a_port_is_the_process_listening_on_it() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        assert_eq!(port_owner(port), Some(std::process::id()));
+        drop(listener);
+        assert_eq!(port_owner(port), None);
     }
 }

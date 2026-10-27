@@ -28,6 +28,8 @@ enum Step {
     Expect(&'static str),
     /// Type this (raw bytes: "\r" is Enter, "\x03" is Ctrl+C, "\x1b" is Esc)
     Send(&'static str),
+    /// Resize the terminal to this many columns and rows, as dragging the window does
+    Resize(u16, u16),
 }
 
 /// What a session printed, and how the child ended
@@ -105,6 +107,16 @@ fn run_in_pty(args: &[&str], script: &[Step]) -> PtyRun {
                     .write_all(keys.as_bytes())
                     .expect("type into the pty");
                 writer.flush().expect("flush the pty");
+            }
+            Step::Resize(cols, rows) => {
+                pair.master
+                    .resize(PtySize {
+                        rows,
+                        cols,
+                        pixel_width: 0,
+                        pixel_height: 0,
+                    })
+                    .expect("resize the pty");
             }
             Step::Expect(wanted) => loop {
                 let seen = text();
@@ -681,4 +693,114 @@ fn watch_shows_the_pid() {
     );
     assert_ok(&run);
     assert!(run.output.contains(&pid), "{}", run.output);
+}
+
+#[test]
+fn watch_redraws_every_interval() {
+    let p = Owned::listener();
+    let pid = p.pid();
+    let run = run_in_pty(
+        &["watch", &pid, "--interval", "0.2"],
+        &[
+            Step::Expect("Watching"),
+            Step::Expect("Watching"),
+            Step::Expect("Watching"),
+            Step::Send("q"),
+        ],
+    );
+    assert_ok(&run);
+    assert!(run.output.contains("Refresh: 0.2s"), "{}", run.output);
+    assert!(
+        run.output.ends_with(LEAVE_ALT_SCREEN),
+        "the screen is left last"
+    );
+}
+
+#[test]
+fn watch_keeps_running_when_another_key_is_pressed() {
+    let p = Owned::listener();
+    let pid = p.pid();
+    let run = run_in_pty(
+        &["watch", &pid, "--interval", "0.2"],
+        &[
+            Step::Expect("Watching"),
+            Step::Send("x\r"),
+            // Another frame after the keys: it did not quit
+            Step::Expect("Watching"),
+            Step::Expect("Watching"),
+            Step::Send("q"),
+        ],
+    );
+    assert_ok(&run);
+}
+
+#[test]
+fn watch_draws_the_new_size_after_a_resize() {
+    let p = Owned::listener();
+    let pid = p.pid();
+    let run = run_in_pty(
+        &["watch", &pid, "--interval", "0.2"],
+        &[
+            Step::Expect("Watching"),
+            Step::Expect("listener"),
+            // Five rows leave none for processes: the one process is counted instead
+            Step::Resize(120, 5),
+            Step::Expect(" ... and 1 more (use --limit to control)"),
+            // Back to a normal size, narrow enough to drop the uptime column
+            Step::Resize(80, 40),
+            Step::Expect("listener"),
+            Step::Send("q"),
+        ],
+    );
+    assert_ok(&run);
+    assert!(
+        run.output.ends_with(LEAVE_ALT_SCREEN),
+        "the screen is left last"
+    );
+}
+
+#[test]
+fn watch_says_when_nothing_matches() {
+    let run = run_in_pty(
+        &["watch", "99999999"],
+        &[
+            Step::Expect("No matching processes found."),
+            Step::Send("q"),
+        ],
+    );
+    assert_ok(&run);
+    assert!(run.output.contains("0 processes"), "{}", run.output);
+}
+
+#[test]
+fn watch_shows_the_sort_in_its_header() {
+    let p = Owned::listener();
+    let pid = p.pid();
+    let run = run_in_pty(
+        &["watch", &pid, "--sort", "mem"],
+        &[Step::Expect("Sort: Memory"), Step::Send("q")],
+    );
+    assert_ok(&run);
+}
+
+#[test]
+fn watch_verbose_lists_the_details() {
+    let p = Owned::listener();
+    let pid = p.pid();
+    let dir = p.dir();
+    let run = run_in_pty(
+        &["watch", &pid, "--verbose"],
+        &[
+            Step::Expect("cwd: "),
+            Step::Expect("uptime: "),
+            Step::Send("q"),
+        ],
+    );
+    assert_ok(&run);
+    assert!(
+        run.output.contains(&format!("cwd: {dir}")),
+        "{}",
+        run.output
+    );
+    assert!(run.output.contains("cmd: "), "{}", run.output);
 }
