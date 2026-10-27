@@ -127,24 +127,45 @@ pub fn apply_filters(
     });
 }
 
-/// Resolve an `--in` directory filter to an absolute PathBuf.
+/// Resolve an `--in` directory filter to the form processes report their cwd in.
 ///
-/// Handles "." (current directory), relative paths, and absolute paths.
+/// Handles "." (current directory), relative paths, and absolute paths, then
+/// resolves symlinks (see [`resolve_dir`]).
 pub fn resolve_in_dir(in_dir: &Option<String>) -> Option<PathBuf> {
     in_dir.as_ref().map(|p| {
         if p == "." {
-            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+            resolve_dir(std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
         } else {
-            let path = PathBuf::from(p);
-            if path.is_relative() {
-                std::env::current_dir()
-                    .unwrap_or_else(|_| PathBuf::from("."))
-                    .join(path)
-            } else {
-                path
-            }
+            resolve_dir(PathBuf::from(p))
         }
     })
+}
+
+/// Make a directory path comparable with the cwds the OS reports.
+///
+/// A relative path is joined onto the current directory. If the directory
+/// exists it is canonicalized: the OS reports a process's cwd with symlinks
+/// resolved (`/tmp/x` is `/private/tmp/x` on macOS) and, on Windows, with the
+/// real case, long names and plain `D:\` form, so the path the user typed
+/// (symlinked, `RUNNER~1`, forward slashes) must be put in that form before
+/// the two are compared. A directory that does not exist (it may still be the
+/// cwd of a process that outlived it) is only made absolute.
+pub fn resolve_dir(path: PathBuf) -> PathBuf {
+    let absolute = if path.is_relative() {
+        std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join(path)
+    } else {
+        path
+    };
+    match absolute.canonicalize() {
+        // Windows returns `\\?\D:\...`, but processes report `D:\...`
+        #[cfg(windows)]
+        Ok(canonical) => PathBuf::from(strip_verbatim_prefix(&canonical.to_string_lossy())),
+        #[cfg(not(windows))]
+        Ok(canonical) => canonical,
+        Err(_) => absolute,
+    }
 }
 
 /// Turn a Windows verbatim path into the plain form processes report.
@@ -201,5 +222,73 @@ mod verbatim_tests {
         ] {
             assert_eq!(strip_verbatim_prefix(path), path);
         }
+    }
+}
+
+#[cfg(test)]
+mod resolve_tests {
+    use super::{resolve_dir, resolve_in_dir};
+    use std::path::PathBuf;
+
+    #[test]
+    fn no_filter_resolves_to_nothing() {
+        assert_eq!(resolve_in_dir(&None), None);
+    }
+
+    #[test]
+    fn a_dot_is_the_current_directory() {
+        let cwd = std::env::current_dir().unwrap().canonicalize().unwrap();
+        let resolved = resolve_in_dir(&Some(".".to_string())).unwrap();
+        assert_eq!(resolved.canonicalize().unwrap(), cwd);
+        assert!(resolved.is_absolute());
+    }
+
+    #[test]
+    fn a_relative_path_is_taken_from_the_current_directory() {
+        // cargo runs unit tests with the package root as the current directory
+        let expected = std::env::current_dir()
+            .unwrap()
+            .join("src")
+            .canonicalize()
+            .unwrap();
+        let resolved = resolve_in_dir(&Some("src".to_string())).unwrap();
+        assert_eq!(resolved.canonicalize().unwrap(), expected);
+        assert!(resolved.is_absolute());
+    }
+
+    #[test]
+    fn a_missing_relative_path_is_only_made_absolute() {
+        let expected = std::env::current_dir().unwrap().join("no-such-dir-8f3a");
+        assert_eq!(
+            resolve_in_dir(&Some("no-such-dir-8f3a".to_string())),
+            Some(expected)
+        );
+    }
+
+    #[test]
+    fn a_missing_absolute_path_is_kept_as_written() {
+        let tmp = tempfile::tempdir().unwrap();
+        let gone = tmp.path().join("gone");
+        assert_eq!(resolve_dir(gone.clone()), gone);
+    }
+
+    #[test]
+    fn an_existing_directory_comes_back_in_canonical_form() {
+        let tmp = tempfile::tempdir().unwrap();
+        let expected = PathBuf::from(super::strip_verbatim_prefix(
+            &tmp.path().canonicalize().unwrap().to_string_lossy(),
+        ));
+        assert_eq!(resolve_dir(tmp.path().to_path_buf()), expected);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_is_resolved_to_its_target() {
+        let tmp = tempfile::tempdir().unwrap();
+        let target = tmp.path().join("real");
+        std::fs::create_dir(&target).unwrap();
+        let link = tmp.path().join("link");
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+        assert_eq!(resolve_dir(link), target.canonicalize().unwrap());
     }
 }

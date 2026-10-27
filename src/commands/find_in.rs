@@ -6,6 +6,7 @@
 //!   proc in . --by node        # Node processes in cwd
 //!   proc in ~/projects         # Processes in ~/projects
 
+use crate::core::filters::resolve_dir;
 use crate::core::{sort_processes, Process, SortKey, StatusFilter};
 use crate::error::{ProcError, Result};
 use crate::ui::{OutputFormat, Printer};
@@ -98,18 +99,11 @@ impl InCommand {
         Process::measure_cpu(&mut processes);
 
         // Resolve directory path
-        let dir_filter = if self.path == "." {
-            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+        let dir_filter = resolve_dir(if self.path == "." {
+            PathBuf::from(".")
         } else {
-            let expanded = Self::expand_tilde(&self.path);
-            if expanded.is_relative() {
-                std::env::current_dir()
-                    .unwrap_or_else(|_| PathBuf::from("."))
-                    .join(expanded)
-            } else {
-                expanded
-            }
-        };
+            Self::expand_tilde(&self.path)
+        });
 
         // Directory filter (required for this command)
         processes.retain(|p| {
