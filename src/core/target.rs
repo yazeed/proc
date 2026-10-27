@@ -66,24 +66,32 @@ pub fn resolve_target(target: &str, mode: NameMatch) -> Result<Vec<Process>> {
     }
 }
 
-/// Resolve port to process
+/// Resolve a port to every process listening on it
 fn resolve_port(port: u16) -> Result<Vec<Process>> {
-    process_on_port(port, PortInfo::find_by_port(port)?, Process::find_by_pid)
+    processes_on_port(port, PortInfo::holders_of(port)?, Process::find_by_pid)
 }
 
-/// The process behind `listener`, what was found listening on `port`; `find` looks
-/// a process up by PID. The process can end between the two lookups.
-fn process_on_port(
+/// The processes behind `listeners`, what was found listening on `port`, in
+/// that order; `find` looks a process up by PID. A holder can end between the
+/// two lookups and is left out, unless that leaves nobody.
+fn processes_on_port(
     port: u16,
-    listener: Option<PortInfo>,
-    find: impl FnOnce(u32) -> Result<Option<Process>>,
+    listeners: Vec<PortInfo>,
+    mut find: impl FnMut(u32) -> Result<Option<Process>>,
 ) -> Result<Vec<Process>> {
-    match listener {
-        Some(port_info) => match find(port_info.pid)? {
-            Some(proc) => Ok(vec![proc]),
-            None => Err(ProcError::ProcessGone(port_info.pid)),
-        },
-        None => Err(ProcError::PortNotFound(port)),
+    let Some(first) = listeners.first().map(|l| l.pid) else {
+        return Err(ProcError::PortNotFound(port));
+    };
+    let mut found = Vec::new();
+    for listener in &listeners {
+        if let Some(proc) = find(listener.pid)? {
+            found.push(proc);
+        }
+    }
+    if found.is_empty() {
+        Err(ProcError::ProcessGone(first))
+    } else {
+        Ok(found)
     }
 }
 
@@ -304,30 +312,47 @@ mod tests {
 
     #[test]
     fn a_port_resolves_to_the_process_listening_on_it() {
-        let found = process_on_port(4000, Some(listener(7)), |pid| {
+        let found = processes_on_port(4000, vec![listener(7)], |pid| {
             assert_eq!(pid, 7);
             Ok(Some(own_process()))
         })
         .unwrap();
         assert_eq!(found.len(), 1);
 
-        let none = process_on_port(4000, None, |_| panic!("no listener, no lookup"));
+        let none = processes_on_port(4000, Vec::new(), |_| panic!("no listener, no lookup"));
         assert!(
             matches!(none, Err(ProcError::PortNotFound(4000))),
             "{none:?}"
         );
 
         // the process ended after the port was listed
-        let gone = process_on_port(4000, Some(listener(7)), |_| Ok(None));
+        let gone = processes_on_port(4000, vec![listener(7)], |_| Ok(None));
         assert!(matches!(gone, Err(ProcError::ProcessGone(7))), "{gone:?}");
 
-        let failed = process_on_port(4000, Some(listener(7)), |_| {
+        let failed = processes_on_port(4000, vec![listener(7)], |_| {
             Err(ProcError::SystemError("no".to_string()))
         });
         assert!(
             matches!(failed, Err(ProcError::SystemError(_))),
             "{failed:?}"
         );
+    }
+
+    #[test]
+    fn a_port_resolves_to_every_process_listening_on_it() {
+        let mut asked = Vec::new();
+        let found = processes_on_port(4000, vec![listener(7), listener(8), listener(9)], |pid| {
+            asked.push(pid);
+            // 8 ended after the port was listed; the others are there
+            Ok((pid != 8).then(own_process))
+        })
+        .unwrap();
+        assert_eq!(asked, vec![7, 8, 9]);
+        assert_eq!(found.len(), 2, "the holder that ended is left out");
+
+        // every holder gone: the first one is named
+        let gone = processes_on_port(4000, vec![listener(7), listener(8)], |_| Ok(None));
+        assert!(matches!(gone, Err(ProcError::ProcessGone(7))), "{gone:?}");
     }
 
     #[test]

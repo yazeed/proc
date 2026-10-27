@@ -115,9 +115,7 @@ impl OnCommand {
 
         for target in targets {
             let found = match parse_target(target) {
-                TargetType::Port(port) => self
-                    .lookup_port(port)
-                    .map(|(port_info, process)| port_hit(port_info, process)),
+                TargetType::Port(port) => self.lookup_port(port).map(port_hits),
                 TargetType::Pid(pid) => self.lookup_pid(pid).map(|found| vec![found]),
                 TargetType::Name(ref name) => self.lookup_name(name),
             };
@@ -176,61 +174,76 @@ impl OnCommand {
         self.matches_in_filter(proc) && self.matches_by_filter(proc)
     }
 
-    /// Find the listener on a port and its process, applying --in/--by
-    fn lookup_port(&self, port: u16) -> Result<(PortInfo, Option<Process>)> {
-        let port_info = match PortInfo::find_by_port(port)? {
-            Some(info) => info,
-            None => return Err(ProcError::PortNotFound(port)),
-        };
+    /// Find every listener on a port with its process, applying --in/--by
+    fn lookup_port(&self, port: u16) -> Result<Vec<(PortInfo, Option<Process>)>> {
+        let listeners = PortInfo::holders_of(port)?;
+        if listeners.is_empty() {
+            return Err(ProcError::PortNotFound(port));
+        }
 
-        let process = Process::find_by_pid(port_info.pid)?;
-        self.filter_port_process(port, port_info, process)
+        let mut holders = Vec::new();
+        for listener in listeners {
+            let process = Process::find_by_pid(listener.pid)?;
+            holders.push((listener, process));
+        }
+        self.filter_holders(port, holders)
     }
 
-    /// Take the CPU reading of the process on a port and apply --in/--by to it.
-    /// The process is `None` when it ended after its port was listed.
-    fn filter_port_process(
+    /// Apply --in/--by to the holders of a port and take the CPU reading of
+    /// the ones that stay, all in one wait. A holder whose process is `None`
+    /// ended after its port was listed, and is kept without one. When the
+    /// filters leave no holder the port counts as not found.
+    fn filter_holders(
         &self,
         port: u16,
-        port_info: PortInfo,
-        process: Option<Process>,
-    ) -> Result<(PortInfo, Option<Process>)> {
-        let Some(mut proc) = process else {
-            return Ok((port_info, None));
-        };
-        // Real CPU reading for what's shown
-        Process::measure_cpu(std::slice::from_mut(&mut proc));
-
-        // Apply --in and --by filters if present
-        if !self.matches_filters(&proc) {
+        holders: Vec<(PortInfo, Option<Process>)>,
+    ) -> Result<Vec<(PortInfo, Option<Process>)>> {
+        let mut kept: Vec<(PortInfo, Option<Process>)> = holders
+            .into_iter()
+            .filter(|(_, process)| process.as_ref().is_none_or(|p| self.matches_filters(p)))
+            .collect();
+        if kept.is_empty() {
             return Err(ProcError::ProcessNotFound(format!(
                 "port {} (process not in specified directory)",
                 port
             )));
         }
 
-        Ok((port_info, Some(proc)))
+        // Real CPU reading for what's shown
+        let mut live: Vec<Process> = kept.iter().filter_map(|(_, p)| p.clone()).collect();
+        Process::measure_cpu(&mut live);
+        let mut live = live.into_iter();
+        for (_, slot) in kept.iter_mut() {
+            if slot.is_some() {
+                *slot = live.next();
+            }
+        }
+        Ok(kept)
     }
 
     /// Show what process is on a specific port
     fn show_process_on_port(&self, port: u16) -> Result<()> {
-        let (port_info, process) = self.lookup_port(port)?;
+        let holders = self.lookup_port(port)?;
 
         if self.json {
             let printer = Printer::from_flags(true, self.verbose);
+            let (first, _) = &holders[0];
+            let processes: Vec<&Process> = holders.iter().filter_map(|(_, p)| p.as_ref()).collect();
             let output = PortLookupOutput {
                 action: "on",
                 query_type: "port_to_process",
                 success: true,
-                port: Some(port_info.port),
-                protocol: Some(format!("{:?}", port_info.protocol).to_lowercase()),
-                address: port_info.address.clone(),
-                process: process.as_ref(),
+                port: Some(first.port),
+                protocol: Some(format!("{:?}", first.protocol).to_lowercase()),
+                address: first.address.clone(),
+                // the first holder, as before `processes` existed
+                process: processes.first().copied(),
+                processes: Some(processes),
                 ports: None,
             };
             printer.print_json(&output);
         } else {
-            self.print_process_on_port(&mut std::io::stdout(), &port_info, process.as_ref())
+            self.print_process_on_port(&mut std::io::stdout(), port, &holders)
                 .expect(WRITE_FAILED);
         }
 
@@ -270,6 +283,7 @@ impl OnCommand {
                 protocol: None,
                 address: None,
                 process: Some(&process),
+                processes: None,
                 ports: Some(&ports),
             };
             printer.print_json(&output);
@@ -340,20 +354,39 @@ impl OnCommand {
         Ok(())
     }
 
+    /// What is on `port`: the line saying so, then each holder
     fn print_process_on_port(
+        &self,
+        out: &mut impl Write,
+        port: u16,
+        holders: &[(PortInfo, Option<Process>)],
+    ) -> std::io::Result<()> {
+        let who = if holders.len() > 1 {
+            format!(" {} processes", holders.len())
+        } else {
+            String::new()
+        };
+        writeln!(
+            out,
+            "{} Port {} is used by{}:",
+            "✓".green().bold(),
+            port.to_string().cyan().bold(),
+            who
+        )?;
+        writeln!(out)?;
+
+        for (port_info, process) in holders {
+            self.print_holder(out, port_info, process.as_ref())?;
+        }
+        Ok(())
+    }
+
+    fn print_holder(
         &self,
         out: &mut impl Write,
         port_info: &PortInfo,
         process: Option<&Process>,
     ) -> std::io::Result<()> {
-        writeln!(
-            out,
-            "{} Port {} is used by:",
-            "✓".green().bold(),
-            port_info.port.to_string().cyan().bold()
-        )?;
-        writeln!(out)?;
-
         writeln!(
             out,
             "  {} {} (PID {})",
@@ -477,13 +510,14 @@ impl OnCommand {
     }
 }
 
-/// What a port lookup contributes to the multi-target JSON: the process on the
-/// port with that port, or nothing when the process ended after the port was listed
-fn port_hit(port_info: PortInfo, process: Option<Process>) -> Vec<(Process, Vec<PortInfo>)> {
-    match process {
-        Some(process) => vec![(process, vec![port_info])],
-        None => Vec::new(),
-    }
+/// What a port lookup contributes to the multi-target JSON: each holder's
+/// process with the port it holds. A holder whose process ended after the port
+/// was listed adds nothing.
+fn port_hits(holders: Vec<(PortInfo, Option<Process>)>) -> Vec<(Process, Vec<PortInfo>)> {
+    holders
+        .into_iter()
+        .filter_map(|(port_info, process)| process.map(|p| (p, vec![port_info])))
+        .collect()
 }
 
 #[derive(Serialize)]
@@ -499,6 +533,9 @@ struct PortLookupOutput<'a> {
     address: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     process: Option<&'a Process>,
+    /// Every process holding the port (`process` is the first of them)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    processes: Option<Vec<&'a Process>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     ports: Option<&'a [PortInfo]>,
 }
@@ -588,17 +625,60 @@ mod tests {
 
     #[test]
     fn a_port_whose_process_ended_has_no_process_to_filter() {
-        let (info, process) = command(Some("/"))
-            .filter_port_process(4000, listener(), None)
+        let holders = command(Some("/"))
+            .filter_holders(4000, vec![(listener(), None)])
             .unwrap();
-        assert_eq!(info.port, 4000);
-        assert!(process.is_none());
+        assert_eq!(holders.len(), 1);
+        assert_eq!(holders[0].0.port, 4000);
+        assert!(holders[0].1.is_none());
+    }
+
+    #[test]
+    fn the_filters_drop_the_holders_they_do_not_match() {
+        let mut elsewhere = without_cwd();
+        elsewhere.pid = 2;
+        elsewhere.cwd = Some("/definitely/not/here".to_string());
+        let mut here = without_cwd();
+        here.pid = 3;
+        here.cwd = Some(
+            std::env::current_dir()
+                .unwrap()
+                .to_string_lossy()
+                .into_owned(),
+        );
+
+        let holders = vec![
+            (listener(), Some(elsewhere)),
+            (listener(), Some(here.clone())),
+            (listener(), None),
+        ];
+        let kept = command(Some("."))
+            .filter_holders(4000, holders.clone())
+            .unwrap();
+        let pids: Vec<_> = kept
+            .iter()
+            .map(|(_, p)| p.as_ref().map(|p| p.pid))
+            .collect();
+        assert_eq!(pids, vec![Some(3), None]);
+
+        // nothing left: the port counts as not found
+        let none = command(Some("/definitely/not/here/either"))
+            .filter_holders(4000, holders[..1].to_vec());
+        assert!(
+            matches!(&none, Err(ProcError::ProcessNotFound(m)) if m.starts_with("port 4000")),
+            "{none:?}"
+        );
     }
 
     #[test]
     fn a_port_whose_process_ended_adds_nothing_to_the_json_results() {
-        assert!(port_hit(listener(), None).is_empty());
-        assert_eq!(port_hit(listener(), Some(without_cwd())).len(), 1);
+        assert!(port_hits(vec![(listener(), None)]).is_empty());
+        let hits = port_hits(vec![
+            (listener(), Some(without_cwd())),
+            (listener(), None),
+            (listener(), Some(without_cwd())),
+        ]);
+        assert_eq!(hits.len(), 2);
     }
 
     /// What a print function writes, with colours off
@@ -614,10 +694,26 @@ mod tests {
         // Neither the process nor its details: the address shows as `*`
         let mut cmd = command(None);
         cmd.verbose = true;
-        let out = printed(|w| cmd.print_process_on_port(w, &listener(), None));
+        let out = printed(|w| cmd.print_process_on_port(w, 4000, &[(listener(), None)]));
         assert_eq!(
             out,
             "✓ Port 4000 is used by:\n\n  Process: x (PID 1)\n  Listening: TCP on *\n\n"
+        );
+    }
+
+    #[test]
+    fn a_port_with_several_holders_says_so_and_lists_each() {
+        let mut second = listener();
+        second.pid = 2;
+        second.address = Some("::1".to_string());
+        let out = printed(|w| {
+            command(None).print_process_on_port(w, 4000, &[(listener(), None), (second, None)])
+        });
+        assert_eq!(
+            out,
+            "✓ Port 4000 is used by 2 processes:\n\n\
+             \x20 Process: x (PID 1)\n  Listening: TCP on *\n\n\
+             \x20 Process: x (PID 2)\n  Listening: TCP on ::1\n\n"
         );
     }
 
@@ -626,7 +722,8 @@ mod tests {
         let mut cmd = command(None);
         cmd.verbose = true;
 
-        let out = printed(|w| cmd.print_process_on_port(w, &listener(), Some(&without_cwd())));
+        let out =
+            printed(|w| cmd.print_process_on_port(w, 4000, &[(listener(), Some(without_cwd()))]));
         assert!(out.contains("Listening: TCP on *\n"), "{out}");
         assert!(out.contains("Resources: 0.0% CPU"), "{out}");
         for label in ["Directory:", "Path:", "Uptime:", "Command:"] {
@@ -655,8 +752,11 @@ mod tests {
         let mut cmd = command(None);
         cmd.verbose = true;
         let p = detailed();
-        assert_stops_at_a_failed_write(|w| cmd.print_process_on_port(w, &listener(), Some(&p)));
-        assert_stops_at_a_failed_write(|w| cmd.print_process_on_port(w, &listener(), None));
+        let held = [(listener(), Some(p))];
+        assert_stops_at_a_failed_write(|w| cmd.print_process_on_port(w, 4000, &held));
+        assert_stops_at_a_failed_write(|w| {
+            cmd.print_process_on_port(w, 4000, &[(listener(), None)])
+        });
     }
 
     #[test]

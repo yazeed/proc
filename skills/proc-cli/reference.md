@@ -133,9 +133,12 @@ If no target is found, `success` is `false` and the exit code is 2. If only some
   "port": 3000,
   "protocol": "tcp",
   "address": "0.0.0.0",
-  "process": <Process>
+  "process": <Process>,
+  "processes": [<Process>, ...]
 }
 ```
+
+One port number can be held by several processes (`127.0.0.1:3000` and `[::1]:3000` are different sockets). `processes` lists every holder, each once; `process` is the first of them, kept for scripts that read one. `protocol` and `address` are the first holder's.
 
 ### proc on PID --json (single process-to-ports lookup)
 

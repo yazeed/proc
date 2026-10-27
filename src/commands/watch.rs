@@ -132,12 +132,13 @@ struct WatchJsonOutput {
     processes: Vec<Process>,
 }
 
-/// The PID of the process listening on `port`, if there is one
-fn port_owner(port: u16) -> Option<u32> {
-    crate::core::PortInfo::find_by_port(port)
-        .ok()
-        .flatten()
+/// The PIDs of the processes listening on `port`, none if nothing does
+fn port_holders(port: u16) -> Vec<u32> {
+    crate::core::PortInfo::holders_of(port)
+        .unwrap_or_default()
+        .into_iter()
         .map(|info| info.pid)
+        .collect()
 }
 
 /// Put the terminal back the way it was: raw mode off, cursor shown, normal screen
@@ -196,13 +197,13 @@ impl WatchCommand {
 
     /// Collect processes for one cycle using the persistent System instance
     fn collect_processes(&self, sys: &System) -> Vec<Process> {
-        self.collect_with(sys, port_owner)
+        self.collect_with(sys, port_holders)
     }
 
-    /// `collect_processes` with the port lookup passed in: the owner of a port
-    /// is read at a different moment than `sys`, so it can be a process `sys`
+    /// `collect_processes` with the port lookup passed in: the holders of a port
+    /// are read at a different moment than `sys`, so one can be a process `sys`
     /// has not seen
-    fn collect_with(&self, sys: &System, port_owner: impl Fn(u16) -> Option<u32>) -> Vec<Process> {
+    fn collect_with(&self, sys: &System, port_holders: impl Fn(u16) -> Vec<u32>) -> Vec<Process> {
         let self_pid = Pid::from_u32(std::process::id());
         let in_dir_filter = resolve_in_dir(&self.in_dir);
         let mode = NameMatch::from_flag(self.cmd);
@@ -230,7 +231,7 @@ impl WatchCommand {
             for target in &targets {
                 match target {
                     TargetType::Port(port) => {
-                        if let Some(owner) = port_owner(*port) {
+                        for owner in port_holders(*port) {
                             let pid = Pid::from_u32(owner);
                             if let Some(proc) = sys.process(pid) {
                                 if seen_pids.insert(owner) {
@@ -1146,27 +1147,49 @@ mod tests {
     }
 
     #[test]
-    fn a_port_owner_the_snapshot_has_not_seen_is_left_out() {
+    fn a_port_holder_the_snapshot_has_not_seen_is_left_out() {
         let mut sys = System::new_all();
         sys.refresh_all();
         let mut cmd = watch_args();
         cmd.target = vec![":8080".into()];
         // This test's own process is in the snapshot; PID 4294967294 is not
         let me = std::process::id();
-        let known = cmd.collect_with(&sys, |port| (port == 8080).then_some(me));
+        let known = cmd.collect_with(&sys, |port| if port == 8080 { vec![me] } else { vec![] });
         assert_eq!(known.iter().map(|p| p.pid).collect::<Vec<_>>(), [me]);
-        let unseen = cmd.collect_with(&sys, |_| Some(u32::MAX - 1));
+        let unseen = cmd.collect_with(&sys, |_| vec![u32::MAX - 1]);
         assert!(unseen.is_empty(), "{unseen:?}");
-        let nobody = cmd.collect_with(&sys, |_| None);
+        let nobody = cmd.collect_with(&sys, |_| Vec::new());
         assert!(nobody.is_empty(), "{nobody:?}");
     }
 
     #[test]
-    fn the_owner_of_a_port_is_the_process_listening_on_it() {
+    fn every_holder_of_a_port_is_watched_once() {
+        let mut sys = System::new_all();
+        sys.refresh_all();
+        let mut cmd = watch_args();
+        cmd.target = vec![":8080".into(), std::process::id().to_string()];
+        let me = std::process::id();
+        // the parent is in the snapshot too; this process is named twice (as a
+        // holder of the port and by PID) and listed once
+        let parent = sys
+            .process(Pid::from_u32(me))
+            .and_then(|p| p.parent())
+            .expect("a parent")
+            .as_u32();
+        let found = cmd.collect_with(&sys, |_| vec![me, parent]);
+        let mut pids: Vec<u32> = found.iter().map(|p| p.pid).collect();
+        pids.sort_unstable();
+        let mut expected = vec![me, parent];
+        expected.sort_unstable();
+        assert_eq!(pids, expected);
+    }
+
+    #[test]
+    fn the_holders_of_a_port_are_the_processes_listening_on_it() {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
-        assert_eq!(port_owner(port), Some(std::process::id()));
+        assert_eq!(port_holders(port), vec![std::process::id()]);
         drop(listener);
-        assert_eq!(port_owner(port), None);
+        assert!(port_holders(port).is_empty());
     }
 }

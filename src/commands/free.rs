@@ -66,19 +66,21 @@ impl FreeCommand {
             }
         }
 
-        // Resolve ports to processes
+        // Resolve ports to processes: every process holding a port
         let mut port_processes: Vec<(u16, Process)> = Vec::new();
         let mut not_found: Vec<u16> = Vec::new();
 
         for port in &ports {
-            // A port nobody listens on, or whose holder has already gone, is not found
-            let holder = match PortInfo::find_by_port(*port)? {
-                Some(port_info) => Process::find_by_pid(port_info.pid)?,
-                None => None,
-            };
-            match holder {
-                Some(proc) => port_processes.push((*port, proc)),
-                None => not_found.push(*port),
+            // A port nobody listens on, or whose holders have all gone, is not found
+            let mut held = false;
+            for listener in PortInfo::holders_of(*port)? {
+                if let Some(proc) = Process::find_by_pid(listener.pid)? {
+                    port_processes.push((*port, proc));
+                    held = true;
+                }
+            }
+            if !held {
+                not_found.push(*port);
             }
         }
 
@@ -95,6 +97,16 @@ impl FreeCommand {
             printer.print_empty_result("free", "All specified ports are already free");
             return Ok(());
         }
+
+        // The ports to free, once each however many processes hold them
+        let target_ports: Vec<u16> = {
+            let mut seen = std::collections::HashSet::new();
+            port_processes
+                .iter()
+                .map(|(port, _)| *port)
+                .filter(|port| seen.insert(*port))
+                .collect()
+        };
 
         // Deduplicate processes (multiple ports might be held by same process)
         let mut processes: Vec<Process> = {
@@ -120,8 +132,8 @@ impl FreeCommand {
                     "Dry run: would kill {} process{} to free {} port{}",
                     processes.len(),
                     plural(processes.len()),
-                    port_processes.len(),
-                    if port_processes.len() == 1 { "" } else { "s" }
+                    target_ports.len(),
+                    if target_ports.len() == 1 { "" } else { "s" }
                 ),
             );
             return Ok(());
@@ -135,8 +147,8 @@ impl FreeCommand {
                 "Kill {} process{} to free {} port{}?",
                 processes.len(),
                 plural(processes.len()),
-                port_processes.len(),
-                if port_processes.len() == 1 { "" } else { "s" }
+                target_ports.len(),
+                if target_ports.len() == 1 { "" } else { "s" }
             );
 
             if !Confirm::new()
@@ -170,16 +182,15 @@ impl FreeCommand {
             std::time::Instant::now() + std::time::Duration::from_secs(1),
         );
 
-        let target_ports: Vec<u16> = port_processes.iter().map(|(port, _)| *port).collect();
-
         loop {
             let mut all_free = true;
             freed.clear();
             still_busy.clear();
 
             for port in &target_ports {
-                match PortInfo::find_by_port(*port) {
-                    Ok(None) => freed.push(*port),
+                // free once nobody is left listening on it, whoever that was
+                match PortInfo::holders_of(*port) {
+                    Ok(holders) if holders.is_empty() => freed.push(*port),
                     _ => {
                         still_busy.push(*port);
                         all_free = false;

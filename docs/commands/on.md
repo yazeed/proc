@@ -18,6 +18,8 @@ Several targets are separate arguments. Comma-separated lists (`:3000,:8080`) st
 
 Every view shows the process's directory and uptime.
 
+A port can be held by several processes at once (`127.0.0.1:3000` and `[::1]:3000` are different sockets). `proc on :3000` lists all of them, and `--json` has them in `processes`, with `process` still the first.
+
 ## Options
 
 | Flag | Short | Description |

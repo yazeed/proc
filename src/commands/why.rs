@@ -64,9 +64,12 @@ impl WhyCommand {
 
             let parsed = parse_target(target_str);
 
-            // Collect port context for port targets
+            // Collect port context for port targets; every holder of the port is
+            // traced below, the context is the port they share
             let port_context: Option<PortInfo> = if let TargetType::Port(port) = &parsed {
-                PortInfo::find_by_port(*port).ok().flatten()
+                PortInfo::holders_of(*port)
+                    .ok()
+                    .and_then(|holders| holders.into_iter().next())
             } else {
                 None
             };

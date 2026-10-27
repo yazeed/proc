@@ -8,7 +8,7 @@ permalink: /commands/kill
 Send SIGKILL to processes. Asks for confirmation unless `--yes`. Alias: `k`.
 
 ```bash
-proc kill :3000            # kill process on port 3000
+proc kill :3000            # kill every process on port 3000
 proc kill node             # kill the processes named node
 proc kill :3000 :8080 node # kill multiple targets
 ```

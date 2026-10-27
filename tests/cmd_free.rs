@@ -58,8 +58,8 @@ fn unused_port() -> u16 {
 struct Owned {
     child: Child,
     port: u16,
-    /// With `--fork`: the process group (the parent's PID) that holds both the parent
-    /// and the forked copy that keeps the port after the parent is gone. Killing
+    /// With `--respawn`: the process group (the parent's PID) that holds both the parent
+    /// and the forked copy that takes the port after the parent is gone. Killing
     /// the group needs no PID read from the child's output, and signals no PID
     /// individually, so it can't hit a PID that has been reused.
     #[cfg_attr(not(unix), allow(dead_code))]
@@ -78,7 +78,7 @@ impl Owned {
             .stdout(Stdio::piped())
             .stdin(Stdio::null());
         #[cfg(unix)]
-        if args.contains(&"--fork") {
+        if args.contains(&"--respawn") {
             use std::os::unix::process::CommandExt;
             command.process_group(0);
         }
@@ -100,12 +100,12 @@ impl Owned {
             child,
             port,
             group: args
-                .contains(&"--fork")
+                .contains(&"--respawn")
                 .then(|| i32::try_from(child_id).expect("pid fits")),
         };
         // Checked only now, with `owned` already holding the group: a panic here
         // drops it, which kills the parent and the forked copy
-        if args.contains(&"--fork") {
+        if args.contains(&"--respawn") {
             let mut line = String::new();
             let _ = stdout.read_line(&mut line);
             let child_pid = line
@@ -287,12 +287,12 @@ fn free_force_kills_a_holder_that_ignores_sigterm() {
     assert!(held.ended_within(Duration::from_secs(5)), "{out}");
 }
 
-/// A forked copy holds the same socket, so killing the process `free` found
-/// leaves the port in use
+/// A copy forked off the holder takes the port the moment the holder is killed,
+/// so the port is in use again: `free` reports it instead of claiming it free
 #[cfg(unix)]
 #[test]
 fn free_reports_a_port_that_stays_in_use() {
-    let held = Owned::start(&["--fork"]);
+    let held = Owned::start(&["--respawn"]);
     let (out, code) = run_text(&["free", &held.target(), "--yes", "--wait", "1"]);
     assert_eq!(code, 1, "{out}");
     assert!(
@@ -304,7 +304,7 @@ fn free_reports_a_port_that_stays_in_use() {
 #[cfg(unix)]
 #[test]
 fn free_json_reports_a_port_that_stays_in_use() {
-    let held = Owned::start(&["--fork"]);
+    let held = Owned::start(&["--respawn"]);
     let (json, code) = run_json(&["free", &held.target(), "--yes", "--wait", "1", "--json"]);
     assert_eq!(code, 1, "{json}");
     assert_eq!(json["success"], false, "{json}");

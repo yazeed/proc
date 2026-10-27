@@ -55,10 +55,11 @@ impl PortInfo {
         }
     }
 
-    /// Find which process is listening on a specific port
-    pub fn find_by_port(port: u16) -> Result<Option<PortInfo>> {
-        let ports = Self::get_all_listening()?;
-        Ok(ports.into_iter().find(|p| p.port == port))
+    /// Every process listening on a port, each once, in the order the system
+    /// lists them (empty when nothing listens). One port number can be held by
+    /// several processes: `127.0.0.1` and `[::1]` are different sockets.
+    pub fn holders_of(port: u16) -> Result<Vec<PortInfo>> {
+        Ok(holders_in(Self::get_all_listening()?, port))
     }
 
     /// Get the full process info for this port's process
@@ -410,6 +411,17 @@ impl PortInfo {
             .map(|a| a == "127.0.0.1" || a == "::1")
             .unwrap_or(false)
     }
+}
+
+/// The listeners in `listening` that hold `port`, one per process: a process
+/// that listens on both an IPv4 and an IPv6 address is one holder, listed with
+/// the first address
+fn holders_in(listening: Vec<PortInfo>, port: u16) -> Vec<PortInfo> {
+    let mut seen = std::collections::HashSet::new();
+    listening
+        .into_iter()
+        .filter(|p| p.port == port && seen.insert(p.pid))
+        .collect()
 }
 
 /// Split a listening socket's local address, as lsof and netstat print it, into
@@ -823,6 +835,31 @@ Active Connections
         // No IPv6 output (netstat refused the call): the IPv4 listeners remain
         let ports = PortInfo::parse_netstat_output(&[v4, ""], |_| None);
         assert_eq!(ports.len(), 2);
+    }
+
+    #[test]
+    fn a_port_held_through_two_sockets_has_two_holders() {
+        let listener = |port: u16, pid: u32, address: &str| PortInfo {
+            port,
+            protocol: Protocol::Tcp,
+            pid,
+            process_name: format!("p{pid}"),
+            address: Some(address.to_string()),
+        };
+        let listening = vec![
+            listener(8080, 10, "127.0.0.1"),
+            listener(9000, 12, "0.0.0.0"),
+            listener(8080, 11, "::1"),
+            // the same process on the IPv6 address too (netstat lists both)
+            listener(8080, 10, "::1"),
+        ];
+        let holders = holders_in(listening.clone(), 8080);
+        let seen: Vec<_> = holders
+            .iter()
+            .map(|p| (p.pid, p.address.as_deref().unwrap()))
+            .collect();
+        assert_eq!(seen, vec![(10, "127.0.0.1"), (11, "::1")]);
+        assert!(holders_in(listening, 7).is_empty());
     }
 
     #[test]
