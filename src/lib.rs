@@ -6,7 +6,7 @@
 //! ## Features
 //!
 //! - **Unified Targets**: `:port`, `PID`, and `name` work the same everywhere
-//! - **Multi-Target**: `proc kill :3000,:8080,node` - comma-separated targets
+//! - **Multi-Target**: `proc kill :3000 :8080 node` - separate arguments (comma-separated targets still work, but are deprecated)
 //! - **Query Language**: `proc by node --in .` - composable filters
 //! - **Working Directory**: See which project folder a process is running from
 //! - **Terminal-Adaptive Tables**: Tables adjust to terminal width automatically
@@ -34,7 +34,7 @@
 //! proc for ./script.py
 //!
 //! # Kill multiple targets
-//! proc kill :3000,:8080,node
+//! proc kill :3000 :8080 node
 //!
 //! # Node processes in current directory
 //! proc by node --in .

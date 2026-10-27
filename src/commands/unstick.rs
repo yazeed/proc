@@ -15,8 +15,11 @@
 //!   proc unstick :3000     # Unstick process on port 3000
 //!   proc unstick 1234      # Unstick PID 1234
 //!   proc unstick node      # Unstick stuck node processes
+//!   proc unstick :3000 1234   # Several targets: separate arguments
+//!
+//! Commas still work (`proc unstick :3000,1234`) but are deprecated.
 
-use crate::core::{apply_filters, parse_targets, resolve_targets_excluding_self, Process};
+use crate::core::{apply_filters, flatten_targets, resolve_targets_excluding_self, Process};
 use crate::error::{ExitCode, ProcError, Result};
 use crate::ui::{format_duration, must_confirm, plural, Printer};
 use clap::Args;
@@ -31,9 +34,9 @@ use nix::sys::signal::Signal;
 /// Attempt to recover stuck processes
 #[derive(Args, Debug)]
 pub struct UnstickCommand {
-    /// Target: PID, :port, or name (optional - finds all stuck if omitted)
-    #[arg(value_parser = crate::core::validate_target_arg)]
-    target: Option<String>,
+    /// Target(s): PID, :port, or name (separate arguments for several; omit to find all stuck)
+    #[arg(num_args = 0.., value_parser = crate::core::validate_target_arg)]
+    target: Vec<String>,
 
     /// Without a target: only stuck processes running longer than this many seconds
     #[arg(long, short, default_value = "300")]
@@ -59,7 +62,8 @@ pub struct UnstickCommand {
     #[arg(long, short = 'j')]
     json: bool,
 
-    /// Filter by directory (defaults to current directory if no path given)
+    /// Filter by directory; takes the next word as the directory unless it starts with '-'
+    /// (bare --in is the current directory, --in=DIR is explicit)
     #[arg(long = "in", short = 'i', num_args = 0..=1, default_missing_value = ".")]
     pub in_dir: Option<String>,
 
@@ -83,9 +87,9 @@ impl UnstickCommand {
         let printer = Printer::from_flags(self.json, self.verbose);
 
         // Get processes to unstick
-        let mut stuck = if let Some(ref target) = self.target {
-            // Specific target
-            self.resolve_target_processes(target)?
+        let mut stuck = if !self.target.is_empty() {
+            // Specific targets
+            self.resolve_target_processes(&self.target)?
         } else {
             // Auto-discover stuck processes
             let timeout = Duration::from_secs(self.timeout);
@@ -97,8 +101,8 @@ impl UnstickCommand {
 
         if stuck.is_empty() {
             // An explicit target filtered down to nothing is "not found", like other commands
-            if let Some(ref target) = self.target {
-                return Err(ProcError::ProcessNotFound(target.clone()));
+            if !self.target.is_empty() {
+                return Err(ProcError::ProcessNotFound(self.target.join(" ")));
             }
             if self.json {
                 printer.print_json(&UnstickOutput {
@@ -288,11 +292,11 @@ impl UnstickCommand {
     }
 
     /// Resolve target to processes, excluding self
-    fn resolve_target_processes(&self, target: &str) -> Result<Vec<Process>> {
-        let targets = parse_targets(target);
+    fn resolve_target_processes(&self, typed: &[String]) -> Result<Vec<Process>> {
+        let targets = flatten_targets(typed);
         let (processes, _) = resolve_targets_excluding_self(&targets);
         if processes.is_empty() {
-            Err(ProcError::ProcessNotFound(target.to_string()))
+            Err(ProcError::ProcessNotFound(typed.join(" ")))
         } else {
             Ok(processes)
         }
@@ -308,7 +312,7 @@ impl UnstickCommand {
     /// Attempt to unstick a process: gentle recovery first, termination only with --force
     fn attempt_unstick(&self, proc: &Process) -> Outcome {
         // For targeted processes, check if actually stuck
-        if self.target.is_some() && !self.is_stuck(proc) {
+        if !self.target.is_empty() && !self.is_stuck(proc) {
             return Outcome::NotStuck;
         }
 
@@ -320,7 +324,7 @@ impl UnstickCommand {
     }
 
     fn show_processes(&self, processes: &[Process]) {
-        let label = if self.target.is_some() {
+        let label = if !self.target.is_empty() {
             "Target"
         } else {
             "Found stuck"

@@ -4,10 +4,13 @@
 //!   proc why :3000              # Why is port 3000 busy? (ancestry + port context)
 //!   proc why node               # Show ancestry for node processes
 //!   proc why 1234               # Show ancestry for PID 1234
+//!   proc why :3000 :8080        # Several targets: separate arguments
 //!   proc why :3000 --json       # JSON output with port context
+//!
+//! Commas still work (`proc why :3000,:8080`) but are deprecated.
 
 use crate::core::{
-    find_ports_for_pid, parse_target, parse_targets, resolve_target, PortInfo, Process,
+    find_ports_for_pid, flatten_targets, parse_target, resolve_target, PortInfo, Process,
     ProcessStatus, Protocol, TargetType,
 };
 use crate::error::{ExitCode, ProcError, Result};
@@ -20,9 +23,9 @@ use std::collections::HashMap;
 /// Trace why a port is busy or show process ancestry
 #[derive(Args, Debug)]
 pub struct WhyCommand {
-    /// Target(s): :port, PID, or process name (comma-separated for multiple)
-    #[arg(required = true, value_parser = crate::core::validate_target_arg)]
-    pub target: String,
+    /// Target(s): :port, PID, or process name (separate arguments for several)
+    #[arg(required = true, num_args = 1.., value_parser = crate::core::validate_target_arg)]
+    pub target: Vec<String>,
 
     /// Output as JSON
     #[arg(long, short = 'j')]
@@ -41,7 +44,7 @@ impl WhyCommand {
         let all_processes = Process::find_all()?;
         let pid_map: HashMap<u32, &Process> = all_processes.iter().map(|p| (p.pid, p)).collect();
 
-        let targets = parse_targets(&self.target);
+        let targets = flatten_targets(&self.target);
 
         // JSON results are collected across targets and printed as one document
         let mut json_results: Vec<WhyOutput> = Vec::new();
@@ -120,7 +123,7 @@ impl WhyCommand {
 
         if !found_any {
             let error =
-                first_error.unwrap_or_else(|| ProcError::ProcessNotFound(self.target.clone()));
+                first_error.unwrap_or_else(|| ProcError::ProcessNotFound(self.target.join(" ")));
             if self.json {
                 return Err(error);
             }

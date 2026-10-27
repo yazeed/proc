@@ -4,12 +4,14 @@
 //!   proc kill node              # Kill all Node.js processes
 //!   proc kill :3000             # Kill what's on port 3000
 //!   proc kill 1234              # Kill specific PID
-//!   proc kill :3000,:8080       # Kill multiple targets
-//!   proc kill :3000,1234,node   # Mixed targets (port + PID + name)
+//!   proc kill 1234 5678         # Kill several targets: separate arguments
+//!   proc kill :3000 :8080 node  # Mixed targets (port + port + name)
 //!   proc kill node --yes        # Skip confirmation
+//!
+//! Commas still work (`proc kill :3000,:8080`) but are deprecated.
 
 use crate::core::{
-    apply_filters, apply_to_each, parse_targets, resolve_targets_excluding_self, Process,
+    apply_filters, apply_to_each, flatten_targets, resolve_targets_excluding_self, Process,
 };
 use crate::error::{ProcError, Result};
 use crate::ui::Printer;
@@ -18,9 +20,9 @@ use clap::Args;
 /// Kill process(es)
 #[derive(Args, Debug)]
 pub struct KillCommand {
-    /// Target(s): process name, PID, or :port (comma-separated for multiple)
-    #[arg(value_parser = crate::core::validate_target_arg)]
-    pub target: String,
+    /// Target(s): process name, PID, or :port (separate arguments for several)
+    #[arg(required = true, num_args = 1.., value_parser = crate::core::validate_target_arg)]
+    pub target: Vec<String>,
 
     /// Skip confirmation prompt
     #[arg(long, short = 'y')]
@@ -42,7 +44,8 @@ pub struct KillCommand {
     #[arg(long, short = 'g')]
     pub graceful: bool,
 
-    /// Filter by directory (defaults to current directory if no path given)
+    /// Filter by directory; takes the next word as the directory unless it starts with '-'
+    /// (bare --in is the current directory, --in=DIR is explicit)
     #[arg(long = "in", short = 'i', num_args = 0..=1, default_missing_value = ".")]
     pub in_dir: Option<String>,
 
@@ -56,9 +59,9 @@ impl KillCommand {
     pub fn execute(&self) -> Result<()> {
         let printer = Printer::from_flags(self.json, self.verbose);
 
-        // Parse comma-separated targets and resolve to processes
+        // Split each value on commas and resolve to processes
         // Use resolve_targets_excluding_self to avoid killing ourselves
-        let targets = parse_targets(&self.target);
+        let targets = flatten_targets(&self.target);
         let (mut processes, not_found) = resolve_targets_excluding_self(&targets);
 
         // Warn about targets that weren't found
@@ -77,7 +80,7 @@ impl KillCommand {
         }
 
         if processes.is_empty() {
-            return Err(ProcError::ProcessNotFound(self.target.clone()));
+            return Err(ProcError::ProcessNotFound(self.target.join(" ")));
         }
 
         // Dry run: just show what would be killed

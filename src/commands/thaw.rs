@@ -3,12 +3,14 @@
 //! Examples:
 //!   proc thaw node              # Resume all frozen node processes
 //!   proc thaw :3000             # Resume process on port 3000
-//!   proc thaw :3000,:8080       # Resume multiple targets
+//!   proc thaw :3000 :8080       # Resume several targets: separate arguments
 //!   proc thaw node --yes        # Skip confirmation
+//!
+//! Commas still work (`proc thaw :3000,:8080`) but are deprecated.
 
 #[cfg(unix)]
 use crate::core::{
-    apply_filters, apply_to_each, parse_targets, resolve_targets_excluding_self, Process,
+    apply_filters, apply_to_each, flatten_targets, resolve_targets_excluding_self, Process,
 };
 use crate::error::{ProcError, Result};
 #[cfg(unix)]
@@ -18,9 +20,9 @@ use clap::Args;
 /// Resume frozen process(es) with SIGCONT
 #[derive(Args, Debug)]
 pub struct ThawCommand {
-    /// Target(s): process name, PID, or :port (comma-separated for multiple)
-    #[arg(required = true, value_parser = crate::core::validate_target_arg)]
-    pub target: String,
+    /// Target(s): process name, PID, or :port (separate arguments for several)
+    #[arg(required = true, num_args = 1.., value_parser = crate::core::validate_target_arg)]
+    pub target: Vec<String>,
 
     /// Skip confirmation prompt
     #[arg(long, short = 'y')]
@@ -38,7 +40,8 @@ pub struct ThawCommand {
     #[arg(long, short = 'v')]
     pub verbose: bool,
 
-    /// Filter by directory (defaults to current directory if no path given)
+    /// Filter by directory; takes the next word as the directory unless it starts with '-'
+    /// (bare --in is the current directory, --in=DIR is explicit)
     #[arg(long = "in", short = 'i', num_args = 0..=1, default_missing_value = ".")]
     pub in_dir: Option<String>,
 
@@ -55,7 +58,7 @@ impl ThawCommand {
 
         let printer = Printer::from_flags(self.json, self.verbose);
 
-        let targets = parse_targets(&self.target);
+        let targets = flatten_targets(&self.target);
         let (mut processes, not_found) = resolve_targets_excluding_self(&targets);
 
         if !not_found.is_empty() {
@@ -73,7 +76,7 @@ impl ThawCommand {
         }
 
         if processes.is_empty() {
-            return Err(ProcError::ProcessNotFound(self.target.clone()));
+            return Err(ProcError::ProcessNotFound(self.target.join(" ")));
         }
 
         if self.dry_run {

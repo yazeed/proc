@@ -4,12 +4,16 @@
 //!   proc watch                     # Watch all processes (alias: proc top)
 //!   proc watch node                # Watch node processes
 //!   proc watch :3000               # Watch process on port 3000
+//!   proc watch :3000 :8080 node    # Watch several targets: separate arguments
 //!   proc watch --in . --by node    # Watch node processes in current directory
 //!   proc watch -n 1 --sort mem     # 1s refresh, sorted by memory
 //!   proc watch --json | head -2    # NDJSON output
+//!
+//! Commas still work (`proc watch :3000,:8080`) but are deprecated.
 
 use crate::core::{
-    parse_target, resolve_in_dir, sort_processes, Process, ProcessStatus, SortKey, TargetType,
+    flatten_targets, parse_target, resolve_in_dir, sort_processes, Process, ProcessStatus, SortKey,
+    TargetType,
 };
 use crate::error::Result;
 use crate::ui::format::{
@@ -44,15 +48,16 @@ fn parse_interval(s: &str) -> std::result::Result<f64, String> {
 /// Watch processes in real-time
 #[derive(Args, Debug)]
 pub struct WatchCommand {
-    /// Target(s): PID, :port, or name (optional — omit for all processes)
-    #[arg(value_parser = crate::core::validate_target_arg)]
-    pub target: Option<String>,
+    /// Target(s): PID, :port, or name (separate arguments for several; omit for all processes)
+    #[arg(num_args = 0.., value_parser = crate::core::validate_target_arg)]
+    pub target: Vec<String>,
 
     /// Refresh interval in seconds (at least 0.1)
     #[arg(long = "interval", short = 'n', default_value = "2", value_parser = parse_interval)]
     pub interval: f64,
 
-    /// Filter by directory
+    /// Filter by directory; takes the next word as the directory unless it starts with '-'
+    /// (bare --in is the current directory, --in=DIR is explicit)
     #[arg(long = "in", short = 'i', num_args = 0..=1, default_missing_value = ".")]
     pub in_dir: Option<String>,
 
@@ -196,17 +201,10 @@ impl WatchCommand {
         let in_dir_filter = resolve_in_dir(&self.in_dir);
 
         // Parse targets once
-        let targets: Vec<TargetType> = self
-            .target
-            .as_ref()
-            .map(|t| {
-                t.split(',')
-                    .map(|s| s.trim())
-                    .filter(|s| !s.is_empty())
-                    .map(parse_target)
-                    .collect()
-            })
-            .unwrap_or_default();
+        let targets: Vec<TargetType> = flatten_targets(&self.target)
+            .iter()
+            .map(|t| parse_target(t))
+            .collect();
 
         let mut seen_pids = HashSet::new();
         let mut processes = Vec::new();
@@ -398,7 +396,11 @@ impl WatchCommand {
             WatchSortKey::Name => "Name",
         };
 
-        let target_label = self.target.as_deref().unwrap_or("all");
+        let target_label = if self.target.is_empty() {
+            "all".to_string()
+        } else {
+            self.target.join(" ")
+        };
 
         // Header line
         let header = format!(
@@ -689,7 +691,7 @@ mod tests {
 
     fn watch_args() -> WatchCommand {
         WatchCommand {
-            target: None,
+            target: Vec::new(),
             interval: 2.0,
             in_dir: None,
             by_name: None,
@@ -898,7 +900,7 @@ mod tests {
     #[test]
     fn the_header_names_the_target_sort_and_refresh() {
         let mut cmd = watch_args();
-        cmd.target = Some(":3000".into());
+        cmd.target = vec![":3000".into()];
         cmd.interval = 0.5;
         for (sort, label) in [
             (WatchSortKey::Cpu, "Sort: CPU"),
@@ -914,6 +916,17 @@ mod tests {
                 format!(" Watching :3000 | 2 processes | {label} | Refresh: 0.5s | q to exit")
             );
         }
+    }
+
+    #[test]
+    fn the_header_names_several_targets_as_typed_joined_by_spaces() {
+        let mut cmd = watch_args();
+        cmd.target = vec![":3000".into(), "node,python".into()];
+        let frame = cmd.render_frame(&[process(1, "a")], 120, 40);
+        assert!(
+            frame.starts_with(" Watching :3000 node,python | 1 processes |"),
+            "{frame}"
+        );
     }
 
     #[test]
@@ -1138,7 +1151,7 @@ mod tests {
         let mut sys = System::new_all();
         sys.refresh_all();
         let mut cmd = watch_args();
-        cmd.target = Some(":8080".into());
+        cmd.target = vec![":8080".into()];
         // This test's own process is in the snapshot; PID 4294967294 is not
         let me = std::process::id();
         let known = cmd.collect_with(&sys, |port| (port == 8080).then_some(me));

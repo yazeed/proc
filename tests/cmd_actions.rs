@@ -797,6 +797,24 @@ fn kill_ends_a_process_and_says_so() {
 }
 
 #[test]
+fn kill_takes_several_targets_as_separate_arguments() {
+    let mut first = Owned::listener();
+    let mut second = Owned::listener();
+    let (json, code) = run_json(&[
+        "kill",
+        &first.pid_arg(),
+        &second.pid_arg(),
+        "--dry-run",
+        "--json",
+    ]);
+    assert_eq!(code, 0, "{json}");
+    assert_eq!(json["count"], 2, "{json}");
+    assert!(lists(&json, "processes", first.pid()), "{json}");
+    assert!(lists(&json, "processes", second.pid()), "{json}");
+    assert!(first.alive() && second.alive());
+}
+
+#[test]
 fn kill_graceful_sends_a_normal_stop_request() {
     let mut owned = Owned::listener();
     let (json, code) = run_json(&["kill", &owned.pid_arg(), "--graceful", "--yes", "--json"]);
@@ -1540,4 +1558,212 @@ fn unstick_force_goes_on_to_sigkill_for_a_process_that_ignores_everything_gentle
         shell.ended_by_signal(Duration::from_secs(5)),
         Some(libc::SIGKILL)
     );
+}
+
+// ---- several targets as separate arguments ----
+
+#[test]
+fn kill_ends_every_target_given_as_a_separate_argument_or_in_a_comma_list() {
+    let mut first = Owned::listener();
+    let mut second = Owned::listener();
+    let mut third = Owned::listener();
+    let list = format!("{},{}", second.pid_arg(), third.pid_arg());
+    let (json, code) = run_json(&["kill", &first.pid_arg(), &list, "--yes", "--json"]);
+    assert_eq!(code, 0, "{json}");
+    assert_eq!(json["succeeded_count"], 3, "{json}");
+    assert!(first.ended_within(Duration::from_secs(15)));
+    assert!(second.ended_within(Duration::from_secs(15)));
+    assert!(third.ended_within(Duration::from_secs(15)));
+}
+
+#[test]
+fn a_pid_given_twice_is_one_process_whichever_way_it_is_typed() {
+    let mut owned = Owned::listener();
+    let pid = owned.pid_arg();
+    let both = format!("{pid},{pid}");
+    for command in ["kill", "stop"] {
+        for args in [
+            vec![command, &pid, &pid],
+            vec![command, &pid, &both],
+            vec![command, &both, &pid],
+        ] {
+            let mut args = args;
+            args.extend(["--dry-run", "--json"]);
+            let (json, code) = run_json(&args);
+            assert_eq!(code, 0, "{args:?}: {json}");
+            assert_eq!(json["count"], 1, "{args:?}: {json}");
+        }
+    }
+    let (json, code) = run_json(&["kill", &pid, &pid, "--yes", "--json"]);
+    assert_eq!(code, 0, "{json}");
+    assert_eq!(json["succeeded_count"], 1, "{json}");
+    assert!(owned.ended_within(Duration::from_secs(15)));
+}
+
+#[test]
+fn stop_takes_several_targets_as_separate_arguments() {
+    let mut first = Owned::listener();
+    let mut second = Owned::listener();
+    let (json, code) = run_json(&[
+        "stop",
+        &first.pid_arg(),
+        &second.pid_arg(),
+        "--yes",
+        "--timeout",
+        "1",
+        "--json",
+    ]);
+    assert_eq!(code, 0, "{json}");
+    assert_eq!(json["succeeded_count"], 2, "{json}");
+    assert_eq!(json["failed_count"], 0, "{json}");
+    assert!(first.ended_within(Duration::from_secs(15)));
+    assert!(second.ended_within(Duration::from_secs(15)));
+}
+
+#[test]
+fn wait_takes_several_targets_as_separate_arguments() {
+    let first = Owned::listener();
+    let second = Owned::listener();
+    let (a, b) = (first.pid_arg(), second.pid_arg());
+
+    // neither ever exits: both are still running at the timeout
+    let (json, code) = run_json(&["wait", &a, &b, "--timeout", "1", "--json"]);
+    assert_eq!(code, 1, "{json}");
+    assert_eq!(json["initial_count"], 2, "{json}");
+    assert!(lists(&json, "still_running", first.pid()), "{json}");
+    assert!(lists(&json, "still_running", second.pid()), "{json}");
+    // the target is echoed as typed, the arguments joined by spaces
+    assert_eq!(json["target"], format!("{a} {b}"), "{json}");
+
+    // a comma list among them
+    let list = format!("{b},{a}");
+    let (json, _) = run_json(&["wait", &a, &list, "--timeout", "1", "--json"]);
+    assert_eq!(json["initial_count"], 2, "{json}");
+    assert_eq!(json["target"], format!("{a} {list}"), "{json}");
+
+    // the same PID twice is waited for once
+    let (json, _) = run_json(&["wait", &a, &a, "--timeout", "1", "--json"]);
+    assert_eq!(json["initial_count"], 1, "{json}");
+    assert_eq!(json["target"], format!("{a} {a}"), "{json}");
+}
+
+#[test]
+fn wait_returns_once_every_separate_target_has_exited() {
+    let mut first = Owned::listener();
+    let mut second = Owned::listener();
+    let mut waiter = Live::start(&[
+        "wait",
+        &first.pid_arg(),
+        &second.pid_arg(),
+        "--timeout",
+        "60",
+    ]);
+    waiter.line_with("Waiting for 2 processes to exit");
+    first.exit_now();
+    second.exit_now();
+    waiter.line_with("All 2 processes exited after");
+    let done = waiter.finish();
+    assert_eq!(done.code, 0, "{}", done.stderr);
+}
+
+#[cfg(unix)]
+#[test]
+fn freeze_and_thaw_take_several_targets_as_separate_arguments() {
+    let first = Owned::listener();
+    let second = Owned::listener();
+    let (a, b) = (first.pid_arg(), second.pid_arg());
+    let (json, code) = run_json(&["freeze", &a, &b, "--yes", "--json"]);
+    assert_eq!(code, 0, "{json}");
+    assert_eq!(json["succeeded_count"], 2, "{json}");
+    assert!(becomes_stopped(first.pid(), true));
+    assert!(becomes_stopped(second.pid(), true));
+    let (json, code) = run_json(&["thaw", &a, &b, "--yes", "--json"]);
+    assert_eq!(code, 0, "{json}");
+    assert_eq!(json["succeeded_count"], 2, "{json}");
+    assert!(becomes_stopped(first.pid(), false));
+    assert!(becomes_stopped(second.pid(), false));
+}
+
+#[test]
+fn unstick_takes_several_targets_as_separate_arguments() {
+    let mut first = Owned::listener();
+    let mut second = Owned::listener();
+    let (json, code) = run_json(&[
+        "unstick",
+        &first.pid_arg(),
+        &second.pid_arg(),
+        "--dry-run",
+        "--json",
+    ]);
+    assert_eq!(code, 0, "{json}");
+    assert_eq!(json["found"], 2, "{json}");
+    assert!(lists(&json, "processes", first.pid()), "{json}");
+    assert!(lists(&json, "processes", second.pid()), "{json}");
+    assert!(first.alive() && second.alive());
+}
+
+#[test]
+fn when_nothing_matches_the_error_echoes_the_targets_as_typed() {
+    // "," and ",," split into no target at all, so nothing can be found (and
+    // nothing is touched)
+    let mut commands = vec!["kill", "stop", "wait", "unstick"];
+    if cfg!(unix) {
+        commands.extend(["freeze", "thaw"]);
+    }
+    for command in commands {
+        let (json, code) = run_json(&[command, ",", ",,", "--json"]);
+        assert_eq!(code, 2, "{command}: {json}");
+        let error = json["error"].as_str().unwrap();
+        assert!(
+            error.contains("No process found matching ', ,,'"),
+            "{command}: {error}"
+        );
+    }
+}
+
+// ---- --in and several targets ----
+
+#[test]
+fn in_takes_the_next_word_as_its_directory_and_a_flag_is_not_a_directory() {
+    let first = Owned::listener();
+    let second = Owned::listener();
+    let (a, b) = (first.pid_arg(), second.pid_arg());
+    let dir = first.dir();
+    let only_first = |json: &Value, code: i32, what: &str| {
+        assert_eq!(code, 0, "{what}: {json}");
+        assert_eq!(json["count"], 1, "{what}: {json}");
+        assert!(lists(json, "processes", first.pid()), "{what}: {json}");
+    };
+
+    // targets, then `--in <dir>`: the directory holds only the first
+    let (json, code) = run_json(&["kill", &a, &b, "--in", &dir, "--dry-run", "--json"]);
+    only_first(&json, code, "targets before --in <dir>");
+
+    // `--in <dir>`, then the targets
+    let (json, code) = run_json(&["kill", "--in", &dir, &a, &b, "--dry-run", "--json"]);
+    only_first(&json, code, "--in <dir> before the targets");
+
+    // `--in=<dir>` cannot swallow a target
+    let in_dir = format!("--in={dir}");
+    let (json, code) = run_json(&["kill", &in_dir, &a, &b, "--dry-run", "--json"]);
+    only_first(&json, code, "--in=<dir> before the targets");
+
+    // `--in` before a PID reads the PID as its directory: nothing runs in a
+    // directory of that name, and only the last PID is left as a target
+    let (json, code) = run_json(&["kill", "--in", &a, &b, "--dry-run", "--json"]);
+    assert_eq!(code, 2, "{json}");
+    let error = json["error"].as_str().unwrap();
+    assert!(
+        error.contains(&format!("No process found matching '{b}'")),
+        "{error}"
+    );
+
+    // a bare `--in` (the next word is a flag) means the current directory
+    let output = proc_cmd()
+        .current_dir(&dir)
+        .args(["kill", &a, &b, "--in", "--dry-run", "--json"])
+        .output()
+        .unwrap();
+    let json: Value = serde_json::from_slice(&output.stdout).unwrap();
+    only_first(&json, output.status.code().unwrap(), "a bare --in");
 }

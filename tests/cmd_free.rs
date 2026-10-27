@@ -214,6 +214,33 @@ fn free_dry_run_warns_about_the_free_port_and_kills_nothing() {
 }
 
 #[test]
+fn free_takes_several_ports_as_separate_arguments() {
+    let mut first = Owned::listener();
+    let mut second = Owned::listener();
+    let (json, code) = run_json(&["free", &first.target(), &second.target(), "--yes", "--json"]);
+    assert_eq!(code, 0, "{json}");
+    assert_eq!(json["success"], true, "{json}");
+    assert_eq!(json["results"].as_array().unwrap().len(), 2, "{json}");
+    assert!(first.ended_within(Duration::from_secs(5)), "{json}");
+    assert!(second.ended_within(Duration::from_secs(5)), "{json}");
+}
+
+#[test]
+fn free_mixes_separate_ports_and_a_comma_list_and_kills_a_holder_once() {
+    let mut held = Owned::listener();
+    let mut other = Owned::listener();
+    let free = format!(":{}", unused_port());
+    // the same port twice has one holder, so one process to kill; the port
+    // nobody holds is warned about, not an error
+    let list = format!("{},{free}", other.target());
+    let (out, code) = run_text(&["free", &held.target(), &held.target(), &list, "--dry-run"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("No process listening on port"), "{out}");
+    assert!(out.contains("Dry run: would kill 2 processes"), "{out}");
+    assert!(held.alive() && other.alive(), "a dry run kills nothing");
+}
+
+#[test]
 fn free_without_yes_and_json_asks_for_yes_and_lists_what_it_would_kill() {
     let mut held = Owned::listener();
     let (json, code) = run_json(&["free", &held.target(), "--json"]);

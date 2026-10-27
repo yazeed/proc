@@ -358,6 +358,34 @@ fn list_a_comma_separated_name_list_finds_each_name_once() {
 }
 
 #[test]
+fn list_names_can_be_separate_arguments() {
+    let first = Owned::listener();
+    let second = Owned::listener();
+    // the same name twice, a name nothing has, and a comma list among them:
+    // each process shows once
+    let list = format!("{},{}", second.name, first.name);
+    let nobody = nobody();
+    let (json, code) = run_json(&[
+        "list",
+        &first.name,
+        &second.name,
+        &nobody,
+        &list,
+        "--json",
+        "--sort",
+        "pid",
+    ]);
+    assert_eq!(code, 0);
+    let mut expected = vec![u64::from(first.pid()), u64::from(second.pid())];
+    expected.sort_unstable();
+    assert_eq!(pids(&json), expected, "{json}");
+
+    // one name of the two, as before
+    let (json, _) = run_json(&["list", &first.name, &nobody, "--json"]);
+    assert_eq!(pids(&json), [u64::from(first.pid())], "{json}");
+}
+
+#[test]
 fn list_path_keeps_the_processes_running_that_executable() {
     let owned = Owned::listener();
     let (json, code) = run_json(&["list", "--path", &owned.exe().to_string_lossy(), "--json"]);

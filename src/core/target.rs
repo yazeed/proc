@@ -114,6 +114,17 @@ pub fn parse_targets(targets_str: &str) -> Vec<String> {
         .collect()
 }
 
+/// Split every target argument the user typed into individual targets
+///
+/// A command takes its targets as separate arguments, and a value may still be
+/// a comma-separated list, so each value goes through [`parse_targets`].
+///
+/// Examples:
+///   ["123", ":3000,:8080", "node"] -> ["123", ":3000", ":8080", "node"]
+pub fn flatten_targets(values: &[String]) -> Vec<String> {
+    values.iter().flat_map(|v| parse_targets(v)).collect()
+}
+
 /// Resolve multiple targets, deduplicating by PID
 ///
 /// Returns a tuple of (found processes, not found target strings)
@@ -185,6 +196,22 @@ mod tests {
             vec![":3000", ":8080", ":9000"]
         );
         assert_eq!(parse_targets(" node , python "), vec!["node", "python"]);
+    }
+
+    #[test]
+    fn separate_arguments_and_comma_lists_flatten_to_one_list_in_order() {
+        let typed = |values: &[&str]| -> Vec<String> {
+            flatten_targets(&values.iter().map(|v| v.to_string()).collect::<Vec<_>>())
+        };
+        assert_eq!(typed(&["123", "456"]), vec!["123", "456"]);
+        assert_eq!(
+            typed(&["123", ":3000,:8080", "node"]),
+            vec!["123", ":3000", ":8080", "node"]
+        );
+        assert_eq!(typed(&["a,b", ",", " c "]), vec!["a", "b", "c"]);
+        // a repeated target stays repeated: the PID dedupe happens when resolving
+        assert_eq!(typed(&["1", "1,1"]), vec!["1", "1", "1"]);
+        assert!(typed(&[]).is_empty());
     }
 
     #[test]

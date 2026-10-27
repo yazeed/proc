@@ -2,13 +2,15 @@
 //!
 //! Usage:
 //!   proc on :3000              # What process is on port 3000?
-//!   proc on :3000,:8080        # What's on multiple ports?
+//!   proc on :3000 :8080        # What's on several ports? (separate arguments)
 //!   proc on 1234               # What ports is PID 1234 listening on?
 //!   proc on node               # What ports are node processes listening on?
 //!   proc on node --in .        # Node processes in cwd and their ports
+//!
+//! Commas still work (`proc on :3000,:8080`) but are deprecated.
 
 use crate::core::{
-    find_ports_for_pid, parse_target, parse_targets, resolve_in_dir, resolve_target, PortInfo,
+    find_ports_for_pid, flatten_targets, parse_target, resolve_in_dir, resolve_target, PortInfo,
     Process, TargetType,
 };
 use crate::error::{ExitCode, ProcError, Result};
@@ -24,11 +26,12 @@ const WRITE_FAILED: &str = "failed printing to stdout";
 /// Show what's on a port, or what ports a process is on
 #[derive(Args, Debug)]
 pub struct OnCommand {
-    /// Target(s): :port, PID, or process name (comma-separated for multiple)
-    #[arg(value_parser = crate::core::validate_target_arg)]
-    pub target: String,
+    /// Target(s): :port, PID, or process name (separate arguments for several)
+    #[arg(required = true, num_args = 1.., value_parser = crate::core::validate_target_arg)]
+    pub target: Vec<String>,
 
-    /// Filter by directory (defaults to current directory if no path given)
+    /// Filter by directory; takes the next word as the directory unless it starts with '-'
+    /// (bare --in is the current directory, --in=DIR is explicit)
     #[arg(long = "in", short = 'i', num_args = 0..=1, default_missing_value = ".")]
     pub in_dir: Option<String>,
 
@@ -48,7 +51,7 @@ pub struct OnCommand {
 impl OnCommand {
     /// Executes the on command, performing bidirectional port/process lookup.
     pub fn execute(&self) -> Result<()> {
-        let targets = parse_targets(&self.target);
+        let targets = flatten_targets(&self.target);
 
         // For single target, use original behavior
         if targets.len() == 1 {
@@ -93,7 +96,7 @@ impl OnCommand {
             // Each target already printed its own warning
             return Err(ProcError::reported(
                 ExitCode::NotFound,
-                format!("No process found matching '{}'", self.target),
+                format!("No process found matching '{}'", self.target.join(" ")),
             ));
         }
 
@@ -127,7 +130,7 @@ impl OnCommand {
         }
 
         if results.is_empty() {
-            return Err(ProcError::ProcessNotFound(self.target.clone()));
+            return Err(ProcError::ProcessNotFound(self.target.join(" ")));
         }
 
         Printer::from_flags(true, self.verbose).print_json(&MultiTargetOutput {
@@ -533,7 +536,7 @@ mod tests {
 
     fn command(in_dir: Option<&str>) -> OnCommand {
         OnCommand {
-            target: "x".to_string(),
+            target: vec!["x".to_string()],
             in_dir: in_dir.map(String::from),
             by_name: None,
             json: false,

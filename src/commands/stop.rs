@@ -4,13 +4,15 @@
 //!   proc stop 1234              # Stop PID 1234
 //!   proc stop :3000             # Stop process on port 3000
 //!   proc stop node              # Stop all node processes
-//!   proc stop :3000,:8080       # Stop multiple targets
-//!   proc stop :3000,1234,node   # Mixed targets (port + PID + name)
+//!   proc stop 1234 5678         # Stop several targets: separate arguments
+//!   proc stop :3000 :8080 node  # Mixed targets (port + port + name)
+//!
+//! Commas still work (`proc stop :3000,:8080`) but are deprecated.
 
 #[cfg(unix)]
 use crate::core::parse_signal_name;
 use crate::core::{
-    apply_filters, apply_to_each, parse_targets, resolve_targets_excluding_self, Process,
+    apply_filters, apply_to_each, flatten_targets, resolve_targets_excluding_self, Process,
 };
 use crate::error::{ProcError, Result};
 use crate::ui::Printer;
@@ -19,9 +21,9 @@ use clap::Args;
 /// Stop process(es) gracefully with SIGTERM
 #[derive(Args, Debug)]
 pub struct StopCommand {
-    /// Target(s): process name, PID, or :port (comma-separated for multiple)
-    #[arg(required = true, value_parser = crate::core::validate_target_arg)]
-    target: String,
+    /// Target(s): process name, PID, or :port (separate arguments for several)
+    #[arg(required = true, num_args = 1.., value_parser = crate::core::validate_target_arg)]
+    target: Vec<String>,
 
     /// Skip confirmation prompt
     #[arg(long, short = 'y')]
@@ -43,7 +45,8 @@ pub struct StopCommand {
     #[arg(long, short, default_value = "10")]
     timeout: u64,
 
-    /// Filter by directory (defaults to current directory if no path given)
+    /// Filter by directory; takes the next word as the directory unless it starts with '-'
+    /// (bare --in is the current directory, --in=DIR is explicit)
     #[arg(long = "in", short = 'i', num_args = 0..=1, default_missing_value = ".")]
     pub in_dir: Option<String>,
 
@@ -78,9 +81,9 @@ impl StopCommand {
             ));
         }
 
-        // Parse comma-separated targets and resolve to processes
+        // Split each value on commas and resolve to processes
         // Use resolve_targets_excluding_self to avoid stopping ourselves
-        let targets = parse_targets(&self.target);
+        let targets = flatten_targets(&self.target);
         let (mut processes, not_found) = resolve_targets_excluding_self(&targets);
 
         // Warn about targets that weren't found
@@ -99,7 +102,7 @@ impl StopCommand {
         }
 
         if processes.is_empty() {
-            return Err(ProcError::ProcessNotFound(self.target.clone()));
+            return Err(ProcError::ProcessNotFound(self.target.join(" ")));
         }
 
         // Dry run: just show what would be stopped

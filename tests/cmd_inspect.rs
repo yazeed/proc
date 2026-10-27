@@ -525,6 +525,48 @@ fn why_several_targets_prints_each_under_its_own_header() {
 }
 
 #[test]
+fn why_takes_several_targets_as_separate_arguments() {
+    let owned = Owned::listener();
+    let (pid, port) = (owned.pid_arg(), owned.port_arg());
+
+    // each target under its own header, in the order typed
+    let (out, _, code) = run_text(&["why", &pid, &port]);
+    assert_eq!(code, 0);
+    let ancestry = out
+        .find(&format!("✓ Ancestry for '{pid}':"))
+        .expect("the PID's header");
+    let port_header = out
+        .find(&format!("✓ Port {} (TCP):", owned.port))
+        .expect("the port's header");
+    assert!(ancestry < port_header, "{out}");
+
+    // one JSON document with a result per target, and the same answer as the comma form
+    let (separate, code) = run_json(&["why", &pid, &port, MISSING_PID, "--json"]);
+    assert_eq!(code, 0);
+    assert_eq!(separate["count"], 2, "{separate}");
+    assert_eq!(separate["results"][0]["target"], pid);
+    assert_eq!(separate["results"][1]["target"], port);
+    let comma = format!("{pid},{port},{MISSING_PID}");
+    let (joined, _) = run_json(&["why", &comma, "--json"]);
+    assert_eq!(joined["count"], 2, "{joined}");
+    let tail = format!("{port},{MISSING_PID}");
+    let (mixed, _) = run_json(&["why", &pid, &tail, "--json"]);
+    assert_eq!(mixed["count"], 2, "{mixed}");
+    assert_eq!(mixed["results"][1]["target"], port);
+}
+
+#[test]
+fn why_with_a_target_that_splits_into_nothing_echoes_the_targets_as_typed() {
+    let (json, code) = run_json(&["why", ",", ",,", "--json"]);
+    assert_eq!(code, 2, "{json}");
+    let error = json["error"].as_str().unwrap();
+    assert!(
+        error.contains("No process found matching ', ,,'"),
+        "{error}"
+    );
+}
+
+#[test]
 fn why_warns_about_a_target_that_is_gone_and_still_answers_for_the_rest() {
     let owned = Owned::listener();
     let targets = format!("{MISSING_PID},{}", owned.pid());
@@ -756,6 +798,69 @@ fn info_warns_about_the_targets_it_did_not_find_and_still_shows_the_rest() {
     assert_eq!(
         json["not_found"],
         serde_json::json!([MISSING_PID, format!(":{gone}")])
+    );
+}
+
+#[test]
+fn info_takes_several_targets_as_separate_arguments() {
+    let first = Owned::listener();
+    let second = Owned::listener();
+    let gone = free_port();
+    let (a, b) = (first.pid_arg(), second.pid_arg());
+    let missing_port = format!(":{gone}");
+
+    let (out, stderr, code) = run_text(&["info", &a, &b, MISSING_PID, &missing_port]);
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(out.matches("✓ Process").count(), 2, "{out}");
+    assert!(
+        out.trim_end()
+            .ends_with(&format!("⚠ Not found: {MISSING_PID}, :{gone}")),
+        "{out}"
+    );
+
+    // the JSON lists keep one entry per target
+    let (json, code) = run_json(&["info", &a, &b, MISSING_PID, &missing_port, "--json"]);
+    assert_eq!(code, 0);
+    assert_eq!(json["found_count"], 2, "{json}");
+    assert_eq!(json["not_found_count"], 2, "{json}");
+    assert_eq!(
+        json["not_found"],
+        serde_json::json!([MISSING_PID, missing_port]),
+        "{json}"
+    );
+
+    // separate arguments and a comma list mix
+    let tail = format!("{b},{MISSING_PID}");
+    let (mixed, _) = run_json(&["info", &a, &tail, "--json"]);
+    assert_eq!(mixed["found_count"], 2, "{mixed}");
+    assert_eq!(mixed["not_found"], serde_json::json!([MISSING_PID]));
+}
+
+#[test]
+fn info_shows_a_pid_given_twice_once() {
+    let owned = Owned::listener();
+    let pid = owned.pid_arg();
+    let both = format!("{pid},{pid}");
+    for args in [
+        ["info", &pid, &pid, "--json"],
+        ["info", &pid, &both, "--json"],
+    ] {
+        let (json, code) = run_json(&args);
+        assert_eq!(code, 0, "{json}");
+        assert_eq!(json["found_count"], 1, "{json}");
+    }
+}
+
+#[test]
+fn info_with_nothing_found_for_several_targets_names_each_one_in_the_list() {
+    let (out, _, code) = run_text(&["info", MISSING_PID, "99999998"]);
+    assert_eq!(code, 2);
+    assert_eq!(out, format!("⚠ Not found: {MISSING_PID}, 99999998\n"));
+    let (json, code) = run_json(&["info", MISSING_PID, "99999998", "--json"]);
+    assert_eq!(code, 2);
+    assert_eq!(
+        json["not_found"],
+        serde_json::json!([MISSING_PID, "99999998"])
     );
 }
 

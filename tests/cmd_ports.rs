@@ -500,6 +500,84 @@ fn on_several_targets_json_counts_a_filtered_out_process_as_not_found() {
     assert_eq!(code, 2, "{json}");
 }
 
+#[test]
+fn on_takes_several_targets_as_separate_arguments_and_commas_still_work() {
+    let a = Owned::listener();
+    let b = Owned::listener();
+    let missing = format!(":{}", unused_port());
+    // (target, PID) of every result: one per matching process, in the order typed
+    let found = |json: &Value| -> Vec<(String, u64)> {
+        json["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| {
+                (
+                    r["target"].as_str().unwrap().to_string(),
+                    r["process"]["pid"].as_u64().unwrap(),
+                )
+            })
+            .collect()
+    };
+    let want = vec![
+        (a.target(), u64::from(a.pid())),
+        (b.pid_arg(), u64::from(b.pid())),
+        (a.name.clone(), u64::from(a.pid())),
+    ];
+
+    let (separate, code) =
+        run_json(&["on", &a.target(), &b.pid_arg(), &a.name, &missing, "--json"]);
+    assert_eq!(code, 0, "{separate}");
+    assert_eq!(found(&separate), want, "{separate}");
+    assert_eq!(separate["count"], 3, "{separate}");
+    assert_eq!(separate["not_found"], serde_json::json!([missing]));
+
+    // the old form, and the two mixed, give the same answer
+    let comma = format!("{},{},{},{missing}", a.target(), b.pid_arg(), a.name);
+    let (joined, _) = run_json(&["on", &comma, "--json"]);
+    assert_eq!(found(&joined), want, "{joined}");
+    assert_eq!(joined["not_found"], separate["not_found"]);
+    let tail = format!("{},{missing}", b.pid_arg());
+    let (mixed, _) = run_json(&["on", &a.target(), &tail, &a.name, "--json"]);
+    assert_eq!(found(&mixed), want, "{mixed}");
+    assert_eq!(mixed["not_found"], separate["not_found"]);
+
+    // human output: each target is shown, a missing one is warned about
+    let (out, _, code) = run_text(&["on", &a.target(), &b.pid_arg(), &missing]);
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        out.contains(&format!("Port {} is used by:", a.port)),
+        "{out}"
+    );
+    assert!(
+        out.contains(&format!("(PID {}) is listening on:", b.pid())),
+        "{out}"
+    );
+    assert!(out.contains("No process listening on port"), "{out}");
+}
+
+#[test]
+fn on_with_nothing_found_echoes_the_targets_as_typed() {
+    // two PIDs nothing runs: the error names both, as typed
+    let (json, code) = run_json(&["on", "4294967", "4294968", "--json"]);
+    assert_eq!(code, 2, "{json}");
+    let error = json["error"].as_str().unwrap();
+    assert!(
+        error.contains("No process found matching '4294967 4294968'"),
+        "{error}"
+    );
+    // and a target that splits into nothing
+    let (json, code) = run_json(&["on", ",", ",,", "--json"]);
+    assert_eq!(code, 2, "{json}");
+    let error = json["error"].as_str().unwrap();
+    assert!(
+        error.contains("No process found matching ', ,,'"),
+        "{error}"
+    );
+    let (out, err, code) = run_text(&["on", ",", ",,"]);
+    assert_eq!(code, 2, "{out}{err}");
+}
+
 // ---- ports ----
 
 /// The `ports` rows (JSON) for the listeners whose process name contains `name`

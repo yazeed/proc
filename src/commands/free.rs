@@ -2,12 +2,14 @@
 //!
 //! Examples:
 //!   proc free :3000              # Kill process on port 3000, verify port freed
-//!   proc free :3000,:8080        # Free multiple ports
+//!   proc free :3000 :8080        # Free several ports: separate arguments
 //!   proc free :3000 --yes        # Skip confirmation
 //!   proc free :3000 --wait 30    # Wait up to 30s for port to free
+//!
+//! Commas still work (`proc free :3000,:8080`) but are deprecated.
 
 use crate::core::port::PortInfo;
-use crate::core::{parse_target, parse_targets, Process, TargetType};
+use crate::core::{flatten_targets, parse_target, Process, TargetType};
 use crate::error::{ExitCode, ProcError, Result};
 use crate::ui::{must_confirm, plural, Printer};
 use clap::Args;
@@ -18,9 +20,9 @@ use serde::Serialize;
 /// Free port(s) by killing the process and verifying the port is available
 #[derive(Args, Debug)]
 pub struct FreeCommand {
-    /// Port target(s): :port (comma-separated for multiple, e.g. :3000,:8080)
-    #[arg(required = true, value_parser = crate::core::validate_target_arg)]
-    pub target: String,
+    /// Port target(s): :port (separate arguments for several, e.g. :3000 :8080)
+    #[arg(required = true, num_args = 1.., value_parser = crate::core::validate_target_arg)]
+    pub target: Vec<String>,
 
     /// Skip confirmation prompt
     #[arg(long, short = 'y')]
@@ -48,7 +50,7 @@ impl FreeCommand {
     pub fn execute(&self) -> Result<()> {
         let printer = Printer::from_flags(self.json, self.verbose);
 
-        let targets = parse_targets(&self.target);
+        let targets = flatten_targets(&self.target);
 
         // Validate all targets are ports
         let mut ports: Vec<u16> = Vec::new();

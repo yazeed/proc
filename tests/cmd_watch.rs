@@ -406,6 +406,23 @@ fn several_targets_are_watched_together_and_listed_once() {
 }
 
 #[test]
+fn several_targets_can_be_separate_arguments() {
+    let first = Owned::listener();
+    let second = Owned::listener();
+    let mut want = vec![u64::from(first.pid()), u64::from(second.pid())];
+    want.sort_unstable();
+
+    let (pid, port) = (first.pid().to_string(), first.port_arg());
+    let frame = first_frame(&["--sort", "pid", &pid, &port, &first.name, &second.name]);
+    assert_eq!(pids(&frame), want, "{frame}");
+
+    // a comma list mixes with them
+    let list = format!("{},{}", first.name, second.name);
+    let frame = first_frame(&["--sort", "pid", &pid, &list]);
+    assert_eq!(pids(&frame), want, "{frame}");
+}
+
+#[test]
 fn a_target_nothing_matches_is_an_empty_frame() {
     let nobody = unique_name();
     let frame = first_frame(&["99999999"]);

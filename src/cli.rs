@@ -23,14 +23,14 @@ const VERSION_INFO: &str = concat!(
 #[command(author, version = VERSION_INFO, about, long_about = None)]
 #[command(propagate_version = true)]
 #[command(
-    after_help = "Targets: :port, PID, or process name. Comma-separate for multiple.
+    after_help = "Targets: :port, PID, or process name. Give several as separate arguments.
 Run 'proc --help' for examples or visit https://github.com/yazeed/proc-cli"
 )]
 #[command(after_long_help = "EXAMPLES:
 
   Port/Process Lookup:
     proc on :3000                  What's on port 3000?
-    proc on :3000,:8080            What's on multiple ports?
+    proc on :3000 :8080            What's on several ports?
     proc on node                   What ports are node processes using?
 
   Find by File:
@@ -52,14 +52,16 @@ Run 'proc --help' for examples or visit https://github.com/yazeed/proc-cli"
     proc list --min-cpu 10         Processes using >10% CPU
 
   Info/Kill/Stop (multi-target):
-    proc info :3000,:8080          Info for multiple targets
-    proc kill :3000,node           Kill port 3000 and node processes
-    proc stop :3000,:8080          Stop multiple targets gracefully
+    proc info :3000 :8080          Info for several targets
+    proc kill :3000 node           Kill port 3000 and node processes
+    proc kill 1234 5678 :8080      Kill two PIDs and whatever is on 8080
+    proc stop :3000 :8080          Stop several targets gracefully
 
   Watch (Real-Time):
     proc watch                     Watch all processes (alias: proc top)
     proc watch node                Watch node processes
     proc watch :3000               Watch process on port 3000
+    proc watch :3000 :8080 node    Watch several targets
     proc watch -n 1 --sort mem     1s refresh, sorted by memory
     proc watch --in . --by node    Node processes in current directory
 
@@ -70,7 +72,7 @@ Run 'proc --help' for examples or visit https://github.com/yazeed/proc-cli"
 
   Free Ports:
     proc free :3000                Kill process, verify port freed
-    proc free :3000,:8080 --yes    Free multiple ports
+    proc free :3000 :8080 --yes    Free several ports
 
   Diagnostics:
     proc why :3000                 Why is port 3000 busy? (ancestry)
@@ -79,6 +81,7 @@ Run 'proc --help' for examples or visit https://github.com/yazeed/proc-cli"
 
   Wait:
     proc wait node                 Wait until node processes exit
+    proc wait 1234 5678            Wait until both exit
     proc wait :3000 --timeout 60   Wait up to 60s for port to free
     proc wait node -n 10 -q        Check every 10s, quiet mode
 
@@ -89,7 +92,11 @@ Run 'proc --help' for examples or visit https://github.com/yazeed/proc-cli"
     proc unstick --force           Recover or terminate stuck processes
     proc stop nginx --signal HUP   Send custom signal (config reload)
 
-Targets: :port, PID, or process name. Comma-separate for multiple.
+Targets: :port, PID, or process name. Give several as separate arguments.
+Comma-separated targets (:3000,:8080) still work but are deprecated and will be
+removed in a future major release.
+--in takes the next word as its directory unless that word starts with '-':
+put it after the targets, or write --in=DIR.
 For more information, visit: https://github.com/yazeed/proc-cli")]
 pub struct Cli {
     /// The subcommand; none prints the orientation text

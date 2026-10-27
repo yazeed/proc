@@ -3,12 +3,17 @@
 //! Examples:
 //!   proc list                  # List all processes
 //!   proc list node             # Filter by name
+//!   proc list node python      # Several names: separate arguments
 //!   proc list --in             # Processes in current directory
 //!   proc list --in /project    # Processes in /project
 //!   proc list --min-cpu 10     # Processes using >10% CPU
+//!
+//! Commas still work (`proc list node,python`) but are deprecated.
 
 use crate::core::filters::resolve_dir;
-use crate::core::{resolve_in_dir, sort_processes, Process, SortKey, StatusFilter};
+use crate::core::{
+    flatten_targets, resolve_in_dir, sort_processes, Process, SortKey, StatusFilter,
+};
 use crate::error::Result;
 use crate::ui::Printer;
 use clap::Args;
@@ -17,10 +22,12 @@ use std::path::PathBuf;
 /// List processes
 #[derive(Args, Debug)]
 pub struct ListCommand {
-    /// Process name or pattern to filter by
-    pub name: Option<String>,
+    /// Process name(s) or pattern(s) to filter by (separate arguments for several)
+    #[arg(num_args = 0..)]
+    pub name: Vec<String>,
 
-    /// Filter by directory (defaults to current directory if no path given)
+    /// Filter by directory; takes the next word as the directory unless it starts with '-'
+    /// (bare --in is the current directory, --in=DIR is explicit)
     #[arg(long = "in", short = 'i', num_args = 0..=1, default_missing_value = ".")]
     pub in_dir: Option<String>,
 
@@ -74,13 +81,10 @@ impl ListCommand {
     pub fn execute(&self) -> Result<()> {
         let printer = Printer::from_flags(self.json, self.verbose).wide(self.wide);
 
-        // Get base process list (supports comma-separated names)
-        let mut processes = if let Some(ref name) = self.name {
-            let names: Vec<String> = name
-                .split(',')
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect();
+        // Get base process list (several names as separate arguments; each may
+        // still be a comma-separated list)
+        let mut processes = if !self.name.is_empty() {
+            let names = flatten_targets(&self.name);
             let mut all = Vec::new();
             let mut seen = std::collections::HashSet::new();
             for n in &names {
@@ -212,7 +216,7 @@ mod tests {
 
     fn command() -> ListCommand {
         ListCommand {
-            name: None,
+            name: Vec::new(),
             in_dir: None,
             path: None,
             min_cpu: None,

@@ -103,6 +103,8 @@ const CASES: &[Case] = &[
     code("on", &["{pid}", "-b", "{name}"], 0),
     code("on", &["{pid}", "--by", "no-such-process-name"], 2),
     code("on", &[MISSING_PID], 2),
+    code("on", &["{pid}", ":{port}"], 0),
+    code("on", &["{pid}", ":{port},{name}", MISSING_PID], 0),
     // ---- for ----
     code("for", &["{exe}"], 0),
     code("for", &["{exe}", "--json"], 0),
@@ -154,6 +156,8 @@ const CASES: &[Case] = &[
     // ---- list ----
     code("list", &[], 0),
     code("list", &["{name}", "--json"], 0),
+    code("list", &["{name}", "no-such-process-name"], 0),
+    code("list", &["{name},no-such-process-name", "{name}"], 0),
     code("list", &["-j", "-v"], 0),
     code("list", &["--verbose", "--wide"], 0),
     code("list", &["-w"], 0),
@@ -176,6 +180,7 @@ const CASES: &[Case] = &[
     code("info", &[":{port}", "-j", "-v"], 0),
     code("info", &["{pid}", "--verbose"], 0),
     code("info", &["{pid}", ":{port}"], 0),
+    code("info", &["{pid}", ":{port},{name}", MISSING_PID], 0),
     code("info", &["{pid}", "--in", "{dir}"], 0),
     code("info", &["{pid}", "-i", "{dir}"], 0),
     code("info", &["{pid}", "--by", "{name}"], 0),
@@ -216,6 +221,8 @@ const CASES: &[Case] = &[
     code("tree", &["--status", "no-such-status"], 4),
     // ---- watch (a table snapshot when stdout isn't a terminal) ----
     code("watch", &["{pid}"], 0),
+    code("watch", &["{pid}", ":{port}", "{name}"], 0),
+    code("watch", &["{pid},:{port}", "{name}"], 0),
     code("watch", &["{pid}", "--interval", "1", "--limit", "3"], 0),
     code("watch", &["{pid}", "-n", "1", "-l", "3", "-s", "mem", "-w"], 0),
     code("watch", &["{pid}", "--verbose", "--wide"], 0),
@@ -232,6 +239,11 @@ const CASES: &[Case] = &[
     // ---- kill ----
     code("kill", &["{pid}", "--yes"], 0),
     code("kill", &[":{port}", "-y", "-j"], 0),
+    code("kill", &["{pid}", ":{port}", "--dry-run"], 0),
+    code("kill", &["{pid}", ":{port},{pid}", "--yes"], 0),
+    code("kill", &[MISSING_PID, "{pid}", "--yes"], 0),
+    code("kill", &["--in", "{dir}", "{pid}", ":{port}", "--yes"], 0),
+    code("kill", &["{pid}", MISSING_PID, "--yes", "--in", "{dir}"], 0),
     // on Windows a graceful kill is taskkill without /F, which a console
     // program refuses ("can only be terminated forcefully"): exit 1
     per_os("kill", &["{pid}", "--graceful", "--yes"], 0, 1),
@@ -247,6 +259,9 @@ const CASES: &[Case] = &[
     // ---- stop ----
     code("stop", &["{pid}", "--yes"], 0),
     code("stop", &[":{port}", "-y", "-j"], 0),
+    code("stop", &["{pid}", ":{port}", "--dry-run"], 0),
+    code("stop", &["{pid}", ":{port},{pid}", "--yes"], 0),
+    code("stop", &[MISSING_PID, "{pid}", "--yes"], 0),
     code("stop", &["{pid}", "--yes", "--timeout", "2"], 0),
     code("stop", &["{pid}", "-y", "-t", "2", "-v"], 0),
     code("stop", &["{pid}", "--dry-run"], 0),
@@ -260,6 +275,8 @@ const CASES: &[Case] = &[
     // ---- free ----
     code("free", &[":{port}", "--yes"], 0),
     code("free", &[":{port}", "-y", "-j"], 0),
+    code("free", &[":{port}", ":{port}", "--yes"], 0),
+    code("free", &[":{port},:{port}", ":{port}", "--dry-run"], 0),
     code("free", &[":{port}", "--yes", "--wait", "2"], 0),
     code("free", &[":{port}", "--yes", "--verbose"], 0),
     code("free", &[":{port}", "-y", "-v"], 0),
@@ -268,6 +285,8 @@ const CASES: &[Case] = &[
     // ---- freeze (SIGSTOP: unsupported on Windows) ----
     per_os("freeze", &["{pid}", "--yes"], 0, 4),
     per_os("freeze", &[":{port}", "-y", "-j"], 0, 4),
+    per_os("freeze", &["{pid}", ":{port}", "--yes"], 0, 4),
+    per_os("freeze", &["{pid}", ":{port},{pid}", "--dry-run"], 0, 4),
     per_os("freeze", &["{pid}", "--yes", "--verbose"], 0, 4),
     per_os("freeze", &["{pid}", "-y", "-v"], 0, 4),
     per_os("freeze", &["{pid}", "--dry-run"], 0, 4),
@@ -278,6 +297,8 @@ const CASES: &[Case] = &[
     // ---- thaw (SIGCONT: unsupported on Windows) ----
     per_os("thaw", &["{pid}", "--yes"], 0, 4),
     per_os("thaw", &[":{port}", "-y", "-j"], 0, 4),
+    per_os("thaw", &["{pid}", ":{port}", "--yes"], 0, 4),
+    per_os("thaw", &["{pid}", ":{port},{pid}", "--dry-run"], 0, 4),
     per_os("thaw", &["{pid}", "--yes", "--verbose"], 0, 4),
     per_os("thaw", &["{pid}", "-y", "-v"], 0, 4),
     per_os("thaw", &["{pid}", "--dry-run"], 0, 4),
@@ -288,6 +309,8 @@ const CASES: &[Case] = &[
     // ---- unstick (has a Windows path: it can only terminate, and only with --force) ----
     code("unstick", &["{pid}", "--yes"], 0),
     code("unstick", &["{pid}", "-y", "-f", "-j"], 0),
+    code("unstick", &["{pid}", ":{port}", "--dry-run"], 0),
+    code("unstick", &["{pid}", ":{port},{pid}", "--yes"], 0),
     code("unstick", &["{pid}", "--yes", "--force", "--verbose"], 0),
     code("unstick", &["{pid}", "--yes", "--timeout", "1"], 0),
     code("unstick", &["{pid}", "--dry-run", "-v"], 0),
@@ -324,6 +347,8 @@ const CASES: &[Case] = &[
     code("why", &["{pid}", "-j", "-v"], 0),
     code("why", &["{pid}", "--verbose"], 0),
     code("why", &["{pid},:{port}"], 0),
+    code("why", &["{pid}", ":{port}"], 0),
+    code("why", &["{pid}", ":{port},{name}", MISSING_PID], 0),
     code("why", &[MISSING_PID], 2),
     // ---- wait (the owned process never exits, so each one times out) ----
     code("wait", &["{pid}", "--timeout", "1"], 1),
@@ -335,6 +360,9 @@ const CASES: &[Case] = &[
     code("wait", &["{pid}", "-t", "1", "-i", "{dir}", "-b", "{name}"], 1),
     code("wait", &["{pid}", "-t", "1", "--by", "{name}"], 1),
     code("wait", &[MISSING_PID, "--timeout", "1"], 2),
+    code("wait", &["{pid}", ":{port}", "-t", "1"], 1),
+    code("wait", &["{pid}", ":{port},{pid}", "-t", "1"], 1),
+    code("wait", &[MISSING_PID, "{pid}", "-t", "1"], 1),
 ];
 
 #[test]
@@ -417,21 +445,70 @@ fn every_flag_is_exercised() {
     );
 }
 
+/// The positional arguments of a case: every word that is not a flag and not the
+/// value of a flag. Which flags take a value comes from the clap definitions, so
+/// `--in {dir}` and `--timeout 2` are not mistaken for targets, and a target
+/// that follows a flag is still found.
+fn positionals(case: &Case) -> Vec<&'static str> {
+    let mut cli = Cli::command();
+    cli.build();
+    let sub = cli
+        .find_subcommand(case.cmd)
+        .unwrap_or_else(|| panic!("{} is not a command", case.cmd));
+    let mut found = Vec::new();
+    let mut words = case.args.iter().copied().peekable();
+    while let Some(word) = words.next() {
+        let def = if let Some(long) = word.strip_prefix("--") {
+            if long.contains('=') {
+                continue; // `--in={dir}`: the value is attached
+            }
+            sub.get_arguments().find(|a| a.get_long() == Some(long))
+        } else if let Some(short) = word.strip_prefix('-') {
+            let mut chars = short.chars();
+            let letter = chars.next();
+            assert!(
+                letter.is_some() && chars.next().is_none(),
+                "{word:?}: the safety check reads one short flag per word"
+            );
+            sub.get_arguments().find(|a| a.get_short() == letter)
+        } else {
+            found.push(word);
+            continue;
+        };
+        let def = def.unwrap_or_else(|| panic!("{} has no flag {word}", case.cmd));
+        if def.get_action().takes_values() {
+            let must_have_one = def.get_num_args().is_some_and(|n| n.min_values() > 0);
+            // An optional value (`--in`) takes the next word unless it is a flag
+            if words
+                .peek()
+                .is_some_and(|next| must_have_one || !next.starts_with('-'))
+            {
+                words.next();
+            }
+        }
+    }
+    found
+}
+
 /// Why a case could touch something the test doesn't own, if it could
 fn unsafe_reason(case: &Case) -> Option<String> {
     if !DESTRUCTIVE.contains(&case.cmd) || case.args.contains(&"--dry-run") {
         return None;
     }
-    // The positional target comes first; each comma-separated piece must be ours
-    if let Some(first) = case.args.first().filter(|a| !a.starts_with('-')) {
-        return if first
-            .split(',')
-            .all(|piece| piece == "{pid}" || piece == ":{port}" || piece == MISSING_PID)
-        {
-            None
-        } else {
-            Some(format!("target {first:?} isn't {{pid}} or :{{port}}"))
-        };
+    // Every positional is a target, and each comma-separated piece of each must be ours
+    let targets = positionals(case);
+    if !targets.is_empty() {
+        for target in targets {
+            let stranger = target
+                .split(',')
+                .find(|piece| !(*piece == "{pid}" || *piece == ":{port}" || *piece == MISSING_PID));
+            if let Some(piece) = stranger {
+                return Some(format!(
+                    "target {piece:?} (in {target:?}) isn't {{pid}} or :{{port}}"
+                ));
+            }
+        }
+        return None;
     }
     // No target: the case must be scoped to the fresh temp directory
     let scoped = case
@@ -463,7 +540,22 @@ fn the_safety_check_rejects_what_it_should() {
     let no_target = code("orphans", &["--kill", "--yes"], 0);
     let wrong_dir = code("stuck", &["--kill", "--in", "/tmp", "--yes"], 0);
     let listed_with_a_stranger = code("kill", &["{pid},node", "--yes"], 0);
-    for case in [bare_name, no_target, wrong_dir, listed_with_a_stranger] {
+    let second_target_a_stranger = code("kill", &["{pid}", "node", "--yes"], 0);
+    let third_target_a_stranger = code("stop", &["{pid}", ":{port}", "node", "--yes"], 0);
+    let stranger_after_a_flag = code("kill", &["--yes", "{pid}", "node"], 0);
+    let stranger_after_a_valued_flag = code("kill", &["--in", "{dir}", "{pid}", "node", "-y"], 0);
+    let stranger_in_a_later_comma_list = code("free", &[":{port}", ":{port},:9", "--yes"], 0);
+    for case in [
+        bare_name,
+        no_target,
+        wrong_dir,
+        listed_with_a_stranger,
+        second_target_a_stranger,
+        third_target_a_stranger,
+        stranger_after_a_flag,
+        stranger_after_a_valued_flag,
+        stranger_in_a_later_comma_list,
+    ] {
         assert!(unsafe_reason(&case).is_some(), "{case:?} should be unsafe");
     }
 
@@ -471,6 +563,11 @@ fn the_safety_check_rejects_what_it_should() {
         code("kill", &["{pid}", "--yes"], 0),
         code("free", &[":{port}", "--yes"], 0),
         code("kill", &["node", "--dry-run"], 0),
+        code("kill", &["{pid}", ":{port}", "--yes"], 0),
+        code("kill", &["--yes", "{pid}", ":{port},{pid}"], 0),
+        code("kill", &["--in", "{dir}", "{pid}", "-y"], 0),
+        code("stop", &["{pid}", "--timeout", "2", "-y"], 0),
+        code("stop", &["{pid}", "--yes", "--by", "{name}"], 0),
         code("orphans", &["--kill", "--yes", "--in", "{dir}"], 0),
         code("list", &["--min-cpu", "5"], 0),
     ];

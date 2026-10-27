@@ -4,11 +4,13 @@
 //!   proc wait node                   # Wait until all node processes exit
 //!   proc wait 1234                   # Wait for PID 1234 to exit
 //!   proc wait :3000                  # Wait for whatever is on port 3000 to exit
-//!   proc wait node,python            # Wait for all to exit
+//!   proc wait node python            # Wait for all to exit (separate arguments)
 //!   proc wait node --timeout 3600    # Timeout after 1 hour
 //!   proc wait node --interval 10     # Status line every 10 seconds
+//!
+//! Commas still work (`proc wait node,python`) but are deprecated.
 
-use crate::core::{apply_filters, parse_targets, resolve_targets, Process};
+use crate::core::{apply_filters, flatten_targets, resolve_targets, Process};
 use crate::error::{ExitCode, ProcError, Result};
 use crate::ui::{format_duration, plural, Printer};
 use clap::Args;
@@ -18,9 +20,9 @@ use serde::Serialize;
 /// Wait for process(es) to exit
 #[derive(Args, Debug)]
 pub struct WaitCommand {
-    /// Target(s): process name, PID, or :port (comma-separated for multiple)
-    #[arg(required = true, value_parser = crate::core::validate_target_arg)]
-    target: String,
+    /// Target(s): process name, PID, or :port (separate arguments for several)
+    #[arg(required = true, num_args = 1.., value_parser = crate::core::validate_target_arg)]
+    target: Vec<String>,
 
     /// Seconds between status lines (exits are noticed within a quarter second)
     #[arg(long, short = 'n', default_value = "5")]
@@ -38,7 +40,8 @@ pub struct WaitCommand {
     #[arg(long, short = 'v')]
     verbose: bool,
 
-    /// Filter by directory (defaults to current directory if no path given)
+    /// Filter by directory; takes the next word as the directory unless it starts with '-'
+    /// (bare --in is the current directory, --in=DIR is explicit)
     #[arg(long = "in", short = 'i', num_args = 0..=1, default_missing_value = ".")]
     pub in_dir: Option<String>,
 
@@ -60,7 +63,7 @@ impl WaitCommand {
         let interval = self.interval.max(1);
 
         // Parse and resolve targets
-        let targets = parse_targets(&self.target);
+        let targets = flatten_targets(&self.target);
         let (mut processes, not_found) = resolve_targets(&targets);
 
         if !not_found.is_empty() {
@@ -71,7 +74,7 @@ impl WaitCommand {
         apply_filters(&mut processes, &self.in_dir, &self.by_name);
 
         if processes.is_empty() {
-            return Err(ProcError::ProcessNotFound(self.target.clone()));
+            return Err(ProcError::ProcessNotFound(self.target.join(" ")));
         }
 
         // Real CPU readings for the verbose list, the only view that shows CPU;
@@ -189,7 +192,7 @@ impl WaitCommand {
                         timed_out: true,
                         elapsed_seconds: elapsed,
                         elapsed_human: format_duration(elapsed),
-                        target: self.target.clone(),
+                        target: self.target.join(" "),
                         initial_count,
                         exited,
                         still_running,
@@ -250,7 +253,7 @@ impl WaitCommand {
                 timed_out: false,
                 elapsed_seconds: elapsed,
                 elapsed_human: format_duration(elapsed),
-                target: self.target.clone(),
+                target: self.target.join(" "),
                 initial_count,
                 exited,
                 still_running: vec![],

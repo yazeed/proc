@@ -4,10 +4,12 @@
 //!   proc info 1234              # Info for PID
 //!   proc info :3000             # Info for process on port 3000
 //!   proc info node              # Info for processes named node
-//!   proc info :3000,:8080       # Info for multiple targets
-//!   proc info :3000,1234,node   # Mixed targets (port + PID + name)
+//!   proc info :3000 :8080       # Info for several targets: separate arguments
+//!   proc info :3000 1234 node   # Mixed targets (port + PID + name)
+//!
+//! Commas still work (`proc info :3000,:8080`) but are deprecated.
 
-use crate::core::{apply_filters, parse_targets, resolve_target, Process};
+use crate::core::{apply_filters, flatten_targets, resolve_target, Process};
 use crate::error::{ExitCode, ProcError, Result};
 use crate::ui::{colorize_status, format_duration, format_memory, Printer};
 use clap::Args;
@@ -18,8 +20,8 @@ use std::fmt::Write;
 /// Show detailed process information
 #[derive(Args, Debug)]
 pub struct InfoCommand {
-    /// Target(s): PID, :port, or name (comma-separated for multiple)
-    #[arg(required = true, value_parser = crate::core::validate_target_arg)]
+    /// Target(s): PID, :port, or name (separate arguments for several)
+    #[arg(required = true, num_args = 1.., value_parser = crate::core::validate_target_arg)]
     targets: Vec<String>,
 
     /// Output as JSON
@@ -30,7 +32,8 @@ pub struct InfoCommand {
     #[arg(long, short = 'v')]
     verbose: bool,
 
-    /// Filter by directory (defaults to current directory if no path given)
+    /// Filter by directory; takes the next word as the directory unless it starts with '-'
+    /// (bare --in is the current directory, --in=DIR is explicit)
     #[arg(long = "in", short = 'i', num_args = 0..=1, default_missing_value = ".")]
     pub in_dir: Option<String>,
 
@@ -44,8 +47,8 @@ impl InfoCommand {
     pub fn execute(&self) -> Result<()> {
         let printer = Printer::from_flags(self.json, self.verbose);
 
-        // Flatten targets - support both space-separated and comma-separated
-        let all_targets: Vec<String> = self.targets.iter().flat_map(|t| parse_targets(t)).collect();
+        // Separate arguments, each of which may still be a comma-separated list
+        let all_targets = flatten_targets(&self.targets);
 
         let (mut found, not_found) = resolve_all(&all_targets, resolve_target);
 
