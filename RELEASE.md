@@ -110,8 +110,10 @@ for img in debian:bullseye-slim alpine; do
 done
 cd -
 
-# Agent skill: skills.sh doesn't watch the repo. It re-reads main only when someone
-# installs the skill with telemetry on, and its pages are cached, so trigger it once.
+# Agent skill: skills.sh doesn't watch the repo. An install with telemetry on can make
+# it re-read main, but not reliably: after the 1.14.5 install its page stayed on 1.14.3
+# for days (others report the same: vercel-labs/skills#2501, #2557). Install once anyway;
+# installs get the current skill from GitHub either way, only the listing page lags.
 mkdir -p /tmp/proc-skill-check && cd /tmp/proc-skill-check
 bunx skills add yazeed/proc-cli --skill proc-cli -a claude-code -y   # installs into this folder only
 cd - && rm -rf /tmp/proc-skill-check
@@ -123,7 +125,7 @@ Also verify:
 - [ ] `proc --version` — Shows new version
 - [ ] `proc manpage` — Includes new commands
 - [ ] `proc completions bash` — Includes new commands
-- [ ] https://www.skills.sh/yazeed/proc-cli/proc-cli — shows the new skill text (allow time for its cache to refresh after the install above)
+- [ ] https://www.skills.sh/yazeed/proc-cli/proc-cli — check its "This skill describes proc X.Y.Z" line. If it is still an old version a day later, ask for a refresh with an issue on [vercel-labs/skills](https://github.com/vercel-labs/skills/issues) (there's no self-service refresh). Agents installing the skill are unaffected: `skills add` reads the current SKILL.md from GitHub
 
 ## 8. Cleanup
 
