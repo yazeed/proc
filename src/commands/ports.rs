@@ -103,21 +103,11 @@ impl PortsCommand {
 
         // Filter by address exposure
         if self.exposed {
-            ports.retain(|p| {
-                p.address
-                    .as_ref()
-                    .map(|a| a == "0.0.0.0" || a == "::" || a == "*")
-                    .unwrap_or(true)
-            });
+            ports.retain(PortInfo::is_exposed);
         }
 
         if self.local {
-            ports.retain(|p| {
-                p.address
-                    .as_ref()
-                    .map(|a| a == "127.0.0.1" || a == "::1" || a.starts_with("[::1]"))
-                    .unwrap_or(false)
-            });
+            ports.retain(PortInfo::is_local);
         }
 
         // Filter by port range (e.g., "3000-9000"), validated when parsed

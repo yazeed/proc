@@ -154,24 +154,14 @@ impl PortInfo {
         let addr_port =
             name_col.trim_end_matches(|c: char| c == ')' || c.is_alphabetic() || c == '(');
 
-        // Split address and port
-        let last_colon = addr_port.rfind(':')?;
-        let port_str = &addr_port[last_colon + 1..];
-        let port: u16 = port_str.parse().ok()?;
-
-        let addr_part = &addr_port[..last_colon];
-        let address = Some(if addr_part == "*" || addr_part.is_empty() {
-            "0.0.0.0".to_string()
-        } else {
-            addr_part.to_string()
-        });
+        let (address, port) = split_listen_address(addr_port)?;
 
         Some(PortInfo {
             port,
             protocol: Protocol::Tcp,
             pid,
             process_name,
-            address,
+            address: Some(address),
         })
     }
 
@@ -363,12 +353,8 @@ impl PortInfo {
             return None;
         }
 
-        // Local address is column 2 (e.g., "0.0.0.0:135")
-        let local_addr = parts[1];
-        let port_str = local_addr.rsplit(':').next()?;
-        let port: u16 = port_str.parse().ok()?;
-
-        let address = local_addr.rsplit(':').nth(1).map(String::from);
+        // Local address is column 2 (e.g., "0.0.0.0:135" or "[::]:135")
+        let (address, port) = split_listen_address(parts[1])?;
 
         // PID is the last column
         let pid: u32 = parts.last()?.parse().ok()?;
@@ -381,7 +367,7 @@ impl PortInfo {
             protocol: Protocol::Tcp,
             pid,
             process_name,
-            address,
+            address: Some(address),
         })
     }
 
@@ -397,6 +383,44 @@ impl PortInfo {
         let name = line.split(',').next()?;
         Some(escape_control(name.trim_matches('"')).into_owned())
     }
+
+    /// Whether the port is open to the network: bound to every address. A port
+    /// with no known address counts as open.
+    pub fn is_exposed(&self) -> bool {
+        self.address
+            .as_ref()
+            .map(|a| a == "0.0.0.0" || a == "::" || a == "*")
+            .unwrap_or(true)
+    }
+
+    /// Whether the port is bound to loopback only
+    pub fn is_local(&self) -> bool {
+        self.address
+            .as_ref()
+            .map(|a| a == "127.0.0.1" || a == "::1")
+            .unwrap_or(false)
+    }
+}
+
+/// Split a listening socket's local address, as lsof and netstat print it, into
+/// the bind address and the port. IPv6 addresses come in brackets (`[::1]:631`,
+/// `[fe80::1%eth0]:22`) and are returned without them, as the kernel tables on
+/// Linux are; `*`, every address, is returned as `0.0.0.0`. A scope suffix
+/// (`%eth0`) stays.
+#[cfg(any(target_os = "macos", target_os = "windows", test))]
+fn split_listen_address(local: &str) -> Option<(String, u16)> {
+    let (host, port) = local.rsplit_once(':')?;
+    let port = port.parse().ok()?;
+    let host = host
+        .strip_prefix('[')
+        .and_then(|h| h.strip_suffix(']'))
+        .unwrap_or(host);
+    let address = if host.is_empty() || host == "*" {
+        "0.0.0.0"
+    } else {
+        host
+    };
+    Some((address.to_string(), port))
 }
 
 /// Parse a port from various formats (":3000", "3000", etc.)
@@ -433,6 +457,93 @@ mod tests {
         assert_eq!(info.process_name, "Activity Monitor");
         assert_eq!(info.pid, 644);
         assert_eq!(info.port, 7768);
+    }
+
+    #[test]
+    fn test_split_listen_address() {
+        for (local, address, port) in [
+            ("0.0.0.0:22", "0.0.0.0", 22),
+            ("127.0.0.1:8080", "127.0.0.1", 8080),
+            ("*:80", "0.0.0.0", 80),
+            ("[::]:80", "::", 80),
+            ("[::1]:631", "::1", 631),
+            ("[::ffff:127.0.0.1]:8080", "::ffff:127.0.0.1", 8080),
+            ("[fe80::1%eth0]:22", "fe80::1%eth0", 22),
+            ("127.0.0.53%lo:53", "127.0.0.53%lo", 53),
+            // A bare IPv6 address with the port after the last colon
+            (":::22", "::", 22),
+        ] {
+            assert_eq!(
+                split_listen_address(local),
+                Some((address.to_string(), port)),
+                "{local}"
+            );
+        }
+        for bad in ["[::1]", "[::1]:http", "3000", ""] {
+            assert_eq!(split_listen_address(bad), None, "{bad}");
+        }
+    }
+
+    #[test]
+    fn test_parse_lsof_line_ipv6_has_no_brackets() {
+        // lsof brackets IPv6 addresses; the address is reported without them on
+        // every OS, so `ports --local` matches "::1"
+        let line =
+            "python3.12  4242  zee  3u  IPv6 0x3cc8c443bf3e8f62  0t0  TCP [::1]:8000 (LISTEN)";
+        let info = PortInfo::parse_lsof_line(line).unwrap();
+        assert_eq!(info.address.as_deref(), Some("::1"));
+        assert_eq!(info.port, 8000);
+        assert_eq!(info.pid, 4242);
+        assert!(info.is_local() && !info.is_exposed());
+    }
+
+    #[test]
+    fn test_parse_netstat_line_keeps_the_whole_ipv6_address() {
+        // The address used to be the text between the last two colons, so
+        // [::]:135 came back as "]" and [::1]:8080 as "]" too, and neither
+        // `ports --exposed` nor `ports --local` kept them
+        let any = "  TCP    [::]:135               [::]:0                 LISTENING       1092";
+        let info = PortInfo::parse_netstat_line(any, &|_| None).unwrap();
+        assert_eq!(info.address.as_deref(), Some("::"));
+        assert_eq!(info.port, 135);
+        assert_eq!(info.pid, 1092);
+        assert!(info.is_exposed() && !info.is_local());
+
+        let loopback =
+            "  TCP    [::1]:8080             [::]:0                 LISTENING       4242";
+        let info = PortInfo::parse_netstat_line(loopback, &|_| None).unwrap();
+        assert_eq!(info.address.as_deref(), Some("::1"));
+        assert_eq!(info.port, 8080);
+        assert!(info.is_local() && !info.is_exposed());
+
+        let v4 = "  TCP    127.0.0.1:8081        0.0.0.0:0              LISTENING       4242";
+        let info = PortInfo::parse_netstat_line(v4, &|_| None).unwrap();
+        assert_eq!(info.address.as_deref(), Some("127.0.0.1"));
+        assert!(info.is_local() && !info.is_exposed());
+    }
+
+    #[test]
+    fn exposed_and_local_read_the_address() {
+        let on = |address: Option<&str>| PortInfo {
+            port: 1,
+            protocol: Protocol::Tcp,
+            pid: 1,
+            process_name: "x".to_string(),
+            address: address.map(String::from),
+        };
+        for exposed in ["0.0.0.0", "::", "*"] {
+            assert!(on(Some(exposed)).is_exposed(), "{exposed}");
+            assert!(!on(Some(exposed)).is_local(), "{exposed}");
+        }
+        for local in ["127.0.0.1", "::1"] {
+            assert!(on(Some(local)).is_local(), "{local}");
+            assert!(!on(Some(local)).is_exposed(), "{local}");
+        }
+        // Bound to one address that is neither: in neither group
+        let one = on(Some("192.168.1.5"));
+        assert!(!one.is_exposed() && !one.is_local());
+        // No known address: counts as open, never as local
+        assert!(on(None).is_exposed() && !on(None).is_local());
     }
 
     #[test]
@@ -628,7 +739,7 @@ node     101  zee   25u  IPv4 0xf    0t0      TCP  *:notaport (LISTEN)
             vec![
                 (3000, 100, "node", Some("0.0.0.0")),
                 (3001, 100, "node", Some("127.0.0.1")),
-                (3002, 7, "Activity Monitor", Some("[::1]")),
+                (3002, 7, "Activity Monitor", Some("::1")),
             ]
         );
     }

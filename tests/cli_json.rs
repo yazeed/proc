@@ -169,6 +169,39 @@ fn info_not_found_exits_not_found() {
     assert_eq!(json["success"], false);
 }
 
+#[test]
+fn ipv6_loopback_listener_keeps_its_address() {
+    // lsof and netstat bracket IPv6 addresses ([::1]:PORT). The address came
+    // back as "]" on Windows and "[::1]" on macOS, so `proc ports --local` and
+    // `--exposed` disagreed between systems
+    let Ok(listener) = std::net::TcpListener::bind("[::1]:0") else {
+        return; // no IPv6 on this machine
+    };
+    let port = listener.local_addr().unwrap().port();
+
+    let (json, code) = run_json(&["on", &format!(":{port}"), "--json"]);
+    assert_eq!(code, 0, "{json}");
+    assert_eq!(json["address"], "::1", "{json}");
+
+    let (json, code) = run_json(&["ports", "--local", "--json"]);
+    assert_eq!(code, 0, "{json}");
+    let listed = json["ports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|p| p["port"] == port && p["address"] == "::1");
+    assert!(listed, "[::1]:{port} missing from ports --local: {json}");
+
+    let (json, code) = run_json(&["ports", "--exposed", "--json"]);
+    assert_eq!(code, 0, "{json}");
+    let listed = json["ports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|p| p["port"] == port);
+    assert!(!listed, "[::1]:{port} is loopback, not exposed: {json}");
+}
+
 #[cfg(unix)]
 mod unix {
     use super::*;
