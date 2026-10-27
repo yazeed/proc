@@ -16,7 +16,11 @@ use crate::ui::{format_duration, format_memory, Printer};
 use clap::Args;
 use colored::*;
 use serde::Serialize;
+use std::io::Write;
 use std::path::PathBuf;
+
+/// What println! would say if stdout were closed
+const WRITE_FAILED: &str = "failed printing to stdout";
 
 /// Show what's on a port, or what ports a process is on
 #[derive(Args, Debug)]
@@ -220,7 +224,8 @@ impl OnCommand {
             };
             printer.print_json(&output);
         } else {
-            self.print_process_on_port(&port_info, process.as_ref());
+            self.print_process_on_port(&mut std::io::stdout(), &port_info, process.as_ref())
+                .expect(WRITE_FAILED);
         }
 
         Ok(())
@@ -263,7 +268,8 @@ impl OnCommand {
             };
             printer.print_json(&output);
         } else {
-            self.print_ports_for_process(&process, &ports);
+            self.print_ports_for_process(&mut std::io::stdout(), &process, &ports)
+                .expect(WRITE_FAILED);
         }
 
         Ok(())
@@ -320,111 +326,148 @@ impl OnCommand {
             printer.print_json(&output);
         } else {
             for (proc, ports) in &all_results {
-                self.print_ports_for_process(proc, ports);
+                self.print_ports_for_process(&mut std::io::stdout(), proc, ports)
+                    .expect(WRITE_FAILED);
             }
         }
 
         Ok(())
     }
 
-    fn print_process_on_port(&self, port_info: &PortInfo, process: Option<&Process>) {
-        println!(
+    fn print_process_on_port(
+        &self,
+        out: &mut impl Write,
+        port_info: &PortInfo,
+        process: Option<&Process>,
+    ) -> std::io::Result<()> {
+        writeln!(
+            out,
             "{} Port {} is used by:",
             "✓".green().bold(),
             port_info.port.to_string().cyan().bold()
-        );
-        println!();
+        )?;
+        writeln!(out)?;
 
-        println!(
+        writeln!(
+            out,
             "  {} {} (PID {})",
             "Process:".bright_black(),
             port_info.process_name.white().bold(),
             port_info.pid.to_string().cyan()
-        );
+        )?;
 
         if let Some(proc) = process {
             if let Some(ref cwd) = proc.cwd {
-                println!("  {} {}", "Directory:".bright_black(), cwd);
+                writeln!(out, "  {} {}", "Directory:".bright_black(), cwd)?;
             }
             if let Some(ref path) = proc.exe_path {
-                println!("  {} {}", "Path:".bright_black(), path.bright_black());
+                writeln!(out, "  {} {}", "Path:".bright_black(), path.bright_black())?;
             }
         }
 
         let addr = port_info.address.as_deref().unwrap_or("*");
-        println!(
+        writeln!(
+            out,
             "  {} {} on {}",
             "Listening:".bright_black(),
             format!("{:?}", port_info.protocol).to_uppercase(),
             addr
-        );
+        )?;
 
         if let Some(proc) = process {
-            println!(
+            writeln!(
+                out,
                 "  {} {:.1}% CPU, {}",
                 "Resources:".bright_black(),
                 proc.cpu_percent,
                 format_memory(proc.memory_mb)
-            );
+            )?;
 
             if let Some(uptime) = proc.uptime_secs {
-                println!("  {} {}", "Uptime:".bright_black(), format_duration(uptime));
+                writeln!(
+                    out,
+                    "  {} {}",
+                    "Uptime:".bright_black(),
+                    format_duration(uptime)
+                )?;
             }
 
             if self.verbose {
                 if let Some(ref cmd) = proc.command {
-                    println!("  {} {}", "Command:".bright_black(), cmd.bright_black());
+                    writeln!(
+                        out,
+                        "  {} {}",
+                        "Command:".bright_black(),
+                        cmd.bright_black()
+                    )?;
                 }
             }
         }
 
-        println!();
+        writeln!(out)
     }
 
-    fn print_ports_for_process(&self, process: &Process, ports: &[PortInfo]) {
-        println!(
+    fn print_ports_for_process(
+        &self,
+        out: &mut impl Write,
+        process: &Process,
+        ports: &[PortInfo],
+    ) -> std::io::Result<()> {
+        writeln!(
+            out,
             "{} {} (PID {}) is listening on:",
             "✓".green().bold(),
             process.name.white().bold(),
             process.pid.to_string().cyan().bold()
-        );
-        println!();
+        )?;
+        writeln!(out)?;
 
         if ports.is_empty() {
-            println!("  {} No listening ports", "ℹ".blue());
+            writeln!(out, "  {} No listening ports", "ℹ".blue())?;
         } else {
             for port_info in ports {
                 let addr = port_info.address.as_deref().unwrap_or("*");
-                println!(
+                writeln!(
+                    out,
                     "  {} :{} ({} on {})",
                     "→".bright_black(),
                     port_info.port.to_string().cyan(),
                     format!("{:?}", port_info.protocol).to_uppercase(),
                     addr
-                );
+                )?;
             }
         }
 
         if process.cwd.is_some() || process.uptime_secs.is_some() {
-            println!();
+            writeln!(out)?;
         }
         if let Some(ref cwd) = process.cwd {
-            println!("  {} {}", "Directory:".bright_black(), cwd);
+            writeln!(out, "  {} {}", "Directory:".bright_black(), cwd)?;
         }
         if let Some(uptime) = process.uptime_secs {
-            println!("  {} {}", "Uptime:".bright_black(), format_duration(uptime));
+            writeln!(
+                out,
+                "  {} {}",
+                "Uptime:".bright_black(),
+                format_duration(uptime)
+            )?;
         }
 
         if self.verbose {
             if let Some(ref path) = process.exe_path {
-                println!("  {} {}", "Path:".bright_black(), path.bright_black());
+                writeln!(out, "  {} {}", "Path:".bright_black(), path.bright_black())?;
             }
             if let Some(ref cmd) = process.command {
-                println!("  {} {}", "Command:".bright_black(), cmd.bright_black());
+                writeln!(
+                    out,
+                    "  {} {}",
+                    "Command:".bright_black(),
+                    cmd.bright_black()
+                )?;
             }
         }
 
-        println!();
+        writeln!(out)
     }
 }
 
@@ -549,19 +592,42 @@ mod tests {
         assert_eq!(port_hit(listener(), Some(without_cwd())).len(), 1);
     }
 
+    /// What a print function writes, with colours off
+    fn printed(print: impl FnOnce(&mut Vec<u8>) -> std::io::Result<()>) -> String {
+        colored::control::set_override(false);
+        let mut out = Vec::new();
+        print(&mut out).unwrap();
+        String::from_utf8(out).unwrap()
+    }
+
     #[test]
     fn a_port_without_a_process_still_prints() {
         // Neither the process nor its details: the address shows as `*`
         let mut cmd = command(None);
         cmd.verbose = true;
-        cmd.print_process_on_port(&listener(), None);
+        let out = printed(|w| cmd.print_process_on_port(w, &listener(), None));
+        assert_eq!(
+            out,
+            "✓ Port 4000 is used by:\n\n  Process: x (PID 1)\n  Listening: TCP on *\n\n"
+        );
     }
 
     #[test]
     fn a_process_missing_its_details_prints_without_them() {
         let mut cmd = command(None);
         cmd.verbose = true;
-        cmd.print_process_on_port(&listener(), Some(&without_cwd()));
-        cmd.print_ports_for_process(&without_cwd(), &[listener()]);
+
+        let out = printed(|w| cmd.print_process_on_port(w, &listener(), Some(&without_cwd())));
+        assert!(out.contains("Listening: TCP on *\n"), "{out}");
+        assert!(out.contains("Resources: 0.0% CPU"), "{out}");
+        for label in ["Directory:", "Path:", "Uptime:", "Command:"] {
+            assert!(!out.contains(label), "{label} printed for nothing: {out}");
+        }
+
+        let out = printed(|w| cmd.print_ports_for_process(w, &without_cwd(), &[listener()]));
+        assert_eq!(
+            out,
+            "✓ x (PID 1) is listening on:\n\n  → :4000 (TCP on *)\n\n"
+        );
     }
 }

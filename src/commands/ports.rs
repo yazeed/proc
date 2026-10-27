@@ -14,6 +14,7 @@ use clap::Args;
 use colored::*;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
+use std::io::Write;
 use std::path::Path;
 
 /// Whether the process is known and its working directory is inside `dir`
@@ -157,64 +158,73 @@ impl PortsCommand {
         if self.json {
             self.print_json(&ports, &process_map);
         } else {
-            self.print_human(&ports, &process_map);
+            self.print_human(&mut std::io::stdout(), &ports, &process_map)
+                .expect("failed printing to stdout");
         }
 
         Ok(())
     }
 
-    fn print_human(&self, ports: &[PortInfo], process_map: &HashMap<u32, Process>) {
+    fn print_human(
+        &self,
+        out: &mut impl Write,
+        ports: &[PortInfo],
+        process_map: &HashMap<u32, Process>,
+    ) -> std::io::Result<()> {
         if ports.is_empty() {
-            println!("{} No listening ports found", "⚠".yellow().bold());
-            return;
+            return writeln!(out, "{} No listening ports found", "⚠".yellow().bold());
         }
 
-        println!(
+        writeln!(
+            out,
             "{} Found {} listening port{}",
             "✓".green().bold(),
             ports.len().to_string().cyan().bold(),
             if ports.len() == 1 { "" } else { "s" }
-        );
-        println!();
+        )?;
+        writeln!(out)?;
 
         // Header
-        println!(
+        writeln!(
+            out,
             "{:<8} {:<10} {:<8} {:<20} {:<15}",
             "PORT".bright_blue().bold(),
             "PROTO".bright_blue().bold(),
             "PID".bright_blue().bold(),
             "PROCESS".bright_blue().bold(),
             "ADDRESS".bright_blue().bold()
-        );
-        println!("{}", "─".repeat(65).bright_black());
+        )?;
+        writeln!(out, "{}", "─".repeat(65).bright_black())?;
 
         for port in ports {
             let addr = port.address.as_deref().unwrap_or("*");
             let proto = format!("{:?}", port.protocol).to_uppercase();
 
-            println!(
+            writeln!(
+                out,
                 "{:<8} {:<10} {:<8} {:<20} {:<15}",
                 port.port.to_string().cyan().bold(),
                 proto.white(),
                 port.pid.to_string().cyan(),
                 truncate_string(&port.process_name, 19).white(),
                 addr.bright_black()
-            );
+            )?;
 
             // In verbose mode, show path
             if self.verbose {
                 if let Some(proc) = process_map.get(&port.pid) {
                     if let Some(ref path) = proc.exe_path {
-                        println!(
+                        writeln!(
+                            out,
                             "         {} {}",
                             "↳".bright_black(),
                             truncate_string(path, 55).bright_black()
-                        );
+                        )?;
                     }
                 }
             }
         }
-        println!();
+        writeln!(out)
     }
 
     fn print_json(&self, ports: &[PortInfo], process_map: &HashMap<u32, Process>) {
@@ -289,7 +299,8 @@ mod tests {
     }
 
     #[test]
-    fn verbose_listing_copes_with_a_port_whose_process_has_no_path() {
+    fn verbose_listing_shows_a_path_only_when_the_process_has_one() {
+        colored::control::set_override(false);
         let cmd = PortsCommand {
             by_name: None,
             in_dir: None,
@@ -308,9 +319,51 @@ mod tests {
             process_name: "x".to_string(),
             address: None,
         };
-        // No entry for the PID, then an entry without a path
-        cmd.print_human(std::slice::from_ref(&port), &HashMap::new());
-        let map = HashMap::from([(1, process(None, None))]);
-        cmd.print_human(std::slice::from_ref(&port), &map);
+        let listing = |map: &HashMap<u32, Process>| {
+            let mut out = Vec::new();
+            cmd.print_human(&mut out, std::slice::from_ref(&port), map)
+                .unwrap();
+            String::from_utf8(out).unwrap()
+        };
+
+        // The row is there, with `*` for the missing address, in every case
+        let without_entry = listing(&HashMap::new());
+        let row = without_entry
+            .lines()
+            .find(|l| l.starts_with("4000"))
+            .unwrap();
+        assert!(
+            row.contains("TCP") && row.trim_end().ends_with('*'),
+            "{row}"
+        );
+        assert!(!without_entry.contains('↳'), "{without_entry}");
+
+        let without_path = listing(&HashMap::from([(1, process(None, None))]));
+        assert!(!without_path.contains('↳'), "{without_path}");
+
+        let with_path = listing(&HashMap::from([(1, process(None, Some("/bin/x")))]));
+        assert!(with_path.contains("↳ /bin/x\n"), "{with_path}");
+    }
+
+    #[test]
+    fn an_empty_listing_says_so() {
+        colored::control::set_override(false);
+        let cmd = PortsCommand {
+            by_name: None,
+            in_dir: None,
+            exposed: false,
+            local: false,
+            json: false,
+            verbose: false,
+            sort: PortSortKey::Port,
+            limit: None,
+            range: None,
+        };
+        let mut out = Vec::new();
+        cmd.print_human(&mut out, &[], &HashMap::new()).unwrap();
+        assert_eq!(
+            String::from_utf8(out).unwrap(),
+            "⚠ No listening ports found\n"
+        );
     }
 }

@@ -67,7 +67,8 @@ fn fresh_dir() -> (tempfile::TempDir, PathBuf) {
 /// two tests share would match the other test's proc.
 fn nobody() -> String {
     let n = COUNTER.fetch_add(1, Ordering::SeqCst);
-    format!("nobody-{}-{n}", std::process::id())
+    // Ends in `x`, so no name is the start of another (`-1x` in `-10x`)
+    format!("nobody-{}-{n}x", std::process::id())
 }
 
 /// A port nothing listens on: one the OS just handed out and took back
@@ -480,10 +481,22 @@ fn on_several_targets_json_with_nothing_found_exits_not_found() {
 
 #[test]
 fn on_several_targets_json_counts_a_filtered_out_process_as_not_found() {
+    // `a` runs in the directory, `b` somewhere else
     let a = Owned::listener();
-    let (_other, other) = other_dir();
-    let targets = format!("{},{}", a.target(), a.pid_arg());
-    let (json, code) = run_json(&["on", &targets, "--in", &other, "--json"]);
+    let b = Owned::listener();
+    let targets = format!("{},{}", a.target(), b.pid_arg());
+    let (json, code) = run_json(&["on", &targets, "--in", &a.dir(), "--json"]);
+    assert_eq!(code, 0, "{json}");
+    assert_eq!(json["count"], 1, "{json}");
+    assert_eq!(json["results"][0]["process"]["pid"], a.pid());
+    assert_eq!(
+        json["not_found"],
+        serde_json::json!([b.pid_arg()]),
+        "{json}"
+    );
+
+    // Everything filtered out is an error, not an empty answer
+    let (json, code) = run_json(&["on", &b.pid_arg(), "--in", &a.dir(), "--json"]);
     assert_eq!(code, 2, "{json}");
 }
 
@@ -573,15 +586,17 @@ fn ports_verbose_shows_the_executable_path() {
         .lines()
         .find(|l| l.contains('↳'))
         .unwrap_or_else(|| panic!("no path line: {out}"));
-    // The path is cut at 55 characters, so look for its tail end of the name
-    assert!(
-        path_line.contains(std::env::consts::EXE_SUFFIX),
-        "{path_line}"
-    );
-
     let json = ports_by(&p.name, &["--verbose"]);
     let exe = json["ports"][0]["exe_path"].as_str().unwrap();
     assert!(exe.contains(&p.name), "{exe}");
+
+    // The table cuts a long path; whatever it shows is the start of the real one
+    let shown = path_line.trim().trim_start_matches('↳').trim();
+    let start: String = exe.chars().take(40).collect();
+    assert!(shown.starts_with(&start), "{shown} is not the path {exe}");
+    if exe.chars().count() <= 55 {
+        assert_eq!(shown, exe);
+    }
 }
 
 #[test]
