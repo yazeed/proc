@@ -20,7 +20,7 @@ use std::path::Path;
 /// Whether the process is known and its working directory is inside `dir`
 fn cwd_within(proc: Option<&Process>, dir: &Path) -> bool {
     proc.and_then(|p| p.cwd.as_deref())
-        .is_some_and(|cwd| Path::new(cwd).starts_with(dir))
+        .is_some_and(|cwd| crate::core::filters::cwd_within(cwd, dir))
 }
 
 /// An inclusive port range, START-END, such as 8000-9000

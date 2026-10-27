@@ -26,7 +26,6 @@ use crossterm::{
 use serde::Serialize;
 use std::collections::HashSet;
 use std::io::{self, IsTerminal, Write};
-use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use sysinfo::{Pid, System};
 
@@ -224,7 +223,7 @@ impl WatchCommand {
         if let Some(ref dir_path) = in_dir_filter {
             processes.retain(|p| {
                 if let Some(ref proc_cwd) = p.cwd {
-                    PathBuf::from(proc_cwd).starts_with(dir_path)
+                    crate::core::filters::cwd_within(proc_cwd, dir_path)
                 } else {
                     false
                 }

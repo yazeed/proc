@@ -138,8 +138,7 @@ impl ListCommand {
         // Directory filter (--in)
         if let Some(ref dir_path) = in_dir_filter {
             if let Some(ref proc_cwd) = p.cwd {
-                let proc_path = PathBuf::from(proc_cwd);
-                if !proc_path.starts_with(dir_path) {
+                if !crate::core::filters::cwd_within(proc_cwd, dir_path) {
                     return false;
                 }
             } else {

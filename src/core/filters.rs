@@ -4,7 +4,7 @@
 
 use crate::core::{Process, ProcessStatus};
 use clap::ValueEnum;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Values accepted by `--status`. An unknown value is a usage error (exit 4),
 /// not a filter that silently matches everything.
@@ -97,9 +97,48 @@ pub fn matches_by_filter(process: &Process, pattern: &str) -> bool {
 /// Check if a process matches an `--in` directory filter.
 pub fn matches_in_filter(process: &Process, dir_path: &std::path::Path) -> bool {
     if let Some(ref cwd) = process.cwd {
-        PathBuf::from(cwd).starts_with(dir_path)
+        cwd_within(cwd, dir_path)
     } else {
         false
+    }
+}
+
+/// Whether a process's cwd is `dir` or under it.
+///
+/// `dir` is already in the OS's own form (see [`resolve_dir`]). A Windows cwd
+/// is not always: it comes back in whatever form the process was started
+/// with. Measured on a GitHub runner, a process spawned with cwd
+/// `C:\Users\RUNNER~1\AppData\Local\Temp\.tmpX` reports
+/// `"cwd": "C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\.tmpX\\"` (short name) while its
+/// `exe_path` is `C:\Users\runneradmin\...` (long). So when the plain
+/// comparison fails, on Windows the cwd is canonicalized too and compared again.
+pub fn cwd_within(cwd: &str, dir: &Path) -> bool {
+    #[cfg(windows)]
+    let canonicalize = |p: &Path| p.canonicalize().ok();
+    #[cfg(not(windows))]
+    let canonicalize = |_: &Path| None;
+    cwd_within_with(cwd, dir, cfg!(windows), canonicalize)
+}
+
+/// [`cwd_within`] with the canonicalizer and the platform switch as inputs,
+/// so every OS can test the Windows path with a fake canonicalizer.
+fn cwd_within_with(
+    cwd: &str,
+    dir: &Path,
+    retry_canonical: bool,
+    canonicalize: impl Fn(&Path) -> Option<PathBuf>,
+) -> bool {
+    if Path::new(cwd).starts_with(dir) {
+        return true;
+    }
+    if !retry_canonical {
+        return false;
+    }
+    match canonicalize(Path::new(cwd)) {
+        Some(canonical) => {
+            PathBuf::from(strip_verbatim_prefix(&canonical.to_string_lossy())).starts_with(dir)
+        }
+        None => false,
     }
 }
 
@@ -341,5 +380,54 @@ mod match_tests {
         process.command = Some("/usr/bin/Node server.js".to_string());
         assert!(matches_by_filter(&process, "node"));
         assert!(!matches_by_filter(&process, "python"));
+    }
+}
+
+#[cfg(test)]
+mod cwd_within_tests {
+    use super::cwd_within_with;
+    use std::path::{Path, PathBuf};
+
+    /// Maps the short name to the long one, as Windows canonicalize does
+    /// (forward slashes, so the paths mean the same on every OS)
+    fn fake(p: &Path) -> Option<PathBuf> {
+        let s = p.to_string_lossy().replace("RUNNER~1", "runneradmin");
+        s.starts_with("C:").then(|| PathBuf::from(s))
+    }
+
+    #[test]
+    fn a_plain_match_needs_no_canonicalizing() {
+        assert!(cwd_within_with(
+            "/srv/app/api",
+            Path::new("/srv/app"),
+            false,
+            |_| None
+        ));
+        assert!(!cwd_within_with(
+            "/srv/other",
+            Path::new("/srv/app"),
+            false,
+            |_| None
+        ));
+    }
+
+    #[test]
+    fn a_short_name_cwd_matches_the_long_name_dir_when_retrying() {
+        let cwd = "C:/Users/RUNNER~1/Temp/.tmpX/";
+        let dir = Path::new("C:/Users/runneradmin/Temp/.tmpX");
+        assert!(cwd_within_with(cwd, dir, true, fake));
+        assert!(!cwd_within_with(cwd, dir, false, fake));
+    }
+
+    #[test]
+    fn a_cwd_that_cannot_be_canonicalized_does_not_match() {
+        let dir = Path::new("C:/Users/runneradmin/Temp");
+        assert!(!cwd_within_with("D:/gone", dir, true, fake));
+    }
+
+    #[test]
+    fn a_canonical_cwd_outside_the_dir_does_not_match() {
+        let dir = Path::new("C:/Users/runneradmin/Temp");
+        assert!(!cwd_within_with("C:/Users/RUNNER~1/Other", dir, true, fake));
     }
 }

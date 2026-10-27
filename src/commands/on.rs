@@ -17,7 +17,6 @@ use clap::Args;
 use colored::*;
 use serde::Serialize;
 use std::io::Write;
-use std::path::PathBuf;
 
 /// What println! would say if stdout were closed
 const WRITE_FAILED: &str = "failed printing to stdout";
@@ -146,8 +145,7 @@ impl OnCommand {
     fn matches_in_filter(&self, proc: &Process) -> bool {
         if let Some(ref dir_path) = resolve_in_dir(&self.in_dir) {
             if let Some(ref proc_cwd) = proc.cwd {
-                let proc_path = PathBuf::from(proc_cwd);
-                proc_path.starts_with(dir_path)
+                crate::core::filters::cwd_within(proc_cwd, dir_path)
             } else {
                 false
             }

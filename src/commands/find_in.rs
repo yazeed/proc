@@ -109,7 +109,7 @@ impl InCommand {
         processes.retain(|p| {
             p.cwd
                 .as_ref()
-                .is_some_and(|cwd| PathBuf::from(cwd).starts_with(&dir_filter))
+                .is_some_and(|cwd| crate::core::filters::cwd_within(cwd, &dir_filter))
         });
 
         // A missing path with nothing running there is a typo, not an empty
