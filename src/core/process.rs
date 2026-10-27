@@ -77,6 +77,18 @@ fn cpu_percent_between(used_before_ms: u64, used_after_ms: u64, wall: Duration) 
     (used_after_ms.saturating_sub(used_before_ms) as f64 / wall_ms * 100.0) as f32
 }
 
+/// Why a command such as `taskkill` failed, in its own words: what it wrote to
+/// stderr, else to stdout, else its exit status
+/// (compiled on Unix for the tests only)
+#[cfg(any(windows, test))]
+fn command_failure(stdout: &[u8], stderr: &[u8], status: &str) -> String {
+    [stderr, stdout]
+        .iter()
+        .map(|out| String::from_utf8_lossy(out).trim().to_string())
+        .find(|text| !text.is_empty())
+        .unwrap_or_else(|| format!("exited with {status}"))
+}
+
 /// The CPU time each process in `sys` has used so far, in ms
 fn cpu_used(sys: &System) -> std::collections::HashMap<Pid, u64> {
     sys.processes()
@@ -663,18 +675,29 @@ impl Process {
             .map_err(|e| ProcError::SignalError(e.to_string()))
     }
 
-    /// Graceful termination (Windows)
+    /// Graceful termination (Windows): `taskkill` without `/F` asks the
+    /// process to close its windows, so it fails for a console program, which
+    /// has none. That failure is returned, with taskkill's reason, rather than
+    /// reported as success.
     #[cfg(windows)]
     pub fn terminate(&self) -> Result<()> {
         use std::process::Command;
 
         self.ensure_same_process()?;
-        Command::new("taskkill")
+        let output = Command::new("taskkill")
             .args(["/PID", &self.pid.to_string()])
             .output()
             .map_err(|e| ProcError::SystemError(e.to_string()))?;
 
-        Ok(())
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(ProcError::SignalError(command_failure(
+                &output.stdout,
+                &output.stderr,
+                &output.status.to_string(),
+            )))
+        }
     }
 
     /// Send an arbitrary signal to the process (Unix only)
@@ -858,6 +881,24 @@ mod tests {
         // a counter that went backwards (a reused PID) or no time passing is 0
         assert_eq!(cpu_percent_between(6_000, 5_000, second), 0.0);
         assert_eq!(cpu_percent_between(0, 1_000, Duration::ZERO), 0.0);
+    }
+
+    #[test]
+    fn a_failed_command_is_explained_in_its_own_words() {
+        let reason = "ERROR: The process with PID 7 could not be terminated.";
+        assert_eq!(
+            command_failure(b"", reason.as_bytes(), "exit code: 1"),
+            reason
+        );
+        // stdout when stderr is empty, trimmed
+        assert_eq!(
+            command_failure(b"  not here\r\n", b"", "exit code: 1"),
+            "not here"
+        );
+        assert_eq!(
+            command_failure(b"", b"  \n", "exit code: 128"),
+            "exited with exit code: 128"
+        );
     }
 
     #[test]

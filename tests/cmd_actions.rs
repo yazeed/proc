@@ -795,16 +795,25 @@ fn kill_ends_a_process_and_says_so() {
 fn kill_graceful_sends_a_normal_stop_request() {
     let mut owned = Owned::listener();
     let (json, code) = run_json(&["kill", &owned.pid_arg(), "--graceful", "--yes", "--json"]);
-    assert_eq!(code, 0, "{json}");
-    assert_eq!(json["succeeded_count"], 1, "{json}");
     // on Unix a graceful kill is SIGTERM, which the listener does not ignore
     #[cfg(unix)]
-    assert_eq!(
-        owned.ended_by_signal(Duration::from_secs(15)),
-        Some(libc::SIGTERM)
-    );
+    {
+        assert_eq!(code, 0, "{json}");
+        assert_eq!(json["succeeded_count"], 1, "{json}");
+        assert_eq!(
+            owned.ended_by_signal(Duration::from_secs(15)),
+            Some(libc::SIGTERM)
+        );
+    }
+    // on Windows a graceful kill is taskkill without /F, which a console
+    // program (no window to close) refuses: proc says so, with taskkill's
+    // reason, and the listener keeps running
     #[cfg(not(unix))]
-    assert!(owned.ended_within(Duration::from_secs(15)));
+    {
+        assert_eq!(code, 1, "{json}");
+        assert_eq!(json["failed_count"], 1, "{json}");
+        assert!(!owned.ended_within(Duration::from_secs(2)), "{json}");
+    }
 }
 
 // ---- freeze and thaw ----

@@ -120,7 +120,13 @@ impl StopCommand {
             if let Some(signal) = custom_signal {
                 return proc.send_signal(signal);
             }
-            proc.terminate()
+            match proc.terminate() {
+                // Windows can't ask a console program to close (taskkill
+                // without /F needs a window); it still gets stopped, by the
+                // force kill after --timeout
+                Err(_) if cfg!(not(unix)) && proc.is_running() => Ok(()),
+                result => result,
+            }
         });
 
         let outlived = self.wait_for_exit(&signalled);
