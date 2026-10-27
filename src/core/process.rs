@@ -71,7 +71,9 @@ fn macos_zombies(known: &std::collections::HashSet<u32>) -> Vec<Process> {
         .map(|d| d.as_secs())
         .unwrap_or(0);
 
-    buf.chunks_exact(KINFO_PROC_SIZE)
+    buf.as_chunks::<KINFO_PROC_SIZE>()
+        .0
+        .iter()
         .filter(|p| p[P_STAT] == SZOMB)
         .filter_map(|p| {
             let pid = read_u32(p, P_PID);
@@ -387,17 +389,41 @@ impl Process {
             true,
         );
 
-        if let Some(proc) = sys.process(Pid::from_u32(self.pid)) {
-            if proc.kill() {
-                Ok(())
-            } else {
-                Err(ProcError::SignalError(format!(
-                    "Failed to kill process {}",
-                    self.pid
-                )))
+        match sys.process(Pid::from_u32(self.pid)) {
+            Some(proc) if self.is_same(proc) => {
+                if proc.kill() {
+                    Ok(())
+                } else {
+                    Err(ProcError::SignalError(format!(
+                        "Failed to kill process {}",
+                        self.pid
+                    )))
+                }
             }
-        } else {
-            Err(ProcError::ProcessNotFound(self.pid.to_string()))
+            // gone, or the PID now belongs to a new process
+            _ => Err(ProcError::ProcessNotFound(self.pid.to_string())),
+        }
+    }
+
+    /// Whether `current`, the process now holding this PID, is the one this record
+    /// describes. A different start time means the PID was reused by a new process.
+    fn is_same(&self, current: &sysinfo::Process) -> bool {
+        match self.start_time {
+            Some(ours) if current.start_time() > 0 => current.start_time().abs_diff(ours) <= 1,
+            _ => true,
+        }
+    }
+
+    /// Checked right before each signal, so a delayed one (stop's SIGKILL comes up
+    /// to --timeout seconds after the target was resolved) can't reach a new
+    /// process that reused the PID.
+    fn ensure_same_process(&self) -> Result<()> {
+        let mut sys = System::new();
+        let pid = Pid::from_u32(self.pid);
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+        match sys.process(pid) {
+            Some(current) if self.is_same(current) => Ok(()),
+            _ => Err(ProcError::ProcessNotFound(self.pid.to_string())),
         }
     }
 
@@ -431,6 +457,7 @@ impl Process {
         use nix::sys::signal::{kill, Signal};
         use nix::unistd::Pid as NixPid;
 
+        self.ensure_same_process()?;
         kill(NixPid::from_raw(self.pid as i32), Signal::SIGTERM)
             .map_err(|e| ProcError::SignalError(e.to_string()))
     }
@@ -440,6 +467,7 @@ impl Process {
     pub fn terminate(&self) -> Result<()> {
         use std::process::Command;
 
+        self.ensure_same_process()?;
         Command::new("taskkill")
             .args(["/PID", &self.pid.to_string()])
             .output()
@@ -453,6 +481,7 @@ impl Process {
     pub fn send_signal(&self, signal: nix::sys::signal::Signal) -> Result<()> {
         use nix::sys::signal::kill;
         use nix::unistd::Pid as NixPid;
+        self.ensure_same_process()?;
         kill(NixPid::from_raw(self.pid as i32), signal)
             .map_err(|e| ProcError::SignalError(format!("{}: {}", signal, e)))
     }
@@ -517,10 +546,7 @@ impl Process {
         match sys.process(pid) {
             None => false,
             Some(current) if current.status() == SysProcessStatus::Zombie => false,
-            Some(current) => match self.start_time {
-                Some(ours) if current.start_time() > 0 => current.start_time().abs_diff(ours) <= 1,
-                _ => true,
-            },
+            Some(current) => self.is_same(current),
         }
     }
 
@@ -635,6 +661,39 @@ mod tests {
             me.start_time = Some(start - 3600);
             assert!(!me.is_running(), "a reused PID counted as the same process");
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_signals_never_reach_a_process_that_reused_the_pid() {
+        let mut child = std::process::Command::new("sleep")
+            .arg("300")
+            .spawn()
+            .unwrap();
+        let mut stale = Process::find_by_pid(child.id()).unwrap().unwrap();
+        // A record from before the PID was reused: same PID, older start time
+        stale.start_time = stale.start_time.map(|t| t - 3600);
+
+        let kill = stale.kill();
+        let term = stale.terminate();
+        let sig = stale.send_signal(nix::sys::signal::Signal::SIGKILL);
+        let alive = child.try_wait().unwrap().is_none();
+        let _ = child.kill();
+        let _ = child.wait();
+
+        assert!(
+            alive,
+            "a stale record signalled the process now using its PID"
+        );
+        assert!(
+            matches!(kill, Err(ProcError::ProcessNotFound(_))),
+            "{kill:?}"
+        );
+        assert!(
+            matches!(term, Err(ProcError::ProcessNotFound(_))),
+            "{term:?}"
+        );
+        assert!(matches!(sig, Err(ProcError::ProcessNotFound(_))), "{sig:?}");
     }
 
     #[test]

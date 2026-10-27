@@ -29,6 +29,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`proc ports --range` ignored a range it couldn't read** (`abc`, `70000-80000`) and listed every port; a reversed range (`9000-8000`) matched nothing. Both now exit 4 and say why
 - **A mistyped port such as `:70000` was searched for as a process name** and reported "not found" (exit 2). Every command now rejects it as invalid input (exit 4): ports go from `:1` to `:65535`
 
+### Security
+
+- **Signals can't reach a process that reused the PID.** Every signal (`kill`, `stop`, `free`, `freeze`, `thaw`, `unstick` and the `--kill` flags) first checks that the PID still belongs to the same process, by its start time. `stop` sends its SIGKILL up to `--timeout` seconds after finding the target, long enough for a PID to be reused
+- **Process names from lsof can't inject terminal escapes or crash proc (macOS).** The full-name change above decodes lsof's `\xNN` escapes; only printable characters are decoded now, so a process named with escape sequences can't control the terminal, and a name with `\x` before a multi-byte character can't make `proc ports` panic. Neither was in a release
+
 ### Added
 
 - **[FAQ page](https://proc-cli.com/faq)**: 16 answers to the most searched process and port questions ("address already in use", killing a process on a port on Mac and Windows, zombies, orphans, pausing a process), each with the proc command and the classic alternative

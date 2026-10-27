@@ -26,9 +26,7 @@ use serde::Serialize;
 use std::time::Duration;
 
 #[cfg(unix)]
-use nix::sys::signal::{kill, Signal};
-#[cfg(unix)]
-use nix::unistd::Pid;
+use nix::sys::signal::Signal;
 
 /// Attempt to recover stuck processes
 #[derive(Args, Debug)]
@@ -356,10 +354,9 @@ impl UnstickCommand {
             return Outcome::NotStuck;
         }
 
-        let pid = Pid::from_raw(proc.pid as i32);
-
+        // Signals go through Process, which checks the PID wasn't reused meanwhile
         // Step 1: SIGCONT (wake if stopped)
-        let _ = kill(pid, Signal::SIGCONT);
+        let _ = proc.send_signal(Signal::SIGCONT);
         std::thread::sleep(Duration::from_secs(1));
 
         if self.check_recovered(proc) {
@@ -367,7 +364,7 @@ impl UnstickCommand {
         }
 
         // Step 2: SIGINT (interrupt)
-        if kill(pid, Signal::SIGINT).is_err() && !proc.is_running() {
+        if proc.send_signal(Signal::SIGINT).is_err() && !proc.is_running() {
             return Outcome::Terminated;
         }
         std::thread::sleep(Duration::from_secs(3));

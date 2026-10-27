@@ -90,18 +90,28 @@ impl PortInfo {
     }
 
     /// lsof writes characters it can't print in a column, spaces included, as
-    /// \xNN, so "Activity Monitor" arrives as "Activity\x20Monitor"
+    /// \xNN, so "Activity Monitor" arrives as "Activity\x20Monitor".
+    ///
+    /// Only printable ASCII is decoded. Control characters stay escaped, so a
+    /// process name can't send escape sequences to the terminal, and the name is
+    /// read as bytes, so a "\x" before a multi-byte character can't panic.
     #[cfg(target_os = "macos")]
     fn unescape_lsof(name: &str) -> String {
+        fn hex(b: u8) -> Option<u8> {
+            (b as char).to_digit(16).map(|d| d as u8)
+        }
         let bytes = name.as_bytes();
         let mut out = Vec::with_capacity(bytes.len());
         let mut i = 0;
         while i < bytes.len() {
-            if bytes[i] == b'\\' && bytes.get(i + 1) == Some(&b'x') && i + 3 < bytes.len() {
-                if let Ok(b) = u8::from_str_radix(&name[i + 2..i + 4], 16) {
-                    out.push(b);
-                    i += 4;
-                    continue;
+            if let [b'\\', b'x', hi, lo, ..] = bytes[i..] {
+                if let (Some(hi), Some(lo)) = (hex(hi), hex(lo)) {
+                    let decoded = hi << 4 | lo;
+                    if (0x20..=0x7e).contains(&decoded) {
+                        out.push(decoded);
+                        i += 4;
+                        continue;
+                    }
                 }
             }
             out.push(bytes[i]);
@@ -335,6 +345,23 @@ mod tests {
         assert_eq!(info.process_name, "Activity Monitor");
         assert_eq!(info.pid, 644);
         assert_eq!(info.port, 7768);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_unescape_lsof_is_safe_for_any_name() {
+        // Control characters stay escaped, so a process name can't inject
+        // terminal escape sequences (ESC [ 2 J clears the screen)
+        assert_eq!(PortInfo::unescape_lsof("evil\\x1b[2J"), "evil\\x1b[2J");
+        assert_eq!(PortInfo::unescape_lsof("a\\x7fb"), "a\\x7fb");
+        assert_eq!(
+            PortInfo::unescape_lsof("Activity\\x20Monitor"),
+            "Activity Monitor"
+        );
+        // "\x" followed by a multi-byte character used to panic on a byte slice
+        assert_eq!(PortInfo::unescape_lsof("x\\xé1"), "x\\xé1");
+        assert_eq!(PortInfo::unescape_lsof("x\\x"), "x\\x");
+        assert_eq!(PortInfo::unescape_lsof("x\\x4"), "x\\x4");
     }
 
     #[test]
