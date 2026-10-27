@@ -65,29 +65,20 @@ pub fn resolve_target(target: &str) -> Result<Vec<Process>> {
     }
 }
 
-/// Resolve a single target to exactly one process
-pub fn resolve_target_single(target: &str) -> Result<Process> {
-    let processes = resolve_target(target)?;
-
-    if processes.is_empty() {
-        return Err(ProcError::ProcessNotFound(target.to_string()));
-    }
-
-    if processes.len() > 1 {
-        return Err(ProcError::InvalidInput(format!(
-            "Target '{}' matches {} processes. Be more specific.",
-            target,
-            processes.len()
-        )));
-    }
-
-    Ok(processes.into_iter().next().unwrap())
-}
-
 /// Resolve port to process
 fn resolve_port(port: u16) -> Result<Vec<Process>> {
-    match PortInfo::find_by_port(port)? {
-        Some(port_info) => match Process::find_by_pid(port_info.pid)? {
+    process_on_port(port, PortInfo::find_by_port(port)?, Process::find_by_pid)
+}
+
+/// The process behind `listener`, what was found listening on `port`; `find` looks
+/// a process up by PID. The process can end between the two lookups.
+fn process_on_port(
+    port: u16,
+    listener: Option<PortInfo>,
+    find: impl FnOnce(u32) -> Result<Option<Process>>,
+) -> Result<Vec<Process>> {
+    match listener {
+        Some(port_info) => match find(port_info.pid)? {
             Some(proc) => Ok(vec![proc]),
             None => Err(ProcError::ProcessGone(port_info.pid)),
         },
@@ -215,8 +206,88 @@ mod tests {
     }
 
     #[test]
+    fn a_colon_target_that_is_not_a_port_is_a_name() {
+        for target in [":abc", ":70000", ":"] {
+            assert!(
+                matches!(parse_target(target), TargetType::Name(n) if n == target),
+                "{target}"
+            );
+        }
+    }
+
+    #[test]
     fn test_parse_target_name() {
         assert!(matches!(parse_target("node"), TargetType::Name(_)));
         assert!(matches!(parse_target("my-process"), TargetType::Name(_)));
+    }
+
+    #[test]
+    fn only_a_colon_target_has_to_be_a_port() {
+        // names and PIDs are left alone, alone or in a list with ports
+        assert_eq!(validate_target_arg("node").unwrap(), "node");
+        assert_eq!(validate_target_arg("1234").unwrap(), "1234");
+        assert_eq!(validate_target_arg(":3000, node").unwrap(), ":3000, node");
+        for bad in [":70000", ":0", ":abc", "node,:70000"] {
+            let err = validate_target_arg(bad).unwrap_err();
+            assert!(err.contains("is not a port"), "{bad}: {err}");
+        }
+    }
+
+    fn listener(pid: u32) -> PortInfo {
+        PortInfo {
+            port: 4000,
+            protocol: crate::core::Protocol::Tcp,
+            pid,
+            process_name: "x".to_string(),
+            address: None,
+        }
+    }
+
+    fn own_process() -> Process {
+        Process::find_by_pid(std::process::id()).unwrap().unwrap()
+    }
+
+    #[test]
+    fn a_port_resolves_to_the_process_listening_on_it() {
+        let found = process_on_port(4000, Some(listener(7)), |pid| {
+            assert_eq!(pid, 7);
+            Ok(Some(own_process()))
+        })
+        .unwrap();
+        assert_eq!(found.len(), 1);
+
+        let none = process_on_port(4000, None, |_| panic!("no listener, no lookup"));
+        assert!(
+            matches!(none, Err(ProcError::PortNotFound(4000))),
+            "{none:?}"
+        );
+
+        // the process ended after the port was listed
+        let gone = process_on_port(4000, Some(listener(7)), |_| Ok(None));
+        assert!(matches!(gone, Err(ProcError::ProcessGone(7))), "{gone:?}");
+
+        let failed = process_on_port(4000, Some(listener(7)), |_| {
+            Err(ProcError::SystemError("no".to_string()))
+        });
+        assert!(
+            matches!(failed, Err(ProcError::SystemError(_))),
+            "{failed:?}"
+        );
+    }
+
+    #[test]
+    fn targets_resolve_once_each_and_never_to_ourselves_when_asked() {
+        let me = std::process::id().to_string();
+        let targets = vec![me.clone(), me.clone(), "99999999".to_string()];
+
+        // listed twice, found once; the made-up PID is not found
+        let (found, missing) = resolve_targets(&targets);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].pid, std::process::id());
+        assert_eq!(missing, vec!["99999999".to_string()]);
+
+        let (found, missing) = resolve_targets_excluding_self(&targets);
+        assert!(found.is_empty());
+        assert_eq!(missing, vec!["99999999".to_string()]);
     }
 }

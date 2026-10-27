@@ -89,6 +89,34 @@ fn command_failure(stdout: &[u8], stderr: &[u8], status: &str) -> String {
         .unwrap_or_else(|| format!("exited with {status}"))
 }
 
+/// The result of asking sysinfo to kill process `pid`, which says whether the
+/// kill was delivered
+fn kill_outcome(delivered: bool, pid: u32) -> Result<()> {
+    if delivered {
+        Ok(())
+    } else {
+        Err(ProcError::SignalError(format!(
+            "Failed to kill process {}",
+            pid
+        )))
+    }
+}
+
+/// What a `taskkill` run (no `/F`) came to: success, or the reason it gave
+/// (compiled on Unix for the tests only)
+#[cfg(any(windows, test))]
+fn taskkill_outcome(output: &std::process::Output) -> Result<()> {
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(ProcError::SignalError(command_failure(
+            &output.stdout,
+            &output.stderr,
+            &output.status.to_string(),
+        )))
+    }
+}
+
 /// The CPU time each process in `sys` has used so far, in ms
 fn cpu_used(sys: &System) -> std::collections::HashMap<Pid, u64> {
     sys.processes()
@@ -116,9 +144,46 @@ fn counts_as_stuck(is_thread: bool, run_time: u64, timeout_secs: u64, looks_stuc
 /// process from the kernel, as `ps` does, and keep the zombies sysinfo didn't return.
 #[cfg(target_os = "macos")]
 fn macos_zombies(known: &std::collections::HashSet<u32>) -> Vec<Process> {
-    // libc has no kinfo_proc for macOS, so read the few fields we need at their
-    // offsets in the 64-bit layout (checked against a live process's known values)
-    const KINFO_PROC_SIZE: usize = 648;
+    let table = read_proc_table(|buf, size| {
+        let mut mib = [libc::CTL_KERN, libc::KERN_PROC, libc::KERN_PROC_ALL, 0];
+        let null = std::ptr::null_mut();
+        // SAFETY: `buf` is null (report the size needed) or points to `*size`
+        // writable bytes, which is how read_proc_table calls it
+        unsafe { libc::sysctl(mib.as_mut_ptr(), 4, buf, size, null, 0) }
+    });
+    zombies_in(&table, known)
+}
+
+/// libc has no kinfo_proc for macOS, so the few fields we need are read at their
+/// offsets in the 64-bit layout (checked against a live process's known values)
+#[cfg(target_os = "macos")]
+const KINFO_PROC_SIZE: usize = 648;
+
+/// The kernel's table of every process, as raw kinfo_proc records; empty if the
+/// kernel refuses. `sysctl` is the call to make (a buffer or null, and the size
+/// in and out), so a test can make it fail.
+#[cfg(target_os = "macos")]
+fn read_proc_table(
+    sysctl: impl Fn(*mut libc::c_void, &mut libc::size_t) -> libc::c_int,
+) -> Vec<u8> {
+    let mut size: libc::size_t = 0;
+    // the first call only reports the size needed
+    if sysctl(std::ptr::null_mut(), &mut size) != 0 {
+        return Vec::new();
+    }
+    // room for processes started in between
+    size += 64 * KINFO_PROC_SIZE;
+    let mut buf: Vec<u8> = vec![0; size];
+    if sysctl(buf.as_mut_ptr().cast(), &mut size) != 0 {
+        return Vec::new();
+    }
+    buf.truncate(size);
+    buf
+}
+
+/// The zombies in a table read by `read_proc_table` that `known` doesn't list
+#[cfg(target_os = "macos")]
+fn zombies_in(buf: &[u8], known: &std::collections::HashSet<u32>) -> Vec<Process> {
     const P_STARTTIME_SEC: usize = 0;
     const P_STAT: usize = 36;
     const P_PID: usize = 40;
@@ -127,31 +192,6 @@ fn macos_zombies(known: &std::collections::HashSet<u32>) -> Vec<Process> {
     const E_PPID: usize = 560;
     const SZOMB: u8 = 5;
 
-    let mut mib = [libc::CTL_KERN, libc::KERN_PROC, libc::KERN_PROC_ALL, 0];
-    let mut size: libc::size_t = 0;
-    let mut buf: Vec<u8> = Vec::new();
-    // SAFETY: the first call only reports the size needed; the second fills a
-    // buffer of the size we pass, with room for processes started in between
-    unsafe {
-        let null = std::ptr::null_mut();
-        if libc::sysctl(mib.as_mut_ptr(), 4, null, &mut size, null, 0) != 0 {
-            return Vec::new();
-        }
-        size += 64 * KINFO_PROC_SIZE;
-        buf.resize(size, 0);
-        if libc::sysctl(
-            mib.as_mut_ptr(),
-            4,
-            buf.as_mut_ptr().cast(),
-            &mut size,
-            null,
-            0,
-        ) != 0
-        {
-            return Vec::new();
-        }
-    }
-    buf.truncate(size);
     if !buf.len().is_multiple_of(KINFO_PROC_SIZE) {
         return Vec::new(); // a layout we don't know; better to show nothing than garbage
     }
@@ -401,9 +441,15 @@ impl Process {
     /// Find processes that have a file open (Unix only via lsof)
     #[cfg(unix)]
     pub fn find_by_open_file(path: &std::path::Path) -> Result<Vec<Process>> {
+        Self::find_by_open_file_with("lsof", path)
+    }
+
+    /// `find_by_open_file` with the lsof program to run, so a test can have it missing
+    #[cfg(unix)]
+    fn find_by_open_file_with(lsof: &str, path: &std::path::Path) -> Result<Vec<Process>> {
         use std::process::Command;
 
-        let output = Command::new("lsof")
+        let output = Command::new(lsof)
             .args(["-t", &path.to_string_lossy()]) // -t = terse (PIDs only)
             .output();
 
@@ -603,16 +649,7 @@ impl Process {
         );
 
         match sys.process(Pid::from_u32(self.pid)) {
-            Some(proc) if self.is_same(proc) => {
-                if proc.kill() {
-                    Ok(())
-                } else {
-                    Err(ProcError::SignalError(format!(
-                        "Failed to kill process {}",
-                        self.pid
-                    )))
-                }
-            }
+            Some(proc) if self.is_same(proc) => kill_outcome(proc.kill(), self.pid),
             // gone, or the PID now belongs to a new process
             _ => Err(ProcError::ProcessNotFound(self.pid.to_string())),
         }
@@ -646,12 +683,17 @@ impl Process {
     /// never ends for a zombie). A process still alive after 5 seconds, such as
     /// one stuck in the kernel, is an error.
     pub fn kill_and_wait(&self) -> Result<()> {
+        self.kill_and_wait_within(Duration::from_secs(5))
+    }
+
+    /// `kill_and_wait` with the time to wait for the process to be gone
+    fn kill_and_wait_within(&self, wait: Duration) -> Result<()> {
         match self.kill() {
             // it exited on its own just before the kill
             Err(ProcError::ProcessNotFound(_)) => return Ok(()),
             other => other?,
         }
-        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        let deadline = std::time::Instant::now() + wait;
         while std::time::Instant::now() < deadline {
             if !self.is_running() {
                 return Ok(());
@@ -659,8 +701,9 @@ impl Process {
             std::thread::sleep(Duration::from_millis(50));
         }
         Err(ProcError::SignalError(format!(
-            "Process {} is still running 5 seconds after SIGKILL",
-            self.pid
+            "Process {} is still running {} seconds after SIGKILL",
+            self.pid,
+            wait.as_secs()
         )))
     }
 
@@ -689,15 +732,7 @@ impl Process {
             .output()
             .map_err(|e| ProcError::SystemError(e.to_string()))?;
 
-        if output.status.success() {
-            Ok(())
-        } else {
-            Err(ProcError::SignalError(command_failure(
-                &output.stdout,
-                &output.stderr,
-                &output.status.to_string(),
-            )))
-        }
+        taskkill_outcome(&output)
     }
 
     /// Send an arbitrary signal to the process (Unix only)
@@ -715,10 +750,12 @@ impl Process {
 
     /// Find orphaned processes (parent is PID 1 / init / launchd, excluding system daemons)
     pub fn find_orphans() -> Result<Vec<Process>> {
-        let all = Self::find_all()?;
+        Ok(Self::orphans_among(Self::find_all()?))
+    }
 
-        Ok(all
-            .into_iter()
+    /// The orphans among `all`
+    fn orphans_among(all: Vec<Process>) -> Vec<Process> {
+        all.into_iter()
             .filter(|p| {
                 if let Some(ppid) = p.parent_pid {
                     ppid == 1 && p.pid != 1 && !Self::is_system_process(p)
@@ -726,7 +763,7 @@ impl Process {
                     false
                 }
             })
-            .collect())
+            .collect()
     }
 
     /// Check if a process is a system daemon (naturally has PPID 1)
@@ -777,19 +814,6 @@ impl Process {
     /// Check if the process is still running (alias for exists for compatibility)
     pub fn is_running(&self) -> bool {
         self.exists()
-    }
-
-    /// Wait for the process to terminate
-    /// Returns the exit status if available
-    pub fn wait(&self) -> Option<std::process::ExitStatus> {
-        let mut sys = System::new();
-        sys.refresh_processes(
-            sysinfo::ProcessesToUpdate::Some(&[Pid::from_u32(self.pid)]),
-            true,
-        );
-
-        sys.process(Pid::from_u32(self.pid))
-            .and_then(|proc| proc.wait())
     }
 
     /// Convert from sysinfo Process
@@ -947,10 +971,9 @@ mod tests {
         let mut me = Process::find_by_pid(std::process::id()).unwrap().unwrap();
         assert!(me.is_running());
         // Same PID, different start time: a new process that reused the PID
-        if let Some(start) = me.start_time {
-            me.start_time = Some(start - 3600);
-            assert!(!me.is_running(), "a reused PID counted as the same process");
-        }
+        let start = me.start_time.expect("a running process has a start time");
+        me.start_time = Some(start - 3600);
+        assert!(!me.is_running(), "a reused PID counted as the same process");
     }
 
     #[test]
@@ -1062,27 +1085,6 @@ mod tests {
     }
 
     #[test]
-    fn test_find_orphans_excludes_system_processes() {
-        let orphans = Process::find_orphans().unwrap();
-        for orphan in &orphans {
-            // No orphan should have a system exe path with cwd "/"
-            if orphan.cwd.as_deref() == Some("/") {
-                if let Some(ref exe) = orphan.exe_path {
-                    assert!(
-                        !exe.starts_with("/usr/sbin/")
-                            && !exe.starts_with("/sbin/")
-                            && !exe.starts_with("/System/")
-                            && !exe.starts_with("/usr/libexec/"),
-                        "System process should have been filtered: {} ({})",
-                        orphan.name,
-                        exe
-                    );
-                }
-            }
-        }
-    }
-
-    #[test]
     fn test_is_system_process_system_paths() {
         let make_proc = |exe: Option<&str>, cwd: Option<&str>| Process {
             pid: 100,
@@ -1124,6 +1126,31 @@ mod tests {
         assert!(Process::is_system_process(&make_proc(
             Some("/usr/bin/foo"),
             None
+        )));
+
+        // Every system directory counts, each checked on its own
+        for exe in [
+            "/System/x",
+            "/usr/libexec/x",
+            "/usr/sbin/x",
+            "/sbin/x",
+            "/usr/bin/x",
+            "/usr/lib/x",
+            "/usr/lib64/x",
+            "/lib/x",
+            "/lib64/x",
+            "/opt/x",
+            "/snap/x",
+        ] {
+            assert!(
+                Process::is_system_process(&make_proc(Some(exe), Some("/"))),
+                "{exe}"
+            );
+        }
+        // a daemon with cwd "/" outside them still counts: nothing says it is a user's
+        assert!(Process::is_system_process(&make_proc(
+            Some("/srv/x"),
+            Some("/")
         )));
 
         // User process with user cwd = NOT system
@@ -1200,5 +1227,234 @@ mod tests {
 
         let result = proc.send_signal(Signal::SIGCONT);
         assert!(result.is_err());
+    }
+
+    /// A record of a process that doesn't exist
+    fn ghost() -> Process {
+        Process {
+            pid: 99999999,
+            name: "ghost".to_string(),
+            exe_path: None,
+            cwd: None,
+            command: None,
+            cpu_percent: 0.0,
+            memory_mb: 0.0,
+            status: ProcessStatus::Running,
+            user: None,
+            parent_pid: None,
+            start_time: None,
+            uptime_secs: None,
+        }
+    }
+
+    #[test]
+    fn every_sysinfo_status_maps_to_ours() {
+        for (sys, ours) in [
+            (SysProcessStatus::Run, ProcessStatus::Running),
+            (SysProcessStatus::Sleep, ProcessStatus::Sleeping),
+            (SysProcessStatus::Stop, ProcessStatus::Stopped),
+            (SysProcessStatus::Zombie, ProcessStatus::Zombie),
+            (SysProcessStatus::Dead, ProcessStatus::Dead),
+            (SysProcessStatus::Idle, ProcessStatus::Unknown),
+        ] {
+            assert_eq!(ProcessStatus::from(sys), ours, "{sys:?}");
+        }
+    }
+
+    #[test]
+    fn a_process_that_is_gone_does_not_look_stuck() {
+        assert!(!ghost().looks_stuck_now());
+    }
+
+    #[test]
+    fn killing_a_process_that_is_already_gone_is_success() {
+        assert!(matches!(ghost().kill(), Err(ProcError::ProcessNotFound(_))));
+        ghost().kill_and_wait().unwrap();
+    }
+
+    #[test]
+    fn a_kill_that_was_not_delivered_is_an_error() {
+        kill_outcome(true, 7).unwrap();
+        let err = kill_outcome(false, 7).unwrap_err();
+        assert!(
+            matches!(&err, ProcError::SignalError(m) if m == "Failed to kill process 7"),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn taskkill_without_force_reports_what_it_said() {
+        #[cfg(unix)]
+        use std::os::unix::process::ExitStatusExt;
+        #[cfg(windows)]
+        use std::os::windows::process::ExitStatusExt;
+        use std::process::{ExitStatus, Output};
+
+        let output = |raw, stdout: &str, stderr: &str| Output {
+            status: ExitStatus::from_raw(raw),
+            stdout: stdout.as_bytes().to_vec(),
+            stderr: stderr.as_bytes().to_vec(),
+        };
+        taskkill_outcome(&output(0, "SUCCESS: sent termination signal", "")).unwrap();
+
+        // exit code 1 on Windows; the same wait status on Unix
+        #[cfg(unix)]
+        let failed = 1 << 8;
+        #[cfg(windows)]
+        let failed = 1;
+        let err =
+            taskkill_outcome(&output(failed, "", "ERROR: could not be terminated")).unwrap_err();
+        assert!(
+            matches!(&err, ProcError::SignalError(m) if m == "ERROR: could not be terminated"),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn orphans_are_the_children_of_init_that_are_not_system_daemons() {
+        let proc = |pid: u32, ppid: Option<u32>, exe: Option<&str>, cwd: Option<&str>| Process {
+            pid,
+            name: format!("p{pid}"),
+            exe_path: exe.map(String::from),
+            cwd: cwd.map(String::from),
+            parent_pid: ppid,
+            ..ghost()
+        };
+        let orphans = Process::orphans_among(vec![
+            // a user's process whose parent died
+            proc(10, Some(1), Some("/home/z/app"), Some("/home/z")),
+            // a system daemon: cwd "/" and an exe in a system directory
+            proc(11, Some(1), Some("/usr/sbin/sshd"), Some("/")),
+            // init itself, and a process with a live parent
+            proc(1, Some(1), Some("/sbin/init"), Some("/home/z")),
+            proc(12, Some(500), Some("/home/z/app"), Some("/home/z")),
+            // no parent known
+            proc(13, None, Some("/home/z/app"), Some("/home/z")),
+        ]);
+        let pids: Vec<u32> = orphans.iter().map(|p| p.pid).collect();
+        assert_eq!(pids, vec![10]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_missing_lsof_finds_no_open_file_owners() {
+        let found = Process::find_by_open_file_with("proc-no-such-lsof", std::path::Path::new("/"));
+        assert!(found.unwrap().is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_process_still_alive_when_the_wait_ends_is_an_error() {
+        let mut child = std::process::Command::new("sleep")
+            .arg("300")
+            .spawn()
+            .unwrap();
+        let record = Process::find_by_pid(child.id()).unwrap().unwrap();
+        // no time to wait: the SIGKILL is sent, but the process isn't seen gone
+        let result = record.kill_and_wait_within(Duration::ZERO);
+        let _ = child.kill();
+        let _ = child.wait();
+        assert!(
+            matches!(&result, Err(ProcError::SignalError(m))
+                if m == &format!("Process {} is still running 0 seconds after SIGKILL", record.pid)),
+            "{result:?}"
+        );
+    }
+
+    /// One kinfo_proc record, with the fields `zombies_in` reads
+    #[cfg(target_os = "macos")]
+    fn kinfo(pid: u32, stat: u8, comm: &str, ruid: u32, ppid: u32, start: u64) -> Vec<u8> {
+        let mut rec = vec![0u8; KINFO_PROC_SIZE];
+        rec[0..8].copy_from_slice(&start.to_ne_bytes());
+        rec[36] = stat;
+        rec[40..44].copy_from_slice(&pid.to_ne_bytes());
+        rec[243..243 + comm.len()].copy_from_slice(comm.as_bytes());
+        rec[392..396].copy_from_slice(&ruid.to_ne_bytes());
+        rec[560..564].copy_from_slice(&ppid.to_ne_bytes());
+        rec
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn zombies_are_read_from_the_kernels_table() {
+        let known = std::collections::HashSet::from([30]);
+        let table: Vec<u8> = [
+            kinfo(10, 5, "defunct-app", 0, 99, 1_700_000_000),
+            // no name left, and no start time
+            kinfo(11, 5, "", 0, 1, 0),
+            // alive, not a zombie
+            kinfo(20, 2, "alive", 0, 1, 1_700_000_000),
+            // already listed by sysinfo
+            kinfo(30, 5, "known", 0, 1, 1_700_000_000),
+            // the kernel's own slot
+            kinfo(0, 5, "kernel", 0, 0, 0),
+        ]
+        .concat();
+
+        let zombies = zombies_in(&table, &known);
+        let pids: Vec<u32> = zombies.iter().map(|z| z.pid).collect();
+        assert_eq!(pids, vec![10, 11]);
+
+        let named = &zombies[0];
+        assert_eq!(named.name, "defunct-app");
+        assert_eq!(named.status, ProcessStatus::Zombie);
+        assert_eq!(named.parent_pid, Some(99));
+        assert_eq!(named.start_time, Some(1_700_000_000));
+        assert!(named.uptime_secs.unwrap() > 0);
+        assert_eq!(named.user.as_deref(), Some("root"));
+
+        let unnamed = &zombies[1];
+        assert_eq!(unnamed.name, "<defunct>");
+        assert_eq!(unnamed.start_time, None);
+        assert_eq!(unnamed.uptime_secs, None);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_table_of_an_unknown_layout_shows_no_zombies() {
+        let known = std::collections::HashSet::new();
+        let mut table = kinfo(10, 5, "z", 0, 1, 0);
+        table.push(0);
+        assert!(zombies_in(&table, &known).is_empty());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_refused_sysctl_gives_an_empty_table() {
+        use std::cell::Cell;
+
+        // refused when asked for the size
+        assert!(read_proc_table(|_, _| -1).is_empty());
+
+        // refused when asked for the table
+        let calls = Cell::new(0);
+        let table = read_proc_table(|_, size| {
+            calls.set(calls.get() + 1);
+            if calls.get() == 1 {
+                *size = 2 * KINFO_PROC_SIZE;
+                0
+            } else {
+                -1
+            }
+        });
+        assert_eq!(calls.get(), 2);
+        assert!(table.is_empty());
+
+        // answered: the table is cut to the size the kernel reports
+        let calls = Cell::new(0);
+        let table = read_proc_table(|buf, size| {
+            calls.set(calls.get() + 1);
+            if calls.get() == 1 {
+                *size = 2 * KINFO_PROC_SIZE;
+            } else {
+                assert_eq!(*size, 66 * KINFO_PROC_SIZE, "room for 64 newcomers");
+                // SAFETY: `buf` has `*size` writable bytes
+                unsafe { buf.cast::<u8>().write(7) };
+                *size = KINFO_PROC_SIZE;
+            }
+            0
+        });
+        assert_eq!(table.len(), KINFO_PROC_SIZE);
+        assert_eq!(table[0], 7);
     }
 }

@@ -529,6 +529,7 @@ struct MultiProcessPortsOutput<'a> {
 mod tests {
     use super::*;
     use crate::core::{ProcessStatus, Protocol};
+    use crate::test_support::assert_stops_at_a_failed_write;
 
     fn command(in_dir: Option<&str>) -> OnCommand {
         OnCommand {
@@ -627,5 +628,33 @@ mod tests {
             out,
             "✓ x (PID 1) is listening on:\n\n  → :4000 (TCP on *)\n\n"
         );
+    }
+
+    /// A process with every detail the printers can show
+    fn detailed() -> Process {
+        let mut p = without_cwd();
+        p.cwd = Some("/work/app".to_string());
+        p.exe_path = Some("/usr/bin/x".to_string());
+        p.command = Some("x --serve".to_string());
+        p.uptime_secs = Some(90);
+        p
+    }
+
+    #[test]
+    fn a_failed_write_ends_the_port_lookup() {
+        let mut cmd = command(None);
+        cmd.verbose = true;
+        let p = detailed();
+        assert_stops_at_a_failed_write(|w| cmd.print_process_on_port(w, &listener(), Some(&p)));
+        assert_stops_at_a_failed_write(|w| cmd.print_process_on_port(w, &listener(), None));
+    }
+
+    #[test]
+    fn a_failed_write_ends_the_process_lookup() {
+        let mut cmd = command(None);
+        cmd.verbose = true;
+        let p = detailed();
+        assert_stops_at_a_failed_write(|w| cmd.print_ports_for_process(w, &p, &[listener()]));
+        assert_stops_at_a_failed_write(|w| cmd.print_ports_for_process(w, &p, &[]));
     }
 }

@@ -91,6 +91,9 @@ pub mod core;
 pub mod error;
 pub mod ui;
 
+#[cfg(test)]
+mod test_support;
+
 pub use error::{ProcError, Result};
 
 /// Library version

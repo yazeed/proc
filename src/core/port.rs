@@ -6,6 +6,8 @@
 use crate::core::{escape_control, Process};
 use crate::error::{ProcError, Result};
 use serde::{Deserialize, Serialize};
+#[cfg(target_os = "linux")]
+use std::path::Path;
 // lsof on macOS, netstat and tasklist on Windows; Linux reads /proc instead
 #[cfg(not(target_os = "linux"))]
 use std::process::Command;
@@ -73,7 +75,15 @@ impl PortInfo {
             .output()
             .map_err(|e| ProcError::SystemError(format!("Failed to run lsof: {}", e)))?;
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
+        Ok(Self::parse_lsof_output(&String::from_utf8_lossy(
+            &output.stdout,
+        )))
+    }
+
+    /// The listening ports in lsof's output, one entry per port and process
+    /// (compiled on other systems for the tests only)
+    #[cfg(any(target_os = "macos", test))]
+    fn parse_lsof_output(stdout: &str) -> Vec<PortInfo> {
         let mut ports = Vec::new();
         let mut seen = std::collections::HashSet::new();
 
@@ -88,7 +98,7 @@ impl PortInfo {
             }
         }
 
-        Ok(ports)
+        ports
     }
 
     /// lsof writes characters it can't print in a column, spaces included, as
@@ -97,7 +107,7 @@ impl PortInfo {
     /// Only printable ASCII is decoded. Control characters stay escaped, so a
     /// process name can't send escape sequences to the terminal, and the name is
     /// read as bytes, so a "\x" before a multi-byte character can't panic.
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", test))]
     fn unescape_lsof(name: &str) -> String {
         fn hex(b: u8) -> Option<u8> {
             (b as char).to_digit(16).map(|d| d as u8)
@@ -122,7 +132,7 @@ impl PortInfo {
         String::from_utf8_lossy(&out).into_owned()
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", test))]
     fn parse_lsof_line(line: &str) -> Option<PortInfo> {
         // lsof output format:
         // COMMAND  PID USER  FD  TYPE  DEVICE  SIZE/OFF  NODE  NAME
@@ -172,11 +182,18 @@ impl PortInfo {
     /// they are left out, as with `ss -p`.
     #[cfg(target_os = "linux")]
     fn get_listening_linux() -> Result<Vec<PortInfo>> {
+        Self::listening_from(Path::new("/proc/net"), Path::new("/proc"))
+    }
+
+    /// `get_listening_linux` reading the socket tables from `net` and the
+    /// processes from `procs`, which are /proc/net and /proc
+    #[cfg(target_os = "linux")]
+    fn listening_from(net: &Path, procs: &Path) -> Result<Vec<PortInfo>> {
         let mut sockets = Vec::new();
         let mut read_any = false;
-        for (table, v6) in [("/proc/net/tcp", false), ("/proc/net/tcp6", true)] {
+        for (table, v6) in [("tcp", false), ("tcp6", true)] {
             // tcp6 is missing when IPv6 is disabled
-            let Ok(text) = std::fs::read_to_string(table) else {
+            let Ok(text) = std::fs::read_to_string(net.join(table)) else {
                 continue;
             };
             read_any = true;
@@ -193,7 +210,7 @@ impl PortInfo {
         }
 
         let wanted: std::collections::HashSet<u64> = sockets.iter().map(|s| s.0).collect();
-        let owners = Self::socket_owners(&wanted);
+        let owners = Self::socket_owners(&wanted, procs);
 
         let mut ports = Vec::new();
         let mut seen = std::collections::HashSet::new();
@@ -206,7 +223,7 @@ impl PortInfo {
                 continue;
             }
             // any process can set its own comm (prctl), escape sequences included
-            let process_name = std::fs::read_to_string(format!("/proc/{pid}/comm"))
+            let process_name = std::fs::read_to_string(procs.join(format!("{pid}/comm")))
                 .map(|name| {
                     let name = name.strip_suffix('\n').unwrap_or(&name);
                     escape_control(name).into_owned()
@@ -266,9 +283,10 @@ impl PortInfo {
     #[cfg(target_os = "linux")]
     fn socket_owners(
         wanted: &std::collections::HashSet<u64>,
+        procs: &Path,
     ) -> std::collections::HashMap<u64, u32> {
         let mut owners = std::collections::HashMap::new();
-        let Ok(procs) = std::fs::read_dir("/proc") else {
+        let Ok(procs) = std::fs::read_dir(procs) else {
             return owners;
         };
         for entry in procs.flatten() {
@@ -309,22 +327,37 @@ impl PortInfo {
             .output()
             .map_err(|e| ProcError::SystemError(format!("Failed to run netstat: {}", e)))?;
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
+        Ok(Self::parse_netstat_output(
+            &String::from_utf8_lossy(&output.stdout),
+            Self::get_process_name_windows,
+        ))
+    }
+
+    /// The listening ports in netstat's output; `name_of` says what a PID is
+    /// called (compiled on other systems for the tests only)
+    #[cfg(any(target_os = "windows", test))]
+    fn parse_netstat_output(
+        stdout: &str,
+        name_of: impl Fn(u32) -> Option<String>,
+    ) -> Vec<PortInfo> {
         let mut ports = Vec::new();
 
         for line in stdout.lines() {
             if line.contains("LISTENING") {
-                if let Some(port_info) = Self::parse_netstat_line(line) {
+                if let Some(port_info) = Self::parse_netstat_line(line, &name_of) {
                     ports.push(port_info);
                 }
             }
         }
 
-        Ok(ports)
+        ports
     }
 
-    #[cfg(target_os = "windows")]
-    fn parse_netstat_line(line: &str) -> Option<PortInfo> {
+    #[cfg(any(target_os = "windows", test))]
+    fn parse_netstat_line(
+        line: &str,
+        name_of: &impl Fn(u32) -> Option<String>,
+    ) -> Option<PortInfo> {
         let parts: Vec<&str> = line.split_whitespace().collect();
         if parts.len() < 5 {
             return None;
@@ -341,8 +374,7 @@ impl PortInfo {
         let pid: u32 = parts.last()?.parse().ok()?;
 
         // Get process name from PID
-        let process_name =
-            Self::get_process_name_windows(pid).unwrap_or_else(|| "unknown".to_string());
+        let process_name = name_of(pid).unwrap_or_else(|| "unknown".to_string());
 
         Some(PortInfo {
             port,
@@ -392,7 +424,6 @@ mod tests {
         assert!(parse_port("").is_err());
     }
 
-    #[cfg(target_os = "macos")]
     #[test]
     fn test_parse_lsof_line_keeps_the_full_name() {
         // With `+c 0` lsof prints the whole name, escaping spaces as \x20; the
@@ -404,7 +435,6 @@ mod tests {
         assert_eq!(info.port, 7768);
     }
 
-    #[cfg(target_os = "macos")]
     #[test]
     fn test_unescape_lsof_is_safe_for_any_name() {
         // Control characters stay escaped, so a process name can't inject
@@ -456,6 +486,191 @@ mod tests {
             PortInfo::parse_proc_net_line("  0: ZZ:1F90 0:0 0A", false),
             None
         );
+        // An address of the wrong length for its table
+        assert_eq!(PortInfo::parse_proc_net_line(v4, true), None);
+        assert_eq!(PortInfo::parse_proc_net_line(v6_any, false), None);
+    }
+
+    /// A fake /proc: `net/tcp`, `net/tcp6` and one directory per process
+    #[cfg(target_os = "linux")]
+    struct FakeProc {
+        dir: tempfile::TempDir,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl FakeProc {
+        const HEADER: &'static str = "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n";
+
+        fn new() -> Self {
+            let dir = tempfile::tempdir().unwrap();
+            std::fs::create_dir(dir.path().join("net")).unwrap();
+            FakeProc { dir }
+        }
+
+        fn table(&self, name: &str, rows: &[(&str, u64)]) {
+            let mut text = Self::HEADER.to_string();
+            for (local, inode) in rows {
+                text.push_str(&format!(
+                    "   0: {local} 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 {inode} 1 0000000000000000 100 0 0 10 0\n"
+                ));
+            }
+            std::fs::write(self.dir.path().join("net").join(name), text).unwrap();
+        }
+
+        /// A process with `comm` (if any) and one fd link per target
+        fn process(&self, pid: &str, comm: Option<&str>, fds: &[&str]) {
+            let p = self.dir.path().join(pid);
+            std::fs::create_dir_all(p.join("fd")).unwrap();
+            if let Some(comm) = comm {
+                std::fs::write(p.join("comm"), comm).unwrap();
+            }
+            for (i, target) in fds.iter().enumerate() {
+                std::os::unix::fs::symlink(target, p.join("fd").join(i.to_string())).unwrap();
+            }
+        }
+
+        fn listening(&self) -> Result<Vec<PortInfo>> {
+            PortInfo::listening_from(&self.dir.path().join("net"), self.dir.path())
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn listening_ports_are_matched_to_the_process_holding_the_socket() {
+        let fake = FakeProc::new();
+        fake.table(
+            "tcp",
+            &[
+                ("0100007F:1F90", 100), // 127.0.0.1:8080, held by 4242
+                ("00000000:0016", 200), // 0.0.0.0:22, held by nobody we can see
+                ("00000000:2328", 300), // 0.0.0.0:9000, held by 4243, which has no comm
+            ],
+        );
+        // the same port on IPv6 is the same listener
+        fake.table("tcp6", &[("00000000000000000000000000000000:1F90", 101)]);
+        fake.process(
+            "4242",
+            Some("myapp\n"),
+            &["socket:[100]", "socket:[101]", "/dev/null", "socket:[x]"],
+        );
+        fake.process("4243", None, &["socket:[300]", "socket:[999]"]);
+        // not a process, and a process whose fds can't be listed
+        std::fs::create_dir(fake.dir.path().join("self")).unwrap();
+        std::fs::create_dir(fake.dir.path().join("4244")).unwrap();
+
+        let mut ports = fake.listening().unwrap();
+        ports.sort_by_key(|p| p.port);
+        let seen: Vec<_> = ports
+            .iter()
+            .map(|p| (p.port, p.pid, p.process_name.as_str(), p.address.as_deref()))
+            .collect();
+        assert_eq!(
+            seen,
+            vec![
+                (8080, 4242, "myapp", Some("127.0.0.1")),
+                (9000, 4243, "unknown", Some("0.0.0.0")),
+            ]
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_missing_ipv6_table_is_not_an_error() {
+        let fake = FakeProc::new();
+        fake.table("tcp", &[("0100007F:1F90", 100)]);
+        fake.process("4242", Some("myapp\n"), &["socket:[100]"]);
+        let ports = fake.listening().unwrap();
+        assert_eq!(ports.len(), 1);
+        assert_eq!(ports[0].port, 8080);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn no_socket_tables_is_an_error() {
+        let fake = FakeProc::new();
+        let err = fake.listening().unwrap_err();
+        assert!(
+            matches!(&err, ProcError::SystemError(m) if m == "Can't read /proc/net/tcp to look up ports"),
+            "{err:?}"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn unreadable_processes_leave_no_owners() {
+        let fake = FakeProc::new();
+        fake.table("tcp", &[("0100007F:1F90", 100)]);
+        let missing = fake.dir.path().join("no-such-proc-dir");
+        let ports = PortInfo::listening_from(&fake.dir.path().join("net"), &missing).unwrap();
+        assert!(ports.is_empty());
+    }
+
+    #[test]
+    fn lsof_output_lists_each_listener_once() {
+        let out = "\
+COMMAND  PID USER   FD   TYPE DEVICE SIZE/OFF NODE NAME
+node     100  zee   20u  IPv4 0xa    0t0      TCP  *:3000 (LISTEN)
+node     100  zee   21u  IPv6 0xb    0t0      TCP  *:3000 (LISTEN)
+node     100  zee   22u  IPv4 0xc    0t0      TCP  127.0.0.1:3001 (LISTEN)
+Activity\\x20Monitor 7 zee 8u IPv6 0xd 0t0 TCP [::1]:3002 (LISTEN)
+short line
+node     abc  zee   23u  IPv4 0xe    0t0      TCP  *:3003 (LISTEN)
+node     101  zee   24u  IPv4 0xf    0t0      TCP  noport (LISTEN)
+node     101  zee   25u  IPv4 0xf    0t0      TCP  *:notaport (LISTEN)
+";
+        let ports = PortInfo::parse_lsof_output(out);
+        let seen: Vec<_> = ports
+            .iter()
+            .map(|p| (p.port, p.pid, p.process_name.as_str(), p.address.as_deref()))
+            .collect();
+        assert_eq!(
+            seen,
+            vec![
+                (3000, 100, "node", Some("0.0.0.0")),
+                (3001, 100, "node", Some("127.0.0.1")),
+                (3002, 7, "Activity Monitor", Some("[::1]")),
+            ]
+        );
+    }
+
+    #[test]
+    fn netstat_output_lists_the_listening_rows() {
+        let out = "\
+Active Connections
+
+  Proto  Local Address          Foreign Address        State           PID
+  TCP    0.0.0.0:135            0.0.0.0:0              LISTENING       1032
+  TCP    127.0.0.1:8080         0.0.0.0:0              LISTENING       4242
+  TCP    127.0.0.1:50000        127.0.0.1:8080         ESTABLISHED     5000
+  TCP    0.0.0.0:99 LISTENING
+  TCP    0.0.0.0:notaport       0.0.0.0:0              LISTENING       1
+  TCP    0.0.0.0:136            0.0.0.0:0              LISTENING       notapid
+";
+        let name_of = |pid: u32| (pid == 1032).then(|| "svchost.exe".to_string());
+        let ports = PortInfo::parse_netstat_output(out, name_of);
+        let seen: Vec<_> = ports
+            .iter()
+            .map(|p| (p.port, p.pid, p.process_name.as_str(), p.address.as_deref()))
+            .collect();
+        assert_eq!(
+            seen,
+            vec![
+                (135, 1032, "svchost.exe", Some("0.0.0.0")),
+                (8080, 4242, "unknown", Some("127.0.0.1")),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_port_gives_its_own_process() {
+        let me = PortInfo {
+            port: 1,
+            protocol: Protocol::Tcp,
+            pid: std::process::id(),
+            process_name: "me".to_string(),
+            address: None,
+        };
+        assert_eq!(me.get_process().unwrap().unwrap().pid, std::process::id());
     }
 
     #[test]

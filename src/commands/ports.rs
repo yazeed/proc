@@ -269,6 +269,7 @@ struct PortsOutput<'a> {
 mod tests {
     use super::*;
     use crate::core::{ProcessStatus, Protocol};
+    use crate::test_support::assert_stops_at_a_failed_write;
 
     fn process(cwd: Option<&str>, exe_path: Option<&str>) -> Process {
         Process {
@@ -365,5 +366,32 @@ mod tests {
             String::from_utf8(out).unwrap(),
             "⚠ No listening ports found\n"
         );
+    }
+
+    #[test]
+    fn a_failed_write_ends_the_listing() {
+        let cmd = PortsCommand {
+            by_name: None,
+            in_dir: None,
+            exposed: false,
+            local: false,
+            json: false,
+            verbose: true,
+            sort: PortSortKey::Port,
+            limit: None,
+            range: None,
+        };
+        let port = PortInfo {
+            port: 4000,
+            protocol: Protocol::Tcp,
+            pid: 1,
+            process_name: "x".to_string(),
+            address: Some("127.0.0.1".to_string()),
+        };
+        let with_path = HashMap::from([(1, process(None, Some("/bin/x")))]);
+        assert_stops_at_a_failed_write(|w| {
+            cmd.print_human(w, std::slice::from_ref(&port), &with_path)
+        });
+        assert_stops_at_a_failed_write(|w| cmd.print_human(w, &[], &HashMap::new()));
     }
 }
