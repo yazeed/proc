@@ -123,7 +123,7 @@ fn suggest_flag(unknown: &str, subcmd_name: &str) -> Option<String> {
     }
 }
 
-fn main() {
+fn main() -> process::ExitCode {
     let cli = match Cli::try_parse() {
         Ok(cli) => cli,
         Err(e) => {
@@ -131,7 +131,8 @@ fn main() {
 
             // Let help/version pass through as-is
             if matches!(e.kind(), ErrorKind::DisplayHelp | ErrorKind::DisplayVersion) {
-                e.exit();
+                let _ = e.print();
+                return process::ExitCode::SUCCESS;
             }
 
             // Strip clap's misleading "tip:" lines
@@ -178,13 +179,13 @@ fn main() {
                 }
             }
 
-            process::exit(exit_code);
+            return process::ExitCode::from(exit_code as u8);
         }
     };
 
     let Some(command) = cli.command else {
         print_orientation();
-        return;
+        return process::ExitCode::SUCCESS;
     };
 
     let result = match command {
@@ -225,7 +226,7 @@ fn main() {
 
         // The command already printed its result; only the exit code is left
         if matches!(e, ProcError::Reported { .. }) {
-            process::exit(exit_code as i32);
+            return process::ExitCode::from(exit_code as u8);
         }
 
         // If --json was requested, output error as JSON to stdout
@@ -239,8 +240,10 @@ fn main() {
             eprintln!("{}", e);
         }
 
-        process::exit(exit_code as i32);
+        return process::ExitCode::from(exit_code as u8);
     }
+
+    process::ExitCode::SUCCESS
 }
 
 /// Print an error as the standard JSON error object on stdout.
