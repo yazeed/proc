@@ -467,3 +467,58 @@ fn is_json_flag(arg: &str) -> bool {
     }
     false
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::CommandFactory;
+
+    /// Commands that change processes. They ask before acting, so they take
+    /// --yes/-y and --dry-run (`orphans` and `stuck` only change them with --kill)
+    const CHANGES_PROCESSES: &[&str] = &[
+        "kill", "stop", "free", "freeze", "thaw", "unstick", "orphans", "stuck",
+    ];
+
+    /// Not process commands: they print shell completions or the man page
+    const NOT_PROCESS_COMMANDS: &[&str] = &["completions", "manpage"];
+
+    #[test]
+    fn every_command_follows_the_flag_conventions() {
+        let cli = Cli::command();
+        let mut problems = Vec::new();
+
+        for cmd in cli.get_subcommands() {
+            let name = cmd.get_name();
+            if NOT_PROCESS_COMMANDS.contains(&name) {
+                continue;
+            }
+            let mut need = |long: &str, short: Option<char>| {
+                let found = cmd.get_arguments().find(|a| a.get_long() == Some(long));
+                match (found, short) {
+                    (None, _) => problems.push(format!("{name}: no --{long}")),
+                    (Some(a), Some(s)) if a.get_short() != Some(s) => {
+                        problems.push(format!("{name}: --{long} should have -{s}"))
+                    }
+                    _ => {}
+                }
+            };
+            need("json", Some('j'));
+            need("verbose", Some('v'));
+            if CHANGES_PROCESSES.contains(&name) {
+                need("yes", Some('y'));
+                need("dry-run", None);
+            }
+        }
+
+        for name in CHANGES_PROCESSES.iter().chain(NOT_PROCESS_COMMANDS) {
+            if cli.find_subcommand(name).is_none() {
+                problems.push(format!("{name} is listed here but isn't a command"));
+            }
+        }
+        assert!(
+            problems.is_empty(),
+            "convention broken:\n{}",
+            problems.join("\n")
+        );
+    }
+}

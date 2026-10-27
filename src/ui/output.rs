@@ -14,6 +14,34 @@ use comfy_table::{Attribute, Cell, CellAlignment, Color, ContentArrangement, Tab
 use dialoguer::Confirm;
 use serde::Serialize;
 
+/// Whether a command that changes processes should ask before acting.
+///
+/// The convention is the same in every output format: changing a process
+/// needs a yes. `--yes` gives it up front (`Ok(false)`: go ahead without
+/// asking); otherwise a person is asked (`Ok(true)`). `--json` only changes
+/// how results are printed, so it never stands in for `--yes`, and without a
+/// terminal there's nobody to ask: both are refused with exit 4 before
+/// anything is touched. `--dry-run` never gets here; it previews without one.
+pub fn must_confirm(action: &str, yes: bool, json: bool) -> Result<bool> {
+    use std::io::IsTerminal;
+    if yes {
+        return Ok(false);
+    }
+    if json {
+        return Err(ProcError::InvalidInput(format!(
+            "{action} changes processes, so it needs --yes, with --json too \
+             (or --dry-run to preview)"
+        )));
+    }
+    if !std::io::stdin().is_terminal() || !std::io::stderr().is_terminal() {
+        return Err(ProcError::InvalidInput(format!(
+            "{action} asks before changing processes, and there's no terminal \
+             to ask in; pass --yes (or --dry-run to preview)"
+        )));
+    }
+    Ok(true)
+}
+
 /// Output format selection
 #[derive(Debug, Clone, Copy, Default)]
 pub enum OutputFormat {
@@ -688,14 +716,16 @@ impl Printer {
 
     /// Show confirmation prompt and return whether the user confirmed.
     ///
-    /// Returns `Ok(true)` if confirmed or skipped (--yes / --json).
-    /// Returns `Ok(false)` if the user declined (prints "Cancelled").
+    /// Returns `Ok(true)` if confirmed or skipped (--yes), `Ok(false)` if the
+    /// user declined (prints "Cancelled"), and an error when there's nobody to
+    /// ask (see [`must_confirm`]).
     pub fn ask_confirm(&self, action: &str, processes: &[Process], yes: bool) -> Result<bool> {
-        if yes {
+        let json = matches!(self.format, OutputFormat::Json);
+        if !must_confirm(action, yes, json)? {
             return Ok(true);
         }
         match self.format {
-            OutputFormat::Json => Ok(true),
+            OutputFormat::Json => unreachable!("must_confirm refuses --json without --yes"),
             OutputFormat::Human => {
                 self.print_confirmation(action, processes);
                 let prompt = format!(
@@ -801,5 +831,21 @@ struct FailedAction<'a> {
 impl Default for Printer {
     fn default() -> Self {
         Self::new(OutputFormat::Human, false)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn json_never_stands_in_for_yes() {
+        // --yes: go ahead without asking, in either output format
+        assert!(!must_confirm("kill", true, false).unwrap());
+        assert!(!must_confirm("kill", true, true).unwrap());
+        // --json without --yes is refused (exit 4), never treated as a yes
+        let refused = must_confirm("kill", false, true).unwrap_err();
+        assert!(matches!(refused, ProcError::InvalidInput(_)), "{refused}");
+        assert!(refused.to_string().contains("--yes"));
     }
 }

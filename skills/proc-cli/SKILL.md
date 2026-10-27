@@ -16,7 +16,7 @@ proc is a semantic CLI for processes and ports on macOS, Linux, and Windows. You
 ## Critical Rules
 
 1. **Always pass `--json`** on every command for structured output
-2. **Always pass `--yes`** on destructive commands to skip interactive prompts
+2. **Always pass `--yes`** on destructive commands. `--json` doesn't replace it: without `--yes`, a command that changes processes exits 4 and touches nothing (with `--json`, or with no terminal to ask in). Pass `--yes`, or `--dry-run` to preview, and run it again
 3. **Use `--dry-run`** before destructive actions to preview what would happen
 4. **Check the exit code**: 0=success, 1=general error (including partial failures and `wait` timeouts), 2=not found, 3=permission denied, 4=invalid input. `"success": false` always comes with a non-zero exit code
 5. **Errors with `--json`** produce `{"action":"<cmd>", "success":false, "error":"...", "exit_code":N}` on stdout — including invalid flags or arguments

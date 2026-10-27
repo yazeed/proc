@@ -8,7 +8,7 @@
 
 use crate::core::{apply_filters, Process};
 use crate::error::Result;
-use crate::ui::{plural, Printer};
+use crate::ui::{must_confirm, plural, Printer};
 use clap::Args;
 use dialoguer::Confirm;
 
@@ -99,7 +99,8 @@ impl OrphansCommand {
             printer.print_processes_under_headline("orphans", &processes);
         }
 
-        if !self.yes && !self.json {
+        // Same rule everywhere: --yes, or ask; --json never skips it
+        if must_confirm("orphans --kill", self.yes, self.json)? {
             let confirmed = Confirm::new()
                 .with_prompt(format!(
                     "Kill {} orphaned process{}?",

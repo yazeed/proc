@@ -416,6 +416,37 @@ mod unix {
     }
 
     #[test]
+    fn changing_a_process_needs_yes_without_a_terminal_or_with_json() {
+        // --json used to act without asking, and without a terminal the prompt
+        // failed with "Dialog error: not a terminal"; both now exit 4 untouched
+        let sleeper = Sleeper::spawn();
+        let pid = sleeper.pid();
+        for command in ["kill", "stop", "freeze", "thaw", "unstick"] {
+            let (json, code) = run_json(&[command, &pid, "--json"]);
+            assert_eq!(code, 4, "{command} --json without --yes: {json}");
+            assert!(json["error"].as_str().unwrap().contains("--yes"), "{json}");
+
+            // no --json, and stdin is not a terminal (assert_cmd closes it)
+            let output = proc_cmd().args([command, &pid]).output().unwrap();
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert_eq!(
+                output.status.code(),
+                Some(4),
+                "{command} without a terminal: {stderr}"
+            );
+            assert!(stderr.contains("--yes"), "{command}: {stderr}");
+        }
+        let mut sleeper = sleeper;
+        assert!(
+            sleeper.0.try_wait().unwrap().is_none(),
+            "the process was changed without --yes"
+        );
+        // and --dry-run still previews without --yes
+        let (json, code) = run_json(&["kill", &pid, "--dry-run", "--json"]);
+        assert_eq!(code, 0, "{json}");
+    }
+
+    #[test]
     fn zombies_are_listed() {
         let sleeper = Sleeper::exiting_after("0");
         std::thread::sleep(std::time::Duration::from_millis(500));

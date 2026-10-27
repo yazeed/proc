@@ -9,7 +9,7 @@
 use crate::core::port::PortInfo;
 use crate::core::{parse_target, parse_targets, Process, TargetType};
 use crate::error::{ExitCode, ProcError, Result};
-use crate::ui::{plural, Printer};
+use crate::ui::{must_confirm, plural, Printer};
 use clap::Args;
 use colored::*;
 use dialoguer::Confirm;
@@ -117,7 +117,8 @@ impl FreeCommand {
             return Ok(());
         }
 
-        if !self.yes && !self.json {
+        // Same rule everywhere: --yes, or ask; --json never skips it
+        if must_confirm("free", self.yes, self.json)? {
             printer.print_confirmation("free", &processes);
 
             let prompt = format!(

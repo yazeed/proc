@@ -18,7 +18,7 @@
 
 use crate::core::{apply_filters, parse_targets, resolve_targets_excluding_self, Process};
 use crate::error::{ExitCode, ProcError, Result};
-use crate::ui::{format_duration, plural, Printer};
+use crate::ui::{format_duration, must_confirm, plural, Printer};
 use clap::Args;
 use colored::*;
 use dialoguer::Confirm;
@@ -166,8 +166,8 @@ impl UnstickCommand {
             return Ok(());
         }
 
-        // Confirm
-        if !self.yes && !self.json {
+        // Confirm. Same rule everywhere: --yes, or ask; --json never skips it
+        if must_confirm("unstick", self.yes, self.json)? {
             if self.force {
                 println!(
                     "\n{} With --force: processes will be terminated if recovery fails.\n",
