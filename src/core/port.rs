@@ -311,28 +311,38 @@ impl PortInfo {
 
     #[cfg(target_os = "windows")]
     fn get_listening_windows() -> Result<Vec<PortInfo>> {
-        // Use netstat on Windows
-        let output = Command::new("netstat")
+        // `netstat -p TCP` lists IPv4 sockets only; IPv6 ones need `-p TCPv6`
+        let v4 = Command::new("netstat")
             .args(["-ano", "-p", "TCP"])
             .output()
             .map_err(|e| ProcError::SystemError(format!("Failed to run netstat: {}", e)))?;
+        // A machine without IPv6 may refuse the second call; that leaves the
+        // IPv4 listeners, not an error
+        let v6 = Command::new("netstat")
+            .args(["-ano", "-p", "TCPv6"])
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+            .unwrap_or_default();
 
         Ok(Self::parse_netstat_output(
-            &String::from_utf8_lossy(&output.stdout),
+            &[&String::from_utf8_lossy(&v4.stdout), &v6],
             Self::get_process_name_windows,
         ))
     }
 
-    /// The listening ports in netstat's output; `name_of` says what a PID is
-    /// called (compiled on other systems for the tests only)
+    /// The listening ports in the outputs of netstat, one per protocol
+    /// (`-p TCP` and `-p TCPv6`); `name_of` says what a PID is called
+    /// (compiled on other systems for the tests only)
     #[cfg(any(target_os = "windows", test))]
     fn parse_netstat_output(
-        stdout: &str,
+        outputs: &[&str],
         name_of: impl Fn(u32) -> Option<String>,
     ) -> Vec<PortInfo> {
         let mut ports = Vec::new();
 
-        for line in stdout.lines() {
+        for line in outputs.iter().flat_map(|o| o.lines()) {
             if line.contains("LISTENING") {
                 if let Some(port_info) = Self::parse_netstat_line(line, &name_of) {
                     ports.push(port_info);
@@ -758,7 +768,7 @@ Active Connections
   TCP    0.0.0.0:136            0.0.0.0:0              LISTENING       notapid
 ";
         let name_of = |pid: u32| (pid == 1032).then(|| "svchost.exe".to_string());
-        let ports = PortInfo::parse_netstat_output(out, name_of);
+        let ports = PortInfo::parse_netstat_output(&[out], name_of);
         let seen: Vec<_> = ports
             .iter()
             .map(|p| (p.port, p.pid, p.process_name.as_str(), p.address.as_deref()))
@@ -770,6 +780,49 @@ Active Connections
                 (8080, 4242, "unknown", Some("127.0.0.1")),
             ]
         );
+    }
+
+    #[test]
+    fn netstat_lists_ipv4_and_ipv6_listeners_from_both_calls() {
+        // What `netstat -ano -p TCP` and `-p TCPv6` print: IPv6 rows only come
+        // from the second call
+        let v4 = "\
+Active Connections
+
+  Proto  Local Address          Foreign Address        State           PID
+  TCP    0.0.0.0:135            0.0.0.0:0              LISTENING       1032
+  TCP    127.0.0.1:8080         0.0.0.0:0              LISTENING       4242
+";
+        let v6 = "\
+Active Connections
+
+  Proto  Local Address          Foreign Address        State           PID
+  TCP    [::]:135               [::]:0                 LISTENING       1032
+  TCP    [::1]:8080             [::]:0                 LISTENING       4242
+  TCP    [fe80::1%12]:9000      [::]:0                 LISTENING       4242
+  TCP    [::1]:50000            [::1]:8080             ESTABLISHED     5000
+";
+        let name_of = |pid: u32| (pid == 1032).then(|| "svchost.exe".to_string());
+        let ports = PortInfo::parse_netstat_output(&[v4, v6], name_of);
+        let seen: Vec<_> = ports
+            .iter()
+            .map(|p| (p.port, p.address.as_deref().unwrap()))
+            .collect();
+        assert_eq!(
+            seen,
+            vec![
+                (135, "0.0.0.0"),
+                (8080, "127.0.0.1"),
+                (135, "::"),
+                (8080, "::1"),
+                (9000, "fe80::1%12"),
+            ]
+        );
+        assert!(ports[2].is_exposed() && ports[3].is_local());
+
+        // No IPv6 output (netstat refused the call): the IPv4 listeners remain
+        let ports = PortInfo::parse_netstat_output(&[v4, ""], |_| None);
+        assert_eq!(ports.len(), 2);
     }
 
     #[test]

@@ -47,7 +47,8 @@ pub struct PortsCommand {
     #[arg(long = "by", short = 'b')]
     pub by_name: Option<String>,
 
-    /// Filter by directory (defaults to current directory if no path given)
+    /// Filter by directory; takes the next word as the directory unless it starts with '-'
+    /// (bare --in is the current directory, --in=DIR is explicit)
     #[arg(long = "in", short = 'i', num_args = 0..=1, default_missing_value = ".")]
     pub in_dir: Option<String>,
 
