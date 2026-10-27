@@ -285,7 +285,9 @@ fn the_stream_sends_a_frame_after_frame() {
     for _ in 0..4 {
         let frame = stream.next();
         assert_eq!(pids(&frame), [u64::from(owned.pid())], "{frame}");
-        assert_eq!(frame["processes"][0]["name"], owned.name, "{frame}");
+        // the process name is the executable's file name: `.exe` on Windows
+        let name = format!("{}{}", owned.name, std::env::consts::EXE_SUFFIX);
+        assert_eq!(frame["processes"][0]["name"], name.as_str(), "{frame}");
     }
     stream.finish();
 }
