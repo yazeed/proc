@@ -85,6 +85,7 @@
 //! `0` success, `1` error or partial failure (including `wait` timeouts),
 //! `2` not found, `3` permission denied, `4` invalid input (including unknown flags).
 
+pub mod cli;
 pub mod commands;
 pub mod core;
 pub mod error;
