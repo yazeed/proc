@@ -10,7 +10,7 @@ Detailed information about specific processes. Aliases: `i`, `inspect`.
 ```bash
 proc info :3000            # info for process on port 3000
 proc info 1234             # info for PID
-proc info node             # info for all node processes
+proc info node             # info for the processes named node
 proc info :3000 :8080      # multiple targets
 ```
 
@@ -21,7 +21,8 @@ Several targets are separate arguments. Comma-separated lists (`:3000,:8080`) st
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--in [<dir>]` | `-i` | Filter by directory. Takes the next word as its directory unless it starts with `-` (bare `--in` is the current directory, `--in=DIR` is explicit) |
-| `--by <name>` | `-b` | Filter by process name |
+| `--by <name>` | `-b` | Filter by process name (the whole name, ignoring case) |
+| `--cmd` | | Match name targets and `--by` as a substring of the process name or full command line (like `pkill -f`) |
 | `--json` | `-j` | Output as JSON |
 | `--verbose` | `-v` | Show extra details |
 

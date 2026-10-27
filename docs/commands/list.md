@@ -9,7 +9,8 @@ List all processes, with optional filters. Aliases: `l`, `ps`.
 
 ```bash
 proc list                      # all processes
-proc list node                 # filter by name
+proc list node                 # only the processes named node
+proc list node --cmd           # ... or with node anywhere in their command line
 proc list node python          # several names
 proc list --sort cpu --limit 10  # top 10 by CPU
 ```
@@ -24,6 +25,7 @@ One process is always one line. Directories and arguments are shortened to fit t
 
 | Flag | Short | Description |
 |------|-------|-------------|
+| `--cmd` | | Match the names as a substring of the process name or full command line (like `pkill -f`) |
 | `--in [<dir>]` | `-i` | Filter by directory. Takes the next word as its directory unless it starts with `-` (bare `--in` is the current directory, `--in=DIR` is explicit) |
 | `--path <path>` | `-p` | Filter by executable path |
 | `--min-cpu <n>` | | Minimum CPU % |

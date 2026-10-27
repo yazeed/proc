@@ -10,7 +10,8 @@ Find processes running in a specific directory.
 ```bash
 proc in .                  # processes in current directory
 proc in ~/projects/myapp   # processes in a specific path
-proc in . --by node        # node processes in cwd
+proc in . --by node        # processes named node in cwd
+proc in . --by node --cmd  # ... or with node anywhere in their command line
 ```
 
 The directory can be one that was deleted, such as a removed git worktree: processes still running there are listed. A path that doesn't exist and has nothing running in it is treated as a typo and exits 4. An existing directory is resolved first (symlinks followed), so `/tmp/x` on macOS finds processes the OS reports in `/private/tmp/x`, and the output shows the resolved path.
@@ -19,7 +20,8 @@ The directory can be one that was deleted, such as a removed git worktree: proce
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--by <name>` | `-b` | Filter by process name |
+| `--by <name>` | `-b` | Filter by process name (the whole name, ignoring case) |
+| `--cmd` | | Match `--by` as a substring of the process name or full command line (like `pkill -f`) |
 | `--min-cpu <n>` | | Minimum CPU % |
 | `--min-mem <n>` | | Minimum memory (MB) |
 | `--status <s>` | | Filter by status: running, sleeping, stopped, zombie |

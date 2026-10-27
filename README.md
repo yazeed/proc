@@ -149,10 +149,12 @@ All commands accept the same target syntax:
 |--------|---------|-------------|
 | Port | `:3000` | Process listening on port 3000 |
 | PID | `1234` | Process with ID 1234 |
-| Name | `node` | All processes named "node" |
+| Name | `node` | Processes named "node" (the whole name, ignoring case) |
 | Multi | `:3000 :8080 node` | Separate arguments |
 
-Give several targets as separate arguments, and mix the three kinds freely: `proc kill 1234 :3000 node`. A process named twice is handled once. Comma-separated targets (`:3000,:8080,node`) still work but are deprecated, and will be removed in a future major release.
+Give several targets as separate arguments, and mix the three kinds freely: `proc kill 1234 :3000 node`. A process named twice is handled once, except by the read-only `on` and `why`, which answer each target under its own header. Comma-separated targets (`:3000,:8080,node`) still work but are deprecated, and will be removed in a future major release.
+
+A name matches the whole process name, ignoring case, the way `killall` and `pkill` read it. `proc kill node` stops the processes named `node` and leaves `Claude Helper` alone, and `--by` follows the same rule. The file name of the executable and of the first argument count as names too, so a long name that Linux cuts to 15 characters still matches, and on Windows a trailing `.exe` is optional. Add `--cmd` to match any part of the name or the full command line instead, like `pkill -f`: `proc kill serve --cmd`. A shell glob such as `node*` is expanded by your shell into several targets before proc sees it, so quote it.
 
 `--in` takes the next word as its directory unless that word starts with `-`, so put it after the targets (`proc kill 1234 5678 --in .`) or write `--in=DIR`.
 
@@ -194,7 +196,8 @@ Filters can be combined with discovery and lifecycle commands:
 | Filter | Description |
 |--------|-------------|
 | `--in <path>` | Filter by working directory |
-| `--by <name>` | Filter by process name |
+| `--by <name>` | Filter by process name (the whole name, like a name target) |
+| `--cmd` | Match names and `--by` as a substring of the process name or full command line (like `pkill -f`) |
 | `--path <path>` | Filter by executable path (`list`) |
 | `--min-cpu <n>` | Processes using >n% CPU |
 | `--min-mem <n>` | Processes using >n MB memory |

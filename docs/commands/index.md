@@ -57,7 +57,9 @@ proc on node           # name
 proc kill :3000 :8080  # multiple (separate arguments)
 ```
 
-Commands that take targets accept several, as separate arguments, and the kinds mix freely (`proc kill 1234 :3000 node`). A process named twice is handled once. Comma-separated targets (`:3000,:8080`) still work but are deprecated, and will be removed in a future major release. `--in` takes the next word as its directory unless that word starts with `-`, so put it after the targets or write `--in=DIR`.
+Commands that take targets accept several, as separate arguments, and the kinds mix freely (`proc kill 1234 :3000 node`). A process named twice is handled once, except by the read-only `on` and `why`, which answer each target under its own header. Comma-separated targets (`:3000,:8080`) still work but are deprecated, and will be removed in a future major release. `--in` takes the next word as its directory unless that word starts with `-`, so put it after the targets or write `--in=DIR`.
+
+A name matches the whole process name, ignoring case, the way `killall` and `pkill` read it. `--by` follows the same rule. Add `--cmd` to match any part of the name or the full command line instead, like `pkill -f`.
 
 ## Scripting
 

@@ -10,7 +10,7 @@ Find processes whose parent has exited, leaving them orphaned (reparented to PID
 ```bash
 proc orphans                 # list all orphaned processes
 proc orphans --kill --yes    # kill all orphans without confirmation
-proc orphans --by node       # find orphaned node processes
+proc orphans --by node       # find orphaned processes named node
 ```
 
 ## Options
@@ -21,7 +21,8 @@ proc orphans --by node       # find orphaned node processes
 | `--yes` | `-y` | Skip confirmation (with --kill) |
 | `--dry-run` | | Show what would be killed (with --kill) |
 | `--in [<dir>]` | `-i` | Filter by directory. Takes the next word as its directory unless it starts with `-` (bare `--in` is the current directory, `--in=DIR` is explicit) |
-| `--by <name>` | `-b` | Filter by process name |
+| `--by <name>` | `-b` | Filter by process name (the whole name, ignoring case) |
+| `--cmd` | | Match `--by` as a substring of the process name or full command line (like `pkill -f`) |
 | `--json` | `-j` | Output as JSON |
 | `--verbose` | `-v` | Show extra details |
 | `--wide` | `-w` | Print full directories and arguments instead of fitting the terminal |

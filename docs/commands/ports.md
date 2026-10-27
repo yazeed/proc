@@ -9,7 +9,7 @@ Show all listening ports on the system. Alias: `p`.
 
 ```bash
 proc ports                 # all listening ports
-proc ports --by node       # ports used by node
+proc ports --by node       # ports used by processes named node
 proc ports --exposed       # network-exposed only
 ```
 
@@ -17,7 +17,8 @@ proc ports --exposed       # network-exposed only
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--by <name>` | `-b` | Filter by process name |
+| `--by <name>` | `-b` | Filter by process name (the whole name, ignoring case) |
+| `--cmd` | | Match `--by` as a substring of the process name or full command line (like `pkill -f`) |
 | `--in [<dir>]` | `-i` | Filter by directory |
 | `--exposed` | `-e` | Only network-exposed ports (0.0.0.0, ::) |
 | `--local` | `-l` | Only localhost ports (127.0.0.1, ::1) |

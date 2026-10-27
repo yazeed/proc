@@ -29,7 +29,8 @@ The table has the same columns as `proc list`, including uptime on terminals at 
 | `--sort <key>` | `-s` | Sort by: cpu, mem, pid, name (default: cpu) |
 | `--limit <n>` | `-l` | Limit results shown |
 | `--in [<dir>]` | `-i` | Filter by directory. Takes the next word as its directory unless it starts with `-` (bare `--in` is the current directory, `--in=DIR` is explicit) |
-| `--by <name>` | `-b` | Filter by process name |
+| `--by <name>` | `-b` | Filter by process name (the whole name, ignoring case) |
+| `--cmd` | | Match name targets and `--by` as a substring of the process name or full command line (like `pkill -f`) |
 | `--min-cpu <n>` | | Minimum CPU % |
 | `--min-mem <n>` | | Minimum memory (MB) |
 | `--json` | `-j` | NDJSON output (one object per refresh) |

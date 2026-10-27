@@ -5,7 +5,7 @@
 rules:
   port: "A leading colon means a port: proc acts on whatever is listening on it."
   pid: "A number is a PID: that one process and nothing else."
-  name: "Anything else is a name, matched against each process's name and full command line, so <code>node</code> also finds <code>nodemon</code> and <code>node server.js</code>."
+  name: "Anything else is a name, matched against the whole process name, so <code>node</code> finds <code>node</code> and not <code>nodemon</code> or an editor with node in its command line. Add <code>--cmd</code> to match any part of the name or the full command line."
   list: "Commas combine targets. A process matched twice is only acted on once."
   scope: "<code>--in</code> keeps any target inside a folder and the folders below it. Most commands take it."
   path: "With <code>proc for</code>, the target is a file: relative, absolute or starting with <code>~</code>."
@@ -58,7 +58,7 @@ groups:
         examples:
           - t: "node"
             kind: name
-            text: "Lists every process whose name or command line matches <code>node</code>."
+            text: "Lists every process named <code>node</code>."
           - t: "node --in ."
             kind: scope
             text: "The same, limited to processes started in this folder."
@@ -77,7 +77,7 @@ groups:
             text: "Lists every process, busiest first."
           - t: "node"
             kind: name
-            text: "Lists only the processes matching <code>node</code>."
+            text: "Lists only the processes named <code>node</code>."
           - t: "--status zombie"
             rule: "Flags narrow any listing. <code>--status</code> takes running, sleeping, stopped or zombie."
             text: "Lists zombie processes: ones that have exited but haven't been cleaned up by their parent."

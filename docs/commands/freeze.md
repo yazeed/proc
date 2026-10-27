@@ -8,7 +8,7 @@ permalink: /commands/freeze
 Send SIGSTOP to pause processes. They remain in memory but stop executing. Asks for confirmation unless `--yes`. Not available on Windows, which has no SIGSTOP: it exits 4.
 
 ```bash
-proc freeze node             # freeze all node processes
+proc freeze node             # freeze the processes named node
 proc freeze :3000            # freeze process on port 3000
 proc freeze :3000 :8080 node # freeze multiple targets
 ```
@@ -22,7 +22,8 @@ Several targets are separate arguments. Comma-separated lists (`:3000,:8080`) st
 | `--yes` | `-y` | Skip confirmation |
 | `--dry-run` | | Show what would be frozen |
 | `--in [<dir>]` | `-i` | Filter by directory. Takes the next word as its directory unless it starts with `-` (bare `--in` is the current directory, `--in=DIR` is explicit) |
-| `--by <name>` | `-b` | Filter by process name |
+| `--by <name>` | `-b` | Filter by process name (the whole name, ignoring case) |
+| `--cmd` | | Match name targets and `--by` as a substring of the process name or full command line (like `pkill -f`) |
 | `--json` | `-j` | Output as JSON |
 | `--verbose` | `-v` | Show extra details |
 

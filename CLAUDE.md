@@ -53,6 +53,7 @@ src/
 ├── core/             # Shared logic
 │   ├── mod.rs        # Exports
 │   ├── filters.rs    # Shared filter utilities (resolve_in_dir)
+│   ├── name_match.rs # How a name target and --by match a process (exact by default, --cmd for substring)
 │   ├── target.rs     # Target parsing (:port, PID, name) and resolution
 │   ├── process.rs    # Process operations
 │   └── port.rs       # Port operations

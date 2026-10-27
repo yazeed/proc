@@ -20,7 +20,8 @@ One process gets the same detail view as `proc on :port` (directory, path, liste
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--in [<dir>]` | `-i` | Filter by working directory. Takes the next word as its directory unless it starts with `-` (bare `--in` is the current directory, `--in=DIR` is explicit) |
-| `--by <name>` | `-b` | Filter by process name |
+| `--by <name>` | `-b` | Filter by process name (the whole name, ignoring case) |
+| `--cmd` | | Match `--by` as a substring of the process name or full command line (like `pkill -f`) |
 | `--min-cpu <n>` | | Minimum CPU % |
 | `--min-mem <n>` | | Minimum memory (MB) |
 | `--status <s>` | | Filter by status: running, sleeping, stopped, zombie |
