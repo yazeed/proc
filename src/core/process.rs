@@ -64,6 +64,13 @@ fn looks_stuck(p: &sysinfo::Process) -> bool {
     p.cpu_usage() > 50.0 || p.status() == SysProcessStatus::UninterruptibleDiskSleep
 }
 
+/// Whether a process has been running for `timeout_secs`. A process's age is in whole
+/// seconds, so a process under a second old reads 0 and must still count for
+/// `--timeout 0`: "longer than" means this many seconds or more.
+fn ran_long_enough(run_time: u64, timeout_secs: u64) -> bool {
+    run_time >= timeout_secs
+}
+
 /// macOS: sysinfo drops zombies, because they have no executable path or arguments
 /// left to read, so `proc list --status zombie` could never find one. Read every
 /// process from the kernel, as `ps` does, and keep the zombies sysinfo didn't return.
@@ -407,7 +414,9 @@ impl Process {
             let now: std::collections::HashSet<Pid> = sys
                 .processes()
                 .iter()
-                .filter(|(_, p)| !is_thread(p) && p.run_time() > timeout_secs && looks_stuck(p))
+                .filter(|(_, p)| {
+                    !is_thread(p) && ran_long_enough(p.run_time(), timeout_secs) && looks_stuck(p)
+                })
                 .map(|(pid, _)| *pid)
                 .collect();
             stuck = Some(match stuck {
@@ -760,6 +769,15 @@ pub fn parse_signal_name(name: &str) -> Result<nix::sys::signal::Signal> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_process_that_ran_the_timeout_has_run_long_enough() {
+        // --timeout 0 finds a process that reads 0 seconds old
+        assert!(ran_long_enough(0, 0));
+        assert!(ran_long_enough(5, 5));
+        assert!(ran_long_enough(6, 5));
+        assert!(!ran_long_enough(4, 5));
+    }
 
     #[test]
     fn test_find_all_processes() {
