@@ -169,7 +169,8 @@ jobs:
       - name: Measure line coverage
         shell: bash
         run: |
-          source <(cargo llvm-cov show-env --sh)
+          # eval, not `source <(...)`: macOS runs bash 3.2, where that reads nothing
+          eval "$(cargo llvm-cov show-env --sh)"
           cargo llvm-cov clean --workspace
           cargo test -- --test-threads=4
           cargo llvm-cov report --lcov --output-path lcov-${{ matrix.os }}.info
