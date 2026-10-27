@@ -60,8 +60,29 @@ const STUCK_READING_GAP: Duration = Duration::from_secs(1);
 
 /// Stuck in one reading: busy (over half a core), or in uninterruptible sleep,
 /// blocked in the kernel (usually on I/O) where it can't even be interrupted
-fn looks_stuck(p: &sysinfo::Process) -> bool {
-    p.cpu_usage() > 50.0 || p.status() == SysProcessStatus::UninterruptibleDiskSleep
+fn looks_stuck(cpu_percent: f32, status: SysProcessStatus) -> bool {
+    cpu_percent > 50.0 || status == SysProcessStatus::UninterruptibleDiskSleep
+}
+
+/// CPU use in percent of one core: the CPU time a process used between two
+/// reads (`accumulated_cpu_time`, in ms) over the wall time between them.
+/// sysinfo's own `cpu_usage` can't be trusted across two reads: on Windows a
+/// process's first update stores no baseline, so the next one divides its
+/// lifetime CPU by all CPU time since boot and reads ~0% for a full core.
+fn cpu_percent_between(used_before_ms: u64, used_after_ms: u64, wall: Duration) -> f32 {
+    let wall_ms = wall.as_secs_f64() * 1000.0;
+    if wall_ms <= 0.0 {
+        return 0.0;
+    }
+    (used_after_ms.saturating_sub(used_before_ms) as f64 / wall_ms * 100.0) as f32
+}
+
+/// The CPU time each process in `sys` has used so far, in ms
+fn cpu_used(sys: &System) -> std::collections::HashMap<Pid, u64> {
+    sys.processes()
+        .iter()
+        .map(|(pid, p)| (*pid, p.accumulated_cpu_time()))
+        .collect()
 }
 
 /// Whether a process has been running for `timeout_secs`. A process's age is in whole
@@ -412,17 +433,43 @@ impl Process {
     /// still looks the same as a loop that never ends; only the user can tell.
     pub fn find_stuck(timeout: Duration) -> Result<Vec<Process>> {
         let timeout_secs = timeout.as_secs();
+        // each read is timed from its start, as in `measure_cpu`
+        let mut read_at = std::time::Instant::now();
         let mut sys = System::new_all();
+        let mut used = cpu_used(&sys);
+        let mut cpu: std::collections::HashMap<Pid, f32> = std::collections::HashMap::new();
         let mut stuck: Option<std::collections::HashSet<Pid>> = None;
 
         for _ in 0..STUCK_READINGS {
             std::thread::sleep(STUCK_READING_GAP);
+            let started = std::time::Instant::now();
             sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+            let wall = started - read_at;
+            read_at = started;
+            // a process first seen in this read has no CPU figure yet
+            cpu = sys
+                .processes()
+                .iter()
+                .filter_map(|(pid, p)| {
+                    let before = used.get(pid)?;
+                    Some((
+                        *pid,
+                        cpu_percent_between(*before, p.accumulated_cpu_time(), wall),
+                    ))
+                })
+                .collect();
+            used = cpu_used(&sys);
             let now: std::collections::HashSet<Pid> = sys
                 .processes()
                 .iter()
-                .filter(|(_, p)| {
-                    counts_as_stuck(is_thread(p), p.run_time(), timeout_secs, looks_stuck(p))
+                .filter(|(pid, p)| {
+                    let busy = cpu.get(pid).copied().unwrap_or(0.0);
+                    counts_as_stuck(
+                        is_thread(p),
+                        p.run_time(),
+                        timeout_secs,
+                        looks_stuck(busy, p.status()),
+                    )
                 })
                 .map(|(pid, _)| *pid)
                 .collect();
@@ -437,7 +484,14 @@ impl Process {
             .processes()
             .iter()
             .filter(|(pid, _)| stuck.contains(pid))
-            .map(|(pid, p)| Process::from_sysinfo(*pid, p))
+            .map(|(pid, p)| {
+                let mut process = Process::from_sysinfo(*pid, p);
+                // the figure the last read measured, not sysinfo's own
+                if let Some(&busy) = cpu.get(pid) {
+                    process.cpu_percent = busy;
+                }
+                process
+            })
             .collect())
     }
 
@@ -446,12 +500,25 @@ impl Process {
     pub fn looks_stuck_now(&self) -> bool {
         let pid = Pid::from_u32(self.pid);
         let mut sys = System::new();
+        let mut read_at = std::time::Instant::now();
         sys.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+        let mut used = sys
+            .process(pid)
+            .filter(|p| self.is_same(p))
+            .map(|p| p.accumulated_cpu_time());
         (0..STUCK_READINGS).all(|_| {
             std::thread::sleep(STUCK_READING_GAP);
+            let started = std::time::Instant::now();
             sys.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
-            sys.process(pid)
-                .is_some_and(|p| self.is_same(p) && looks_stuck(p))
+            let wall = started - read_at;
+            read_at = started;
+            let (Some(before), Some(p)) = (used, sys.process(pid).filter(|p| self.is_same(p)))
+            else {
+                return false;
+            };
+            let after = p.accumulated_cpu_time();
+            used = Some(after);
+            looks_stuck(cpu_percent_between(before, after, wall), p.status())
         })
     }
 
@@ -461,12 +528,18 @@ impl Process {
     pub fn cpu_over(&self, window: Duration) -> Option<f32> {
         let pid = Pid::from_u32(self.pid);
         let mut sys = System::new();
+        let started = std::time::Instant::now();
         sys.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+        let before = sys
+            .process(pid)
+            .filter(|p| self.is_same(p))
+            .map(|p| p.accumulated_cpu_time())?;
         std::thread::sleep(window.max(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL));
+        let wall = started.elapsed();
         sys.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
         sys.process(pid)
             .filter(|p| self.is_same(p))
-            .map(|p| p.cpu_usage())
+            .map(|p| cpu_percent_between(before, p.accumulated_cpu_time(), wall))
     }
 
     /// Measure the CPU use of these processes over 0.2 s and set `cpu_percent`,
@@ -490,15 +563,11 @@ impl Process {
 
         let first = std::time::Instant::now();
         sys.refresh_processes_specifics(which, true, cpu_only);
-        let before: std::collections::HashMap<Pid, u64> = sys
-            .processes()
-            .iter()
-            .map(|(pid, p)| (*pid, p.accumulated_cpu_time()))
-            .collect();
+        let before = cpu_used(&sys);
         std::thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
         // each refresh reads the processes in the same order, so timing both
         // from their start gives every process the same window
-        let wall_ms = first.elapsed().as_secs_f64() * 1000.0;
+        let wall = first.elapsed();
         sys.refresh_processes_specifics(which, true, cpu_only);
 
         for process in processes.iter_mut() {
@@ -507,8 +576,8 @@ impl Process {
                 continue;
             };
             if process.is_same(current) {
-                let used_ms = current.accumulated_cpu_time().saturating_sub(cpu_before);
-                process.cpu_percent = (used_ms as f64 / wall_ms * 100.0) as f32;
+                process.cpu_percent =
+                    cpu_percent_between(cpu_before, current.accumulated_cpu_time(), wall);
             }
         }
     }
@@ -776,6 +845,28 @@ pub fn parse_signal_name(name: &str) -> Result<nix::sys::signal::Signal> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cpu_is_the_cpu_time_used_over_the_wall_time() {
+        let second = Duration::from_secs(1);
+        // a full core for a second, half a core, and nothing
+        assert_eq!(cpu_percent_between(5_000, 6_000, second), 100.0);
+        assert_eq!(cpu_percent_between(5_000, 5_500, second), 50.0);
+        assert_eq!(cpu_percent_between(5_000, 5_000, second), 0.0);
+        // two cores' worth reads 200%, in percent of one core
+        assert_eq!(cpu_percent_between(0, 2_000, second), 200.0);
+        // a counter that went backwards (a reused PID) or no time passing is 0
+        assert_eq!(cpu_percent_between(6_000, 5_000, second), 0.0);
+        assert_eq!(cpu_percent_between(0, 1_000, Duration::ZERO), 0.0);
+    }
+
+    #[test]
+    fn busy_means_over_half_a_core_or_blocked_in_the_kernel() {
+        assert!(looks_stuck(50.1, SysProcessStatus::Run));
+        assert!(!looks_stuck(50.0, SysProcessStatus::Run));
+        assert!(!looks_stuck(0.0, SysProcessStatus::Sleep));
+        assert!(looks_stuck(0.0, SysProcessStatus::UninterruptibleDiskSleep));
+    }
 
     #[test]
     fn a_reading_counts_as_stuck_from_the_timeout_on() {
