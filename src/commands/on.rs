@@ -104,13 +104,9 @@ impl OnCommand {
 
         for target in targets {
             let found = match parse_target(target) {
-                TargetType::Port(port) => {
-                    self.lookup_port(port)
-                        .map(|(port_info, process)| match process {
-                            Some(process) => vec![(process, vec![port_info])],
-                            None => Vec::new(),
-                        })
-                }
+                TargetType::Port(port) => self
+                    .lookup_port(port)
+                    .map(|(port_info, process)| port_hit(port_info, process)),
                 TargetType::Pid(pid) => self.lookup_pid(pid).map(|found| vec![found]),
                 TargetType::Name(ref name) => self.lookup_name(name),
             };
@@ -177,23 +173,33 @@ impl OnCommand {
             None => return Err(ProcError::PortNotFound(port)),
         };
 
-        let mut process = Process::find_by_pid(port_info.pid)?;
+        let process = Process::find_by_pid(port_info.pid)?;
+        self.filter_port_process(port, port_info, process)
+    }
+
+    /// Take the CPU reading of the process on a port and apply --in/--by to it.
+    /// The process is `None` when it ended after its port was listed.
+    fn filter_port_process(
+        &self,
+        port: u16,
+        port_info: PortInfo,
+        process: Option<Process>,
+    ) -> Result<(PortInfo, Option<Process>)> {
+        let Some(mut proc) = process else {
+            return Ok((port_info, None));
+        };
         // Real CPU reading for what's shown
-        if let Some(ref mut proc) = process {
-            Process::measure_cpu(std::slice::from_mut(proc));
-        }
+        Process::measure_cpu(std::slice::from_mut(&mut proc));
 
         // Apply --in and --by filters if present
-        if let Some(ref proc) = process {
-            if !self.matches_filters(proc) {
-                return Err(ProcError::ProcessNotFound(format!(
-                    "port {} (process not in specified directory)",
-                    port
-                )));
-            }
+        if !self.matches_filters(&proc) {
+            return Err(ProcError::ProcessNotFound(format!(
+                "port {} (process not in specified directory)",
+                port
+            )));
         }
 
-        Ok((port_info, process))
+        Ok((port_info, Some(proc)))
     }
 
     /// Show what process is on a specific port
@@ -265,11 +271,8 @@ impl OnCommand {
 
     /// Find processes by name and their listening ports, applying --in/--by
     fn lookup_name(&self, name: &str) -> Result<Vec<(Process, Vec<PortInfo>)>> {
+        // A name that matches nothing is an error here, never an empty list
         let mut processes = resolve_target(name)?;
-
-        if processes.is_empty() {
-            return Err(ProcError::ProcessNotFound(name.to_string()));
-        }
 
         // Apply --in and --by filters if present
         if self.in_dir.is_some() || self.by_name.is_some() {
@@ -425,6 +428,15 @@ impl OnCommand {
     }
 }
 
+/// What a port lookup contributes to the multi-target JSON: the process on the
+/// port with that port, or nothing when the process ended after the port was listed
+fn port_hit(port_info: PortInfo, process: Option<Process>) -> Vec<(Process, Vec<PortInfo>)> {
+    match process {
+        Some(process) => vec![(process, vec![port_info])],
+        None => Vec::new(),
+    }
+}
+
 #[derive(Serialize)]
 struct PortLookupOutput<'a> {
     action: &'static str,
@@ -470,4 +482,86 @@ struct MultiProcessPortsOutput<'a> {
     success: bool,
     count: usize,
     results: &'a Vec<ProcessPortsJson<'a>>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::{ProcessStatus, Protocol};
+
+    fn command(in_dir: Option<&str>) -> OnCommand {
+        OnCommand {
+            target: "x".to_string(),
+            in_dir: in_dir.map(String::from),
+            by_name: None,
+            json: false,
+            verbose: false,
+        }
+    }
+
+    /// A process record with no working directory, which some processes really
+    /// are (a zombie has none on Linux)
+    fn without_cwd() -> Process {
+        Process {
+            pid: 1,
+            name: "x".to_string(),
+            exe_path: None,
+            cwd: None,
+            command: None,
+            cpu_percent: 0.0,
+            memory_mb: 0.0,
+            status: ProcessStatus::Sleeping,
+            user: None,
+            parent_pid: None,
+            start_time: None,
+            uptime_secs: None,
+        }
+    }
+
+    fn listener() -> PortInfo {
+        PortInfo {
+            port: 4000,
+            protocol: Protocol::Tcp,
+            pid: 1,
+            process_name: "x".to_string(),
+            address: None,
+        }
+    }
+
+    #[test]
+    fn a_process_with_no_working_directory_fails_in() {
+        assert!(!command(Some("/")).matches_in_filter(&without_cwd()));
+        assert!(command(None).matches_in_filter(&without_cwd()));
+    }
+
+    #[test]
+    fn a_port_whose_process_ended_has_no_process_to_filter() {
+        let (info, process) = command(Some("/"))
+            .filter_port_process(4000, listener(), None)
+            .unwrap();
+        assert_eq!(info.port, 4000);
+        assert!(process.is_none());
+    }
+
+    #[test]
+    fn a_port_whose_process_ended_adds_nothing_to_the_json_results() {
+        assert!(port_hit(listener(), None).is_empty());
+        assert_eq!(port_hit(listener(), Some(without_cwd())).len(), 1);
+    }
+
+    #[test]
+    fn a_port_without_a_process_still_prints() {
+        // Neither the process nor its details: the address shows as `*`
+        let mut cmd = command(None);
+        cmd.verbose = true;
+        cmd.print_process_on_port(&listener(), None);
+    }
+
+    #[test]
+    fn a_process_missing_its_details_prints_without_them() {
+        let mut cmd = command(None);
+        cmd.verbose = true;
+        cmd.print_process_on_port(&listener(), Some(&without_cwd()));
+        cmd.print_ports_for_process(&without_cwd(), &[listener()]);
+    }
 }

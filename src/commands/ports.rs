@@ -13,8 +13,14 @@ use crate::ui::{truncate_string, Printer};
 use clap::Args;
 use colored::*;
 use serde::Serialize;
-use std::collections::HashMap;
-use std::path::PathBuf;
+use std::collections::{HashMap, HashSet};
+use std::path::Path;
+
+/// Whether the process is known and its working directory is inside `dir`
+fn cwd_within(proc: Option<&Process>, dir: &Path) -> bool {
+    proc.and_then(|p| p.cwd.as_deref())
+        .is_some_and(|cwd| Path::new(cwd).starts_with(dir))
+}
 
 /// An inclusive port range, START-END, such as 8000-9000
 fn parse_port_range(s: &str) -> std::result::Result<(u16, u16), String> {
@@ -85,18 +91,13 @@ impl PortsCommand {
         }
 
         // Filter by directory if specified
-        if let Some(ref _dir) = self.in_dir {
-            let in_dir_filter = resolve_in_dir(&self.in_dir);
-            if let Some(ref dir_path) = in_dir_filter {
-                ports.retain(|p| {
-                    if let Ok(Some(proc)) = Process::find_by_pid(p.pid) {
-                        if let Some(ref cwd) = proc.cwd {
-                            return PathBuf::from(cwd).starts_with(dir_path);
-                        }
-                    }
-                    false
-                });
-            }
+        if let Some(dir_path) = resolve_in_dir(&self.in_dir) {
+            ports.retain(|p| {
+                cwd_within(
+                    Process::find_by_pid(p.pid).ok().flatten().as_ref(),
+                    &dir_path,
+                )
+            });
         }
 
         // Filter by address exposure
@@ -141,15 +142,14 @@ impl PortsCommand {
 
         // In verbose mode, fetch process info for paths
         let process_map: HashMap<u32, Process> = if self.verbose {
-            let mut map = HashMap::new();
-            for port in &ports {
-                if let std::collections::hash_map::Entry::Vacant(e) = map.entry(port.pid) {
-                    if let Ok(Some(proc)) = Process::find_by_pid(port.pid) {
-                        e.insert(proc);
-                    }
-                }
-            }
-            map
+            // One lookup per PID; a process that ended since its port was listed has no entry
+            let pids: HashSet<u32> = ports.iter().map(|p| p.pid).collect();
+            pids.into_iter()
+                .filter_map(|pid| {
+                    let proc = Process::find_by_pid(pid).ok().flatten()?;
+                    Some((pid, proc))
+                })
+                .collect()
         } else {
             HashMap::new()
         };
@@ -253,4 +253,64 @@ struct PortsOutput<'a> {
     success: bool,
     count: usize,
     ports: Vec<PortWithProcess<'a>>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::{ProcessStatus, Protocol};
+
+    fn process(cwd: Option<&str>, exe_path: Option<&str>) -> Process {
+        Process {
+            pid: 1,
+            name: "x".to_string(),
+            exe_path: exe_path.map(String::from),
+            cwd: cwd.map(String::from),
+            command: None,
+            cpu_percent: 0.0,
+            memory_mb: 0.0,
+            status: ProcessStatus::Sleeping,
+            user: None,
+            parent_pid: None,
+            start_time: None,
+            uptime_secs: None,
+        }
+    }
+
+    #[test]
+    fn only_a_known_process_inside_the_directory_passes_in() {
+        let dir = Path::new("/work");
+        assert!(cwd_within(Some(&process(Some("/work/app"), None)), dir));
+        assert!(!cwd_within(Some(&process(Some("/elsewhere"), None)), dir));
+        // No working directory (a zombie has none), or no process at all
+        // (it ended since its port was listed)
+        assert!(!cwd_within(Some(&process(None, None)), dir));
+        assert!(!cwd_within(None, dir));
+    }
+
+    #[test]
+    fn verbose_listing_copes_with_a_port_whose_process_has_no_path() {
+        let cmd = PortsCommand {
+            by_name: None,
+            in_dir: None,
+            exposed: false,
+            local: false,
+            json: false,
+            verbose: true,
+            sort: PortSortKey::Port,
+            limit: None,
+            range: None,
+        };
+        let port = PortInfo {
+            port: 4000,
+            protocol: Protocol::Tcp,
+            pid: 1,
+            process_name: "x".to_string(),
+            address: None,
+        };
+        // No entry for the PID, then an entry without a path
+        cmd.print_human(std::slice::from_ref(&port), &HashMap::new());
+        let map = HashMap::from([(1, process(None, None))]);
+        cmd.print_human(std::slice::from_ref(&port), &map);
+    }
 }
