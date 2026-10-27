@@ -24,6 +24,7 @@ proc orphans --by node       # find orphaned node processes
 | `--by <name>` | `-b` | Filter by process name |
 | `--json` | `-j` | Output as JSON |
 | `--verbose` | `-v` | Show extra details |
+| `--wide` | `-w` | Print full directories and arguments instead of fitting the terminal |
 
 ## Examples
 

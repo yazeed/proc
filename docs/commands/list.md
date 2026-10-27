@@ -15,6 +15,8 @@ proc list --sort cpu --limit 10  # top 10 by CPU
 
 The table shows PID, directory, name, arguments, CPU, memory and status, plus uptime on terminals at least 100 columns wide. `--verbose` and `--json` always include uptime.
 
+One process is always one line. Directories and arguments are shortened to fit the terminal, with long paths keeping their root and their tail (`/Users/…/maliqe-website/.next/standalone`). Use `--wide` to print them in full.
+
 ## Options
 
 | Flag | Short | Description |
@@ -30,6 +32,7 @@ The table shows PID, directory, name, arguments, CPU, memory and status, plus up
 | `--limit <n>` | `-n` | Limit results |
 | `--json` | `-j` | Output as JSON |
 | `--verbose` | `-v` | Show command line, cwd, parent PID, uptime |
+| `--wide` | `-w` | Print full directories and arguments instead of fitting the terminal |
 
 ## Examples
 

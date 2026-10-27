@@ -29,6 +29,7 @@ The directory can be one that was deleted, such as a removed git worktree: proce
 | `--limit <n>` | `-n` | Limit results |
 | `--json` | `-j` | Output as JSON |
 | `--verbose` | `-v` | Show command line, cwd, parent PID, uptime |
+| `--wide` | `-w` | Print full directories and arguments instead of fitting the terminal |
 
 ## Examples
 

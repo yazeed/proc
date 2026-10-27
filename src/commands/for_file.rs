@@ -55,6 +55,10 @@ pub struct ForCommand {
     #[arg(long, short = 'v')]
     pub verbose: bool,
 
+    /// Print full directories and arguments instead of fitting the terminal width
+    #[arg(long, short = 'w')]
+    pub wide: bool,
+
     /// Sort by: cpu, mem, pid, name
     #[arg(long, short = 's', value_enum, default_value_t = SortKey::Cpu)]
     pub sort: SortKey,
@@ -105,10 +109,7 @@ impl ForCommand {
 
         // 8. Handle no results
         if processes.is_empty() {
-            return Err(ProcError::ProcessNotFound(format!(
-                "No processes found for file: {}",
-                self.file
-            )));
+            return Err(ProcError::ProcessNotFound(self.file.clone()));
         }
 
         // 9. For each process, get ports
@@ -274,11 +275,9 @@ impl ForCommand {
         } else {
             // Multiple processes: the standard process table, then who listens where
             let processes: Vec<Process> = results.iter().map(|(p, _)| p.clone()).collect();
-            Printer::from_flags(false, self.verbose).print_processes_as(
-                "for",
-                &processes,
-                Some(&format!("for {}", file_display)),
-            );
+            Printer::from_flags(false, self.verbose)
+                .wide(self.wide)
+                .print_processes_as("for", &processes, Some(&format!("for {}", file_display)));
 
             let listening: Vec<_> = results
                 .iter()

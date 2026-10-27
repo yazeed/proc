@@ -213,6 +213,7 @@ Filters can be combined with discovery and lifecycle commands:
 |--------|-------|-------------|
 | `--json` | `-j` | JSON output |
 | `--verbose` | `-v` | Show paths, cwd, full commands |
+| `--wide` | `-w` | Print full directories and arguments instead of fitting the terminal (`list`, `by`, `in`, `for`, `stuck`, `orphans`) |
 | `--yes` | `-y` | Skip confirmation |
 | `--dry-run` | | Preview without executing |
 | `--force` | `-f` | Force termination if recovery fails (`unstick`) |

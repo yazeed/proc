@@ -189,7 +189,7 @@ For complete JSON output schemas and field definitions, see [reference.md](refer
 - **Blocking**: `proc wait` — always pass `--timeout`
 - **Streaming**: `proc watch --json` — NDJSON forever; bound it with `timeout N` or `| head -n N`. Without `--json` and without a TTY it prints one snapshot. Prefer `proc list` for a single snapshot
 - **Destructive**: `kill`, `stop`, `freeze`, `thaw`, `free`, `unstick`, and `orphans`/`stuck` with `--kill` — always pass `--yes --json`
-- **Showing results to the user**: run without `--json` for a readable table (an `UPTIME` column appears on terminals 100+ columns wide)
+- **Showing results to the user**: run without `--json` for a readable table (an `UPTIME` column appears on terminals 100+ columns wide). One process is always one line; directories and arguments are shortened to fit, so add `--wide` on `list`, `by`, `in`, `for`, `stuck` and `orphans` when the full path matters
 
 ## Gotchas
 

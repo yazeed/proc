@@ -4,6 +4,7 @@
 
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Shell};
+use colored::Colorize;
 use proc_cli::commands::{
     ByCommand, ForCommand, FreeCommand, FreezeCommand, InCommand, InfoCommand, KillCommand,
     ListCommand, OnCommand, OrphansCommand, PortsCommand, StopCommand, StuckCommand, ThawCommand,
@@ -95,7 +96,52 @@ Targets: :port, PID, or process name. Comma-separate for multiple.
 For more information, visit: https://github.com/yazeed/proc-cli")]
 struct Cli {
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
+}
+
+/// What a bare `proc` prints.
+///
+/// The full command list is a menu, not an orientation: it tells a newcomer
+/// what exists without telling them how the tool thinks. The one thing worth
+/// learning first is that a target is the same everywhere, so that is what
+/// this leads with — and every line here is a command that runs as shown.
+fn print_orientation() {
+    println!(
+        "{} {}",
+        "proc".bold(),
+        "— semantic process management".bright_black()
+    );
+    println!();
+    println!(
+        "  {}",
+        "A target is the same everywhere: :port, PID, or name.".bright_black()
+    );
+    println!();
+    for (cmd, what) in [
+        ("proc on :3000", "what's on port 3000"),
+        ("proc in .", "what's running in this directory"),
+        ("proc by node", "processes named node"),
+        ("proc kill :3000", "stop whatever holds the port"),
+    ] {
+        println!(
+            "    {} {}",
+            format!("{:<20}", cmd).cyan(),
+            what.bright_black()
+        );
+    }
+    println!();
+    println!(
+        "  {} {}",
+        format!("{:<8}", "Common:").bright_black(),
+        "on · in · by · ports · info · kill · stop · free · why".white()
+    );
+    println!();
+    println!(
+        "  {} {}  {}",
+        format!("{:<20}", "proc --help").cyan(),
+        "all 19 commands".bright_black(),
+        "· https://proc-cli.com".bright_black()
+    );
 }
 
 #[derive(Subcommand)]
@@ -309,7 +355,12 @@ fn main() {
         }
     };
 
-    let result = match cli.command {
+    let Some(command) = cli.command else {
+        print_orientation();
+        return;
+    };
+
+    let result = match command {
         Commands::On(cmd) => cmd.execute(),
         Commands::For(cmd) => cmd.execute(),
         Commands::By(cmd) => cmd.execute(),

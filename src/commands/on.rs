@@ -270,7 +270,7 @@ impl OnCommand {
             processes.retain(|p| self.matches_filters(p));
             if processes.is_empty() {
                 return Err(ProcError::ProcessNotFound(format!(
-                    "'{}' (no matches with specified filters)",
+                    "{} (no matches with specified filters)",
                     name
                 )));
             }

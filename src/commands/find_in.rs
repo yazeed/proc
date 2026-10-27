@@ -50,6 +50,10 @@ pub struct InCommand {
     #[arg(long, short = 'v')]
     pub verbose: bool,
 
+    /// Print full directories and arguments instead of fitting the terminal width
+    #[arg(long, short = 'w')]
+    pub wide: bool,
+
     /// Limit the number of results
     #[arg(long, short = 'n')]
     pub limit: Option<usize>,
@@ -81,7 +85,7 @@ impl InCommand {
         } else {
             OutputFormat::Human
         };
-        let printer = Printer::new(format, self.verbose);
+        let printer = Printer::new(format, self.verbose).wide(self.wide);
 
         // Get base process list
         let mut processes = if let Some(ref name) = self.by_name {

@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **A bare `proc` orients you instead of listing all 19 commands.** It now leads with the one idea that unlocks the rest — a target is the same everywhere — and shows four commands that run exactly as printed, with `proc --help` still listing everything. The full list told a newcomer what exists without telling them how the tool thinks, and the measure that matters for a CLI is how long it takes someone who has never run it to get a correct answer
+- **One process is always one line.** The process table truncates to the terminal width instead of letting cells wrap: on a machine with ten sibling repos, fourteen processes used to render as roughly seventy interleaved fragments with the columns no longer lining up, which stopped it being a table at all. Long directories keep their root and their tail (`/Users/…/maliqe-website/.next/standalone`), because the tail is the part that differs between rows
 - **Website redesign ([proc-cli.com](https://proc-cli.com)).** A new layout and type built for reading: a 42rem text column, Atkinson Hyperlegible Next and JetBrains Mono, light and dark themes. Code blocks are dark terminals with copy buttons and spacing above and below, so the text after a block no longer sits against it. The home page leads with an interactive command reader: pick any of the 19 commands and one of its targets, and it says what that exact command does and how proc reads the target (58 examples, in `docs/_data/reader.yml`). "Target" in the headline uses the same colour as the target in the reader. Command pages have a sidebar listing every command, and the changelog has one listing every version with its release date, grouped by minor version and marking the one you're reading. The header and the install page show the latest version, read from `docs/_data/release.yml`, which RELEASE.md now bumps with the others
 - **Sentence case across the site**: page titles, headings, tables and post titles
 - **`proc wait` notices an exit within a quarter second.** It used to check only every `--interval` (5 seconds by default), so it could return 5 seconds late. `--interval` now sets how often the status line is printed
@@ -19,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Not-found messages no longer nest a sentence inside a sentence.** `proc for ./Cargo.toml` printed `No process found matching 'No processes found for file: ./Cargo.toml'`, and `proc on <name>` with a filter that matched nothing doubled its quotes. Both passed pre-formatted text into an error template that supplies its own wording and quoting; they now pass the target, so the message reads `No process found matching './Cargo.toml'`
+- **proc could crash on a non-ASCII path, process name or argument.** Truncation cut strings by byte position, so a cut landing inside a multi-byte character (an accent, CJK, an emoji) panicked instead of printing a row. The cut point is derived from the terminal width, so the same command crashed or succeeded depending on how wide the window was. Truncation now counts display columns and never splits a character, and CJK and emoji — two columns wide each — stay aligned
 - **`proc stop`, `orphans --kill` and `stuck --kill` could hang forever** when a killed process became a zombie whose parent didn't reap it (seen on Linux: `proc stop` never returned). Waiting after SIGKILL is now limited to 5 seconds
 - **A zombie (exited, not yet reaped) counted as running** on Linux, so `wait` timed out on processes that had already exited, and `stop`, `free` and `unstick` waited out their timeouts on them
 - **Zombies were never listed on macOS**, so `proc list --status zombie` found nothing; they are now read from the kernel, as `ps` does
@@ -36,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`--wide` / `-w` on `list`, `by`, `in`, `for`, `stuck` and `orphans`**: prints directories and arguments in full instead of fitting them to the terminal, for when you need the whole path and your terminal can scroll
 - **[FAQ page](https://proc-cli.com/faq)**: 16 answers to the most searched process and port questions ("address already in use", killing a process on a port on Mac and Windows, zombies, orphans, pausing a process), each with the proc command and the classic alternative
 - **Blog post**: [What's new in proc](https://proc-cli.com/posts/whats-new-in-proc), covering the releases since March
 - **Structured data**: SoftwareApplication on the home page, FAQPage on the FAQ, BreadcrumbList on posts and command pages, and an author (`yazeed`, linked to GitHub) on posts, shown with an avatar next to the date. Every page also has a social card image

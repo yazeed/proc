@@ -4,7 +4,9 @@
 
 use crate::core::{PortInfo, Process};
 use crate::error::{ExitCode, ProcError, Result};
-use crate::ui::format::{colorize_status, format_duration, format_memory, plural, truncate_string};
+use crate::ui::format::{
+    colorize_status, format_duration, format_memory, plural, truncate_path, truncate_string,
+};
 use colored::*;
 use comfy_table::presets::NOTHING;
 use comfy_table::{Attribute, Cell, CellAlignment, Color, ContentArrangement, Table};
@@ -25,6 +27,8 @@ pub enum OutputFormat {
 pub struct Printer {
     format: OutputFormat,
     verbose: bool,
+    /// Print full values instead of truncating them to the terminal width.
+    wide: bool,
 }
 
 /// Detect terminal width, falling back to 120 when stdout is not a TTY.
@@ -35,7 +39,18 @@ fn terminal_width() -> u16 {
 impl Printer {
     /// Creates a new printer with the specified format and verbosity.
     pub fn new(format: OutputFormat, verbose: bool) -> Self {
-        Self { format, verbose }
+        Self {
+            format,
+            verbose,
+            wide: false,
+        }
+    }
+
+    /// Opt into untruncated output (`--wide`). Values print in full and rows
+    /// may exceed the terminal width rather than being elided.
+    pub fn wide(mut self, wide: bool) -> Self {
+        self.wide = wide;
+        self
     }
 
     /// Create a printer from common CLI flags.
@@ -212,11 +227,46 @@ impl Printer {
             // UPTIME only fits next to a readable ARGS column on wider terminals
             let show_uptime = width >= 100;
 
+            // Column budget. The fixed columns below consume a known number of
+            // terminal columns (content plus comfy-table's 1-column padding on
+            // each side); DIR, NAME and ARGS share what is left. Pre-truncating
+            // each of those to its share is what keeps one process on one line:
+            // comfy-table wraps any cell that does not fit, and a wrapped cell
+            // destroys the column alignment that makes a table readable.
+            const PID_W: usize = 8;
+            const CPU_W: usize = 8;
+            const MEM_W: usize = 11;
+            const UPTIME_W: usize = 10;
+            const STATUS_W: usize = 12;
+            let fixed = PID_W + CPU_W + MEM_W + STATUS_W + if show_uptime { UPTIME_W } else { 0 };
+            // Each flexible column renders as its Fixed() content width plus
+            // comfy-table's 2 columns of padding, so reserve those 6 up front.
+            const FLEX_PADDING: usize = 6;
+            // Measured slack: with arrangement disabled the fixed columns render
+            // a few columns wider than their constraints, and a line exactly as
+            // wide as the terminal wraps in some emulators. Verified against
+            // rendered output at 80/100/120/160/200 columns.
+            const SAFETY: usize = 7;
+            let avail = (width as usize)
+                .saturating_sub(fixed + FLEX_PADDING + SAFETY)
+                .max(24);
+            let name_w = (avail / 4).clamp(8, 16);
+            let rest = avail - name_w;
+            let args_w = (rest / 2).max(12);
+            let dir_w = rest - args_w;
+            // An UpperBoundary column fits exactly its Fixed() value of content.
+            let dir_content = dir_w;
+            let name_content = name_w;
+            let args_content = args_w;
+
             let mut table = Table::new();
+            // Disabled never reflows a cell, so one process is always one line.
+            // Fitting the terminal is handled by truncating content above, not
+            // by letting comfy-table wrap — a wrapped cell breaks the column
+            // alignment that makes the table readable in the first place.
             table
                 .load_preset(NOTHING)
-                .set_content_arrangement(ContentArrangement::Dynamic)
-                .set_width(width);
+                .set_content_arrangement(ContentArrangement::Disabled);
 
             // Header
             let mut header = vec![
@@ -257,56 +307,55 @@ impl Printer {
             );
             table.set_header(header);
 
-            // Set fixed-width columns and flexible ones
-            use comfy_table::ColumnConstraint::*;
-            use comfy_table::Width::*;
-            // Fixed widths must account for comfy-table's per-cell padding (1 left + 1 right = 2)
-            // Content width = Fixed(N) - 2
-            table
-                .column_mut(0)
-                .expect("PID column")
-                .set_constraint(Absolute(Fixed(8))); // 6 content — fits "999999"
-            table
-                .column_mut(1)
-                .expect("DIR column")
-                .set_constraint(LowerBoundary(Fixed(20)));
-            table
-                .column_mut(2)
-                .expect("NAME column")
-                .set_constraint(LowerBoundary(Fixed(10)));
-            // ARGS: flexible but capped so it doesn't squeeze other columns
-            let args_max = (width / 2).max(30);
-            table
-                .column_mut(3)
-                .expect("ARGS column")
-                .set_constraint(UpperBoundary(Fixed(args_max)));
-            table
-                .column_mut(4)
-                .expect("CPU% column")
-                .set_constraint(Absolute(Fixed(8))); // 6 content — fits "100.0"
-            table
-                .column_mut(5)
-                .expect("MEM column")
-                .set_constraint(Absolute(Fixed(11))); // 9 content — fits "9999.9MB"
-            let status_column = if show_uptime {
+            // Constraints mirror the budget above. In --wide mode no constraint
+            // is set at all, so every column sizes to its full content.
+            if !self.wide {
+                use comfy_table::ColumnConstraint::*;
+                use comfy_table::Width::*;
                 table
-                    .column_mut(6)
-                    .expect("UPTIME column")
-                    .set_constraint(Absolute(Fixed(10))); // 8 content — fits "999d 23h"
-                7
-            } else {
-                6
-            };
-            table
-                .column_mut(status_column)
-                .expect("STATUS column")
-                .set_constraint(Absolute(Fixed(12))); // 10 content — fits "Sleeping"
+                    .column_mut(0)
+                    .expect("PID column")
+                    .set_constraint(Absolute(Fixed(PID_W as u16))); // 6 content — fits "999999"
+                table
+                    .column_mut(4)
+                    .expect("CPU% column")
+                    .set_constraint(Absolute(Fixed(CPU_W as u16))); // 6 content — fits "100.0"
+                table
+                    .column_mut(5)
+                    .expect("MEM column")
+                    .set_constraint(Absolute(Fixed(MEM_W as u16))); // 9 content — fits "9999.9MB"
+                let status_column = if show_uptime {
+                    table
+                        .column_mut(6)
+                        .expect("UPTIME column")
+                        .set_constraint(Absolute(Fixed(UPTIME_W as u16))); // 8 content
+                    7
+                } else {
+                    6
+                };
+                table
+                    .column_mut(status_column)
+                    .expect("STATUS column")
+                    .set_constraint(Absolute(Fixed(STATUS_W as u16))); // 10 content
+            }
 
             for proc in processes {
                 let status_str = format!("{:?}", proc.status);
 
-                // Show working directory (where the process was started from)
-                let path_display = proc.cwd.as_deref().unwrap_or("-").to_string();
+                // Show working directory (where the process was started from).
+                // Middle elision keeps the root and the tail that differs
+                // between rows; truncating either end alone loses one of them.
+                let cwd = proc.cwd.as_deref().unwrap_or("-");
+                let path_display = if self.wide {
+                    cwd.to_string()
+                } else {
+                    truncate_path(cwd, dir_content)
+                };
+                let name_display = if self.wide {
+                    proc.name.clone()
+                } else {
+                    truncate_string(&proc.name, name_content)
+                };
 
                 // Show command args (skip executable, simplify paths to filenames)
                 let cmd_display = proc
@@ -331,8 +380,10 @@ impl Printer {
                             let result = args.join(" ");
                             if result.is_empty() {
                                 "-".to_string()
+                            } else if self.wide {
+                                result
                             } else {
-                                truncate_string(&result, (args_max as usize).saturating_sub(2))
+                                truncate_string(&result, args_content)
                             }
                         } else {
                             // No args beyond the executable itself
@@ -354,7 +405,7 @@ impl Printer {
                 let mut row = vec![
                     Cell::new(proc.pid).fg(Color::Cyan),
                     Cell::new(&path_display).fg(Color::DarkGrey),
-                    Cell::new(&proc.name).fg(Color::White),
+                    Cell::new(&name_display).fg(Color::White),
                     Cell::new(&cmd_display).fg(Color::DarkGrey),
                     Cell::new(format!("{:.1}", proc.cpu_percent))
                         .set_alignment(CellAlignment::Right),

@@ -42,6 +42,10 @@ pub struct StuckCommand {
     #[arg(long, short = 'v')]
     pub verbose: bool,
 
+    /// Print full directories and arguments instead of fitting the terminal width
+    #[arg(long, short = 'w')]
+    pub wide: bool,
+
     /// Filter by directory (defaults to current directory if no path given)
     #[arg(long = "in", short = 'i', num_args = 0..=1, default_missing_value = ".")]
     pub in_dir: Option<String>,
@@ -54,7 +58,7 @@ pub struct StuckCommand {
 impl StuckCommand {
     /// Executes the stuck command, finding long-running processes using high CPU.
     pub fn execute(&self) -> Result<()> {
-        let printer = Printer::from_flags(self.json, self.verbose);
+        let printer = Printer::from_flags(self.json, self.verbose).wide(self.wide);
 
         let timeout = Duration::from_secs(self.timeout);
         let mut processes = Process::find_stuck(timeout)?;

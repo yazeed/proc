@@ -55,6 +55,10 @@ pub struct ListCommand {
     #[arg(long, short = 'v')]
     pub verbose: bool,
 
+    /// Print full directories and arguments instead of fitting the terminal width
+    #[arg(long, short = 'w')]
+    pub wide: bool,
+
     /// Limit the number of results
     #[arg(long, short = 'n')]
     pub limit: Option<usize>,
@@ -67,7 +71,7 @@ pub struct ListCommand {
 impl ListCommand {
     /// Executes the list command, displaying processes matching the filters.
     pub fn execute(&self) -> Result<()> {
-        let printer = Printer::from_flags(self.json, self.verbose);
+        let printer = Printer::from_flags(self.json, self.verbose).wide(self.wide);
 
         // Get base process list (supports comma-separated names)
         let mut processes = if let Some(ref name) = self.name {

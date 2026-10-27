@@ -29,6 +29,7 @@ One process gets the same detail view as `proc on :port` (directory, path, liste
 | `--limit <n>` | `-n` | Limit results |
 | `--json` | `-j` | Output as JSON |
 | `--verbose` | `-v` | Show extra details |
+| `--wide` | `-w` | Print full directories and arguments instead of fitting the terminal |
 
 ## Examples
 
