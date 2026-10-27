@@ -94,6 +94,9 @@ impl InCommand {
             Process::find_all()?
         };
 
+        // Real CPU readings for the table, --min-cpu and --sort cpu
+        Process::measure_cpu(&mut processes);
+
         // Resolve directory path
         let dir_filter = if self.path == "." {
             std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))

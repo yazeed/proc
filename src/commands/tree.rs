@@ -101,8 +101,9 @@ impl TreeCommand {
     pub fn execute(&self) -> Result<()> {
         let printer = Printer::from_flags(self.json, self.verbose);
 
-        // Get all processes
-        let all_processes = Process::find_all()?;
+        // Get all processes, with real CPU readings for the nodes and --min-cpu
+        let mut all_processes = Process::find_all()?;
+        Process::measure_cpu(&mut all_processes);
 
         // Build PID -> Process map for quick lookup
         let pid_map: HashMap<u32, &Process> = all_processes.iter().map(|p| (p.pid, p)).collect();

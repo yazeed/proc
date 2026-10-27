@@ -376,6 +376,46 @@ mod unix {
     }
 
     #[test]
+    fn cpu_is_measured_where_it_is_shown() {
+        // CPU used to be read a few milliseconds after the first refresh, so a
+        // process spinning at 100% showed about 0.4%
+        let spinning = Sleeper(
+            StdCommand::new("sh")
+                .args(["-c", "while :; do :; done"])
+                .spawn()
+                .unwrap(),
+        );
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let pid = spinning.pid();
+        let me = u64::from(spinning.0.id());
+        let cpu_of = |list: &Value| -> Option<f64> {
+            list.as_array()?
+                .iter()
+                .find(|p| p["pid"].as_u64() == Some(me))?["cpu_percent"]
+                .as_f64()
+        };
+
+        let (info, _) = run_json(&["info", &pid, "--json"]);
+        assert!(cpu_of(&info["processes"]).unwrap() > 50.0, "info: {info}");
+
+        let (on, _) = run_json(&["on", &pid, "--json"]);
+        let on_cpu = on["process"]["cpu_percent"].as_f64().unwrap();
+        assert!(on_cpu > 50.0, "on: {on}");
+
+        let (busy, _) = run_json(&["list", "--min-cpu", "50", "--json"]);
+        assert!(
+            cpu_of(&busy["processes"]).is_some(),
+            "--min-cpu 50 missed it: {busy}"
+        );
+
+        let (top, _) = run_json(&["list", "--sort", "cpu", "--limit", "5", "--json"]);
+        assert!(
+            cpu_of(&top["processes"]).is_some(),
+            "not in the top 5 by CPU: {top}"
+        );
+    }
+
+    #[test]
     fn zombies_are_listed() {
         let sleeper = Sleeper::exiting_after("0");
         std::thread::sleep(std::time::Duration::from_millis(500));

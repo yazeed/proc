@@ -58,6 +58,12 @@ impl OrphansCommand {
         // Apply --in and --by filters
         apply_filters(&mut processes, &self.in_dir, &self.by_name);
 
+        // Real CPU readings for every view that shows the list; only
+        // `--kill --json` (no dry run) goes straight to killing
+        if !(self.kill && self.json && !self.dry_run) {
+            Process::measure_cpu(&mut processes);
+        }
+
         if processes.is_empty() {
             printer.print_empty_result("orphans", "No orphaned processes found");
             return Ok(());

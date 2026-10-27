@@ -453,6 +453,50 @@ impl Process {
             .map(|p| p.cpu_usage())
     }
 
+    /// Measure the CPU use of these processes over 0.2 s and set `cpu_percent`,
+    /// in percent of one core. A lookup reads CPU a few milliseconds after its
+    /// first refresh, which is ~0% even for a process using a whole core, so
+    /// commands call this before they show, filter or sort by CPU. One 0.2 s wait
+    /// covers the whole batch; commands that never show CPU skip it.
+    ///
+    /// CPU is the CPU time each process used between two reads, over the wall
+    /// time we measure between them. sysinfo's own `cpu_usage` divides by its
+    /// system-wide tick interval instead, which read about 2% for a process
+    /// spinning at 100% in some runs.
+    pub fn measure_cpu(processes: &mut [Process]) {
+        if processes.is_empty() {
+            return;
+        }
+        let pids: Vec<Pid> = processes.iter().map(|p| Pid::from_u32(p.pid)).collect();
+        let which = sysinfo::ProcessesToUpdate::Some(&pids);
+        let cpu_only = sysinfo::ProcessRefreshKind::nothing().with_cpu();
+        let mut sys = System::new();
+
+        let first = std::time::Instant::now();
+        sys.refresh_processes_specifics(which, true, cpu_only);
+        let before: std::collections::HashMap<Pid, u64> = sys
+            .processes()
+            .iter()
+            .map(|(pid, p)| (*pid, p.accumulated_cpu_time()))
+            .collect();
+        std::thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
+        // each refresh reads the processes in the same order, so timing both
+        // from their start gives every process the same window
+        let wall_ms = first.elapsed().as_secs_f64() * 1000.0;
+        sys.refresh_processes_specifics(which, true, cpu_only);
+
+        for process in processes.iter_mut() {
+            let pid = Pid::from_u32(process.pid);
+            let (Some(current), Some(&cpu_before)) = (sys.process(pid), before.get(&pid)) else {
+                continue;
+            };
+            if process.is_same(current) {
+                let used_ms = current.accumulated_cpu_time().saturating_sub(cpu_before);
+                process.cpu_percent = (used_ms as f64 / wall_ms * 100.0) as f32;
+            }
+        }
+    }
+
     /// Force kill the process (SIGKILL on Unix, taskkill /F on Windows)
     pub fn kill(&self) -> Result<()> {
         let mut sys = System::new();

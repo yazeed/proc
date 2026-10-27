@@ -71,6 +71,9 @@ impl InfoCommand {
         // Apply --in and --by filters
         apply_filters(&mut found, &self.in_dir, &self.by_name);
 
+        // Real CPU readings for what's shown
+        Process::measure_cpu(&mut found);
+
         if self.json {
             printer.print_json(&InfoOutput {
                 action: "info",

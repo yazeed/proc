@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A mistyped port such as `:70000` was searched for as a process name** and reported "not found" (exit 2). Every command now rejects it as invalid input (exit 4): ports go from `:1` to `:65535`
 - **IPv6 addresses on Linux came out as `]`** (`[::]:80` was split at the wrong colon), so `ports --exposed` left out ports listening on `::` and `--local` missed `::1`. They are now `::` and `::1`, as the filters expect
 - **`proc unstick <target>` never tried.** It read CPU over a few milliseconds, which is about 0% for any process, so a named target was always "not stuck", and in the recovery steps every process looked recovered after the first signal. Stuck is now measured like `proc stuck`, and recovery over a full second
+- **CPU readings were wrong: a process using a whole core showed as about 0.4%.** Every lookup read CPU a few milliseconds after its first refresh, so `list --sort cpu`, `--min-cpu` and every CPU column were close to meaningless. `list`, `by`, `in`, `for`, `info`, `on`, `tree`, `orphans` and `wait -v` now measure CPU over 0.2 s, from each process's CPU time, before they show, filter or sort by it, which makes them about 0.2 s slower (one wait for all processes, not one each). `kill`, `stop`, `freeze` and `thaw` measure only for a dry run or the confirmation prompt, so with `--yes` they're as fast as before
 
 ### Security
 

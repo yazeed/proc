@@ -96,7 +96,8 @@ impl ForCommand {
             }
         }
 
-        // 5. Apply filters
+        // 5. Apply filters, with real CPU readings for --min-cpu, the sort and the view
+        Process::measure_cpu(&mut processes);
         self.apply_filters(&mut processes);
 
         // 6. Sort processes

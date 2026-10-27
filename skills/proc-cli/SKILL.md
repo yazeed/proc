@@ -207,5 +207,5 @@ For complete JSON output schemas and field definitions, see [reference.md](refer
 - `--graceful` is only on `proc kill`.
 - Unknown flags exit 4; with `--json` the error is a JSON object on stdout, otherwise plain text on stderr.
 - `freeze` and `thaw` are Unix only — on Windows they fail with exit 1.
-- `proc stuck` is a heuristic (sustained high CPU), not a hang detector.
+- `proc stuck` is a heuristic: over 50% CPU or blocked in the kernel, in two readings a second apart. A long build at full CPU looks the same as a loop that never ends, so check what it found before `--kill`.
 - An orphan (parent PID 1) isn't necessarily abandoned: daemons and `tmux`/`nohup` jobs are orphaned on purpose. Check `cwd`, `command` and uptime before treating one as a leftover.

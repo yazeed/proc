@@ -8,7 +8,7 @@
 //!   proc kill :3000,1234,node   # Mixed targets (port + PID + name)
 //!   proc kill node --yes        # Skip confirmation
 
-use crate::core::{apply_filters, parse_targets, resolve_targets_excluding_self};
+use crate::core::{apply_filters, parse_targets, resolve_targets_excluding_self, Process};
 use crate::error::{ProcError, Result};
 use crate::ui::Printer;
 use clap::Args;
@@ -66,6 +66,12 @@ impl KillCommand {
 
         // Apply --in and --by filters
         apply_filters(&mut processes, &self.in_dir, &self.by_name);
+
+        // Real CPU readings only when the list is shown first (dry run or the
+        // confirmation prompt); `--yes` and `--json` act at once, without the wait
+        if self.dry_run || (!self.yes && !self.json) {
+            Process::measure_cpu(&mut processes);
+        }
 
         if processes.is_empty() {
             return Err(ProcError::ProcessNotFound(self.target.clone()));

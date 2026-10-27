@@ -126,3 +126,14 @@ fn unstick_sees_a_spinning_process_as_stuck() {
     assert_eq!(json["not_stuck"], 0, "{json}");
     assert_eq!(json["terminated"], 1, "{json}");
 }
+
+#[test]
+fn list_measures_cpu_once_for_all_processes() {
+    // Real CPU readings need a 0.2 s window. One window covers every process
+    // (about 0.3 s in all); one per process would take minutes on a machine
+    // with a thousand processes
+    let (json, code, took) = run_json_timed(&["list", "--json"], 60);
+    assert_eq!(code, Some(0), "{json}");
+    let count = json["count"].as_u64().unwrap();
+    assert!(took < 2.0, "list of {count} processes took {took:.1}s");
+}

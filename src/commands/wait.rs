@@ -74,6 +74,12 @@ impl WaitCommand {
             return Err(ProcError::ProcessNotFound(self.target.clone()));
         }
 
+        // Real CPU readings for the verbose list, the only view that shows CPU;
+        // measured before the clock starts, so it doesn't count against --timeout
+        if self.verbose && !self.json {
+            Process::measure_cpu(&mut processes);
+        }
+
         let initial_count = processes.len();
         let start = std::time::Instant::now();
 

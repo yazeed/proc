@@ -96,6 +96,9 @@ impl ListCommand {
             Process::find_all()?
         };
 
+        // Real CPU readings for the table, --min-cpu and --sort cpu
+        Process::measure_cpu(&mut processes);
+
         // Resolve --in filter path
         let in_dir_filter = resolve_in_dir(&self.in_dir);
 

@@ -177,7 +177,11 @@ impl OnCommand {
             None => return Err(ProcError::PortNotFound(port)),
         };
 
-        let process = Process::find_by_pid(port_info.pid)?;
+        let mut process = Process::find_by_pid(port_info.pid)?;
+        // Real CPU reading for what's shown
+        if let Some(ref mut proc) = process {
+            Process::measure_cpu(std::slice::from_mut(proc));
+        }
 
         // Apply --in and --by filters if present
         if let Some(ref proc) = process {
@@ -218,8 +222,10 @@ impl OnCommand {
 
     /// Find a process by PID and its listening ports, applying --in/--by
     fn lookup_pid(&self, pid: u32) -> Result<(Process, Vec<PortInfo>)> {
-        let process = Process::find_by_pid(pid)?
+        let mut process = Process::find_by_pid(pid)?
             .ok_or_else(|| ProcError::ProcessNotFound(pid.to_string()))?;
+        // Real CPU reading for what's shown
+        Process::measure_cpu(std::slice::from_mut(&mut process));
 
         // Apply --in and --by filters if present
         if !self.matches_filters(&process) {
@@ -275,6 +281,9 @@ impl OnCommand {
                 )));
             }
         }
+
+        // Real CPU readings for what's shown, one wait for all of them
+        Process::measure_cpu(&mut processes);
 
         let mut all_results: Vec<(Process, Vec<PortInfo>)> = Vec::new();
 
