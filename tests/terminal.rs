@@ -579,6 +579,21 @@ fn unstick_asks_first() {
 }
 
 #[test]
+fn unstick_without_force_says_it_will_only_try_to_recover() {
+    let mut p = Owned::busy();
+    let dir = p.dir();
+    let args = ["unstick", "--timeout", "0", "--in", &dir];
+    let run = answers_n(&args, "Unstick 1 process", "Aborted");
+    assert_ok(&run);
+    assert!(
+        run.output.contains("Will attempt recovery only"),
+        "{}",
+        run.output
+    );
+    assert!(p.alive());
+}
+
+#[test]
 fn stuck_kill_asks_first() {
     let mut p = Owned::busy();
     let dir = p.dir();
