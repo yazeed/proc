@@ -5,7 +5,7 @@ description: "Teach your coding agent to use proc: install the proc-cli skill fo
 permalink: /skill
 ---
 
-The proc-cli skill teaches coding agents (Claude Code, Codex, Cursor, Gemini CLI and others) when to reach for proc and how to use it safely. Instead of `lsof -ti :3000 | xargs kill -9`, your agent runs `proc free :3000`, reads structured JSON, and checks with you before touching processes it didn't start.
+The proc-cli skill teaches coding agents (Claude Code, Codex, Cursor, Gemini CLI and others) when to reach for proc and how to use it safely. Instead of `lsof -ti :3000 | xargs kill -9`, your agent runs `proc free :3000`, reads structured JSON, and checks with you before touching processes it didn't start: it previews them with `--dry-run` and only adds `--yes` once you agree. proc enforces its side too: nothing that stops, kills or pauses a process runs without `--yes` unless a person confirms at the prompt, and `--json` never counts as a yes.
 
 ## Install
 
@@ -51,7 +51,7 @@ Installs always fetch the current skill from the repository, so a new install is
 - **What it replaces**: `lsof`, `ps | grep`, `pgrep`, `pkill`, `kill`, `netstat`, `pstree` and `top`, each mapped to the proc command for the job
 - **The contract**: `--json` on every command, one JSON document per command (`watch` streams one per refresh), and fixed exit codes (0 success, 1 error, 2 not found, 3 permission denied, 4 invalid input)
 - **Playbooks**: freeing a busy port, stopping its own background servers by port or PID rather than by a copied name pattern, checking for leftovers before finishing, and clean restarts
-- **Safety**: only touch processes it started or you named, preview with `--dry-run`, prefer `stop` over `kill`, and ask before using `sudo`
+- **Safety**: only touch processes it started or you named, and ask you about anything else after showing you the `--dry-run` list; prefer `stop` over `kill`, and ask before using `sudo`
 - **Gotchas**: `kill` and `stop` don't signal child processes, `:3000` is a port but `3000` is a PID, and an orphaned process isn't necessarily abandoned
 
 ## Try it

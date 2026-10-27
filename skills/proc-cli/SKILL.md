@@ -21,7 +21,7 @@ proc is a semantic CLI for processes and ports on macOS, Linux, and Windows. You
 4. **Check the exit code**: 0=success, 1=general error (including partial failures and `wait` timeouts), 2=not found, 3=permission denied, 4=invalid input. `"success": false` always comes with a non-zero exit code
 5. **Errors with `--json`** produce `{"action":"<cmd>", "success":false, "error":"...", "exit_code":N}` on stdout — including invalid flags or arguments
 6. **Every JSON response** is a single document (except the `watch` stream) with `action` (the command name, aliases resolved) and `success` fields
-7. **Only touch processes you started or the user named.** Prefer port and PID targets; scope name targets with `--in <dir>` or `--by <name>`
+7. **Only touch processes you started or the user named. For anything else, ask the user first**: run the command with `--dry-run --json`, show them the processes it lists, and add `--yes` only after they agree. `--yes` is your confirmation on their behalf, so never pass it for processes they haven't approved. Prefer port and PID targets; scope name targets with `--in <dir>` or `--by <name>`
 8. **Exit 3 means you need elevated rights.** Ask the user before retrying with `sudo`
 
 ## Use proc Instead Of
