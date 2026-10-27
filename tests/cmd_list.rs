@@ -609,7 +609,8 @@ fn tree_pid_json_shows_the_process_with_its_children() {
     );
     let child = find_node(roots[0]["children"].as_array().unwrap(), owned.pid())
         .unwrap_or_else(|| panic!("the listener is not under this process: {json}"));
-    assert_eq!(child["name"], owned.name.as_str());
+    // the process name is the executable's file name: `.exe` on Windows
+    assert_eq!(child["name"], owned.file_name().as_str());
     assert!(child["children"].as_array().unwrap().is_empty());
     assert!(child["memory_mb"].as_f64().unwrap() > 0.0);
     assert!(child["status"].is_string());
@@ -849,7 +850,7 @@ fn tree_ancestors_json_lists_the_chain_root_first() {
     assert_eq!(code, 0);
     let node = &json["ancestry"][0];
     assert_eq!(node["target_pid"].as_u64(), Some(u64::from(owned.pid())));
-    assert_eq!(node["target_name"], owned.name.as_str());
+    assert_eq!(node["target_name"], owned.file_name().as_str());
     let chain = node["chain"].as_array().unwrap();
     assert_eq!(node["depth"].as_u64(), Some(chain.len() as u64));
     assert!(chain.len() >= 2, "{json}");
