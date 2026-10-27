@@ -118,7 +118,7 @@ impl FreeCommand {
         }
 
         // Same rule everywhere: --yes, or ask; --json never skips it
-        if must_confirm("free", self.yes, self.json)? {
+        if must_confirm("free", self.yes, self.json, &processes)? {
             printer.print_confirmation("free", &processes);
 
             let prompt = format!(

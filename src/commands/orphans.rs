@@ -100,7 +100,7 @@ impl OrphansCommand {
         }
 
         // Same rule everywhere: --yes, or ask; --json never skips it
-        if must_confirm("orphans --kill", self.yes, self.json)? {
+        if must_confirm("orphans --kill", self.yes, self.json, &processes)? {
             let confirmed = Confirm::new()
                 .with_prompt(format!(
                     "Kill {} orphaned process{}?",

@@ -425,6 +425,14 @@ mod unix {
             let (json, code) = run_json(&[command, &pid, "--json"]);
             assert_eq!(code, 4, "{command} --json without --yes: {json}");
             assert!(json["error"].as_str().unwrap().contains("--yes"), "{json}");
+            assert_eq!(json["needs_confirmation"], true, "{command}: {json}");
+            let listed = json["processes"].as_array().unwrap();
+            assert_eq!(listed.len(), 1, "{command}: {json}");
+            assert_eq!(
+                listed[0]["pid"].as_u64().map(|p| p.to_string()),
+                Some(pid.clone()),
+                "{command}: {json}"
+            );
 
             // no --json, and stdin is not a terminal (assert_cmd closes it)
             let output = proc_cmd().args([command, &pid]).output().unwrap();
@@ -444,6 +452,12 @@ mod unix {
         // and --dry-run still previews without --yes
         let (json, code) = run_json(&["kill", &pid, "--dry-run", "--json"]);
         assert_eq!(code, 0, "{json}");
+
+        // other errors keep their plain shape
+        let (json, code) = run_json(&["kill", "99999999", "--json"]);
+        assert_ne!(code, 0, "{json}");
+        assert!(json.get("needs_confirmation").is_none(), "{json}");
+        assert!(json.get("processes").is_none(), "{json}");
     }
 
     #[test]

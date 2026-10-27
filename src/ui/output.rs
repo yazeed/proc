@@ -22,22 +22,31 @@ use serde::Serialize;
 /// how results are printed, so it never stands in for `--yes`, and without a
 /// terminal there's nobody to ask: both are refused with exit 4 before
 /// anything is touched. `--dry-run` never gets here; it previews without one.
-pub fn must_confirm(action: &str, yes: bool, json: bool) -> Result<bool> {
+///
+/// Both refusals carry `processes`, the ones the command would have changed,
+/// so a caller reading the JSON error can see what a retry with `--yes` hits.
+pub fn must_confirm(action: &str, yes: bool, json: bool, processes: &[Process]) -> Result<bool> {
     use std::io::IsTerminal;
     if yes {
         return Ok(false);
     }
     if json {
-        return Err(ProcError::InvalidInput(format!(
-            "{action} changes processes, so it needs --yes, with --json too \
-             (or --dry-run to preview)"
-        )));
+        return Err(ProcError::ConfirmationRequired {
+            message: format!(
+                "{action} changes processes, so it needs --yes, with --json too \
+                 (or --dry-run to preview)"
+            ),
+            processes: processes.to_vec(),
+        });
     }
     if !std::io::stdin().is_terminal() || !std::io::stderr().is_terminal() {
-        return Err(ProcError::InvalidInput(format!(
-            "{action} asks before changing processes, and there's no terminal \
-             to ask in; pass --yes (or --dry-run to preview)"
-        )));
+        return Err(ProcError::ConfirmationRequired {
+            message: format!(
+                "{action} asks before changing processes, and there's no terminal \
+                 to ask in; pass --yes (or --dry-run to preview)"
+            ),
+            processes: processes.to_vec(),
+        });
     }
     Ok(true)
 }
@@ -721,7 +730,7 @@ impl Printer {
     /// ask (see [`must_confirm`]).
     pub fn ask_confirm(&self, action: &str, processes: &[Process], yes: bool) -> Result<bool> {
         let json = matches!(self.format, OutputFormat::Json);
-        if !must_confirm(action, yes, json)? {
+        if !must_confirm(action, yes, json, processes)? {
             return Ok(true);
         }
         match self.format {
@@ -841,11 +850,14 @@ mod tests {
     #[test]
     fn json_never_stands_in_for_yes() {
         // --yes: go ahead without asking, in either output format
-        assert!(!must_confirm("kill", true, false).unwrap());
-        assert!(!must_confirm("kill", true, true).unwrap());
+        assert!(!must_confirm("kill", true, false, &[]).unwrap());
+        assert!(!must_confirm("kill", true, true, &[]).unwrap());
         // --json without --yes is refused (exit 4), never treated as a yes
-        let refused = must_confirm("kill", false, true).unwrap_err();
-        assert!(matches!(refused, ProcError::InvalidInput(_)), "{refused}");
+        let refused = must_confirm("kill", false, true, &[]).unwrap_err();
+        assert!(
+            matches!(refused, ProcError::ConfirmationRequired { .. }),
+            "{refused}"
+        );
         assert!(refused.to_string().contains("--yes"));
     }
 }

@@ -167,7 +167,7 @@ impl UnstickCommand {
         }
 
         // Confirm. Same rule everywhere: --yes, or ask; --json never skips it
-        if must_confirm("unstick", self.yes, self.json)? {
+        if must_confirm("unstick", self.yes, self.json, &stuck)? {
             if self.force {
                 println!(
                     "\n{} With --force: processes will be terminated if recovery fails.\n",

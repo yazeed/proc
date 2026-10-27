@@ -2,6 +2,7 @@
 //!
 //! Provides structured error handling with helpful suggestions for users.
 
+use crate::core::Process;
 use thiserror::Error;
 
 /// Main error type for proc operations
@@ -22,6 +23,17 @@ pub enum ProcError {
     /// User provided invalid input or arguments
     #[error("Invalid input: {0}")]
     InvalidInput(String),
+
+    /// A command that changes processes was run without `--yes` where nobody
+    /// can be asked (`--json`, or no terminal). Carries the processes it would
+    /// have changed so `--json` callers can see them in the error.
+    #[error("{message}")]
+    ConfirmationRequired {
+        /// What to pass to proceed
+        message: String,
+        /// The processes the command would have changed
+        processes: Vec<Process>,
+    },
 
     /// An underlying system call failed
     #[error("System error: {0}")]
@@ -120,7 +132,9 @@ impl From<&ProcError> for ExitCode {
         match err {
             ProcError::ProcessNotFound(_) | ProcError::PortNotFound(_) => ExitCode::NotFound,
             ProcError::PermissionDenied(_) => ExitCode::PermissionDenied,
-            ProcError::InvalidInput(_) => ExitCode::InvalidInput,
+            ProcError::InvalidInput(_) | ProcError::ConfirmationRequired { .. } => {
+                ExitCode::InvalidInput
+            }
             ProcError::Reported { exit_code, .. } => *exit_code,
             _ => ExitCode::GeneralError,
         }

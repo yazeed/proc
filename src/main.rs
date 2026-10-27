@@ -10,6 +10,7 @@ use proc_cli::commands::{
     ListCommand, OnCommand, OrphansCommand, PortsCommand, StopCommand, StuckCommand, ThawCommand,
     TreeCommand, UnstickCommand, WaitCommand, WatchCommand, WhyCommand,
 };
+use proc_cli::core::Process;
 use proc_cli::error::{ExitCode, ProcError};
 use std::io;
 use std::process;
@@ -343,7 +344,7 @@ fn main() {
                 if let Some(ref suggestion) = suggestion {
                     error.push_str(&format!("\n  Try: did you mean '{}'?", suggestion));
                 }
-                print_json_error(&error, exit_code);
+                print_json_error(&error, exit_code, None);
             } else {
                 eprint!("{}", cleaned);
                 if let Some(suggestion) = suggestion {
@@ -403,7 +404,11 @@ fn main() {
 
         // If --json was requested, output error as JSON to stdout
         if wants_json() {
-            print_json_error(&e.to_string(), exit_code as i32);
+            let processes = match &e {
+                ProcError::ConfirmationRequired { processes, .. } => Some(processes.as_slice()),
+                _ => None,
+            };
+            print_json_error(&e.to_string(), exit_code as i32, processes);
         } else {
             eprintln!("{}", e);
         }
@@ -412,14 +417,21 @@ fn main() {
     }
 }
 
-/// Print an error as the standard JSON error object on stdout
-fn print_json_error(error: &str, exit_code: i32) {
-    let error_json = serde_json::json!({
+/// Print an error as the standard JSON error object on stdout.
+///
+/// `confirmation` is `Some(processes)` only for a missing `--yes`: the object
+/// then also says `needs_confirmation` and lists what would have been changed.
+fn print_json_error(error: &str, exit_code: i32, confirmation: Option<&[Process]>) {
+    let mut error_json = serde_json::json!({
         "action": action_name(),
         "success": false,
         "error": error,
         "exit_code": exit_code
     });
+    if let Some(processes) = confirmation {
+        error_json["needs_confirmation"] = serde_json::json!(true);
+        error_json["processes"] = serde_json::json!(processes);
+    }
     println!("{}", serde_json::to_string_pretty(&error_json).unwrap());
 }
 

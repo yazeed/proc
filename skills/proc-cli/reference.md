@@ -8,7 +8,7 @@
 | 1 | General error, or the command ran but did not fully succeed (a process failed, a port stayed busy, `wait` timed out) |
 | 2 | Not found (process or port doesn't exist) |
 | 3 | Permission denied (need sudo) |
-| 4 | Invalid input (unknown flag, missing argument, invalid signal name), or a command that changes processes run without `--yes` where nobody can confirm: with `--json`, or without a terminal. Nothing was changed; add `--yes` (or `--dry-run` to preview) and run it again |
+| 4 | Invalid input (unknown flag, missing argument, invalid signal name), or a command that changes processes run without `--yes` where nobody can confirm: with `--json`, or without a terminal. Nothing was changed; add `--yes` (or `--dry-run` to preview) and run it again. With `--json` the error also carries `needs_confirmation` and the `processes` it would have changed (see below) |
 
 `"success": false` always comes with a non-zero exit code. Every command prints exactly one JSON document, except `proc watch --json`, which streams one per refresh.
 
@@ -24,6 +24,21 @@ Printed when the command cannot produce its normal result (including invalid fla
   "exit_code": 2
 }
 ```
+
+A command that changes processes and is run with `--json` but without `--yes` fails with exit 4 and adds two fields, so the caller can show the user what a retry with `--yes` would hit. Nothing was changed. `processes` holds [Process Objects](#process-object):
+
+```json
+{
+  "action": "kill",
+  "success": false,
+  "error": "kill changes processes, so it needs --yes, with --json too (or --dry-run to preview)",
+  "exit_code": 4,
+  "needs_confirmation": true,
+  "processes": [{ "pid": 1234, "name": "node", "...": "..." }]
+}
+```
+
+Every other error has only the four fields above.
 
 ## Process Object
 
