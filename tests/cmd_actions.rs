@@ -522,11 +522,12 @@ fn wait_json_timeout_lists_the_process_still_running() {
 
 #[test]
 fn wait_with_a_target_that_is_gone_is_not_found() {
+    // wait only reads, so a reused PID could not be harmed
     let pid = Owned::listener().gone_pid();
-    let (json, code) = run_json(&["wait", &pid, "--json"]);
+    let (json, code) = run_json(&["wait", &pid, "--timeout", "60", "--json"]);
     assert_eq!(code, 2, "{json}");
     assert_eq!(json["success"], false);
-    let r = run(&["wait", &pid]);
+    let r = run(&["wait", &pid, "--timeout", "60"]);
     assert_eq!(r.code, 2, "{}{}", r.stdout, r.stderr);
 }
 
@@ -600,7 +601,7 @@ fn wait_json_counts_zombies_as_exited_and_reports_each() {
     let first = Short::sleeping("1");
     let second = Short::sleeping("2");
     let targets = format!("{},{}", first.0.id(), second.0.id());
-    let (json, code) = run_json(&["wait", &targets, "--json"]);
+    let (json, code) = run_json(&["wait", &targets, "--timeout", "60", "--json"]);
     assert_eq!(code, 0, "{json}");
     assert_eq!(json["success"], true, "{json}");
     assert_eq!(json["timed_out"], false, "{json}");
@@ -726,13 +727,25 @@ fn stop_handles_several_targets_at_once() {
 
 #[test]
 fn stop_that_finds_nothing_is_not_found_and_a_missing_target_is_warned_about() {
+    // `--in` a directory of the test's own: if the OS handed the gone PID to a
+    // stranger, its cwd is not here, so it is still "not found" and untouched
     let gone = Owned::listener().gone_pid();
-    let r = run(&["stop", &gone, "--yes"]);
+    let (_tmp, own_dir) = fresh_dir();
+    let own_dir = own_dir.to_string_lossy().into_owned();
+    let r = run(&["stop", &gone, "--yes", "--in", &own_dir]);
     assert_eq!(r.code, 2, "{}{}", r.stdout, r.stderr);
 
     let mut alive = Owned::listener();
     let targets = format!("{gone},{}", alive.pid());
-    let r = run(&["stop", &targets, "--yes", "--timeout", "1"]);
+    let r = run(&[
+        "stop",
+        &targets,
+        "--yes",
+        "--timeout",
+        "1",
+        "--in",
+        &alive.dir(),
+    ]);
     assert_eq!(r.code, 0, "{}{}", r.stdout, r.stderr);
     assert!(
         r.stdout.contains(&format!("Not found: {gone}")),
@@ -791,7 +804,7 @@ fn kill_graceful_sends_a_normal_stop_request() {
         Some(libc::SIGTERM)
     );
     #[cfg(not(unix))]
-    let _ = owned.ended_within(Duration::from_secs(15));
+    assert!(owned.ended_within(Duration::from_secs(15)));
 }
 
 // ---- freeze and thaw ----
@@ -897,12 +910,16 @@ fn freeze_and_thaw_without_yes_and_json_ask_for_yes_with_measured_cpu() {
 fn freeze_and_thaw_find_nothing_for_a_gone_target_and_warn_about_it() {
     let gone = Owned::listener().gone_pid();
     let alive = Owned::listener();
+    // `--in` the test's own directories: a stranger that got the gone PID is
+    // filtered out, so nothing but our own process can be frozen or thawed
+    let (_tmp, own_dir) = fresh_dir();
+    let own_dir = own_dir.to_string_lossy().into_owned();
     for action in ["freeze", "thaw"] {
-        let r = run(&[action, &gone, "--yes"]);
+        let r = run(&[action, &gone, "--yes", "--in", &own_dir]);
         assert_eq!(r.code, 2, "{action}: {}{}", r.stdout, r.stderr);
 
         let targets = format!("{gone},{}", alive.pid());
-        let r = run(&[action, &targets, "--yes"]);
+        let r = run(&[action, &targets, "--yes", "--in", &alive.dir()]);
         assert_eq!(r.code, 0, "{action}: {}{}", r.stdout, r.stderr);
         assert!(
             r.stdout.contains(&format!("Not found: {gone}")),
@@ -988,8 +1005,9 @@ fn orphans_with_none_in_the_directory_says_so() {
         r.stderr
     );
     // a name filter that matches nothing leaves nothing too
-    let r = run(&["orphans", "--by", "no-process-has-this-name", "--json"]);
-    assert_eq!(r.code, 0, "{}{}", r.stdout, r.stderr);
+    let (json, code) = run_json(&["orphans", "--by", "no-process-has-this-name", "--json"]);
+    assert_eq!(code, 0, "{json}");
+    assert_eq!(json["count"], 0, "{json}");
 }
 
 /// A shell loop that uses a whole core and ends itself after two minutes, so a
@@ -1302,8 +1320,11 @@ fn cpu_in_line(stdout: &str, pid: u32) -> f64 {
 
 #[test]
 fn unstick_with_a_target_that_is_gone_is_not_found() {
+    // `--in` a directory of the test's own, so a reused PID is never touched
     let gone = Owned::listener().gone_pid();
-    let r = run(&["unstick", &gone, "--yes"]);
+    let (_tmp, own_dir) = fresh_dir();
+    let own_dir = own_dir.to_string_lossy().into_owned();
+    let r = run(&["unstick", &gone, "--yes", "--in", &own_dir]);
     assert_eq!(r.code, 2, "{}{}", r.stdout, r.stderr);
     let owned = Owned::listener();
     let r = run(&[
