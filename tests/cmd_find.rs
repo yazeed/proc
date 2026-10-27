@@ -64,6 +64,42 @@ fn fresh_dir() -> (tempfile::TempDir, PathBuf) {
 
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
+/// Run the copy, with its cwd in `dir`. On Linux a file another test thread has
+/// just written can be "busy" (ETXTBSY) for an instant: a fork in a parallel
+/// test still holds the write handle until it execs. That clears in
+/// milliseconds, so try again, a bounded number of times. (Avoiding the race at
+/// the source would mean running the original example, which brings back
+/// processes that share one exe path; cmd_ports.rs retries too.)
+fn spawn_copy(exe: &Path, args: &[&str], dir: &Path) -> Child {
+    let mut attempts = 0;
+    loop {
+        let spawned = std::process::Command::new(exe)
+            .args(args)
+            .current_dir(dir)
+            .stdout(Stdio::piped())
+            .stdin(Stdio::null())
+            .spawn();
+        match spawned {
+            Ok(child) => return child,
+            Err(e) if attempts < 50 && is_text_file_busy(&e) => {
+                attempts += 1;
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            Err(e) => panic!("spawn the listener copy: {e:?}"),
+        }
+    }
+}
+
+#[cfg(unix)]
+fn is_text_file_busy(e: &std::io::Error) -> bool {
+    e.raw_os_error() == Some(libc::ETXTBSY)
+}
+
+#[cfg(not(unix))]
+fn is_text_file_busy(_: &std::io::Error) -> bool {
+    false
+}
+
 /// Held for as long as a busy process runs, so no more than one spins at a time
 static BUSY: Mutex<()> = Mutex::new(());
 
@@ -107,7 +143,9 @@ impl Owned {
             if lists(&json, "processes", busy.pid()) {
                 return busy;
             }
-            assert!(Instant::now() < deadline, "never seen as stuck: {json}");
+            if Instant::now() >= deadline {
+                panic!("never seen as stuck: {json}\n{}", busy.what_proc_saw());
+            }
         }
     }
 
@@ -123,13 +161,7 @@ impl Owned {
                 copy
             }
         };
-        let mut child = std::process::Command::new(&exe)
-            .args(args)
-            .current_dir(&dir)
-            .stdout(Stdio::piped())
-            .stdin(Stdio::null())
-            .spawn()
-            .expect("spawn the listener copy");
+        let mut child = spawn_copy(&exe, args, &dir);
         let mut line = String::new();
         let mut stdout = BufReader::new(child.stdout.take().unwrap());
         let read = stdout.read_line(&mut line);
@@ -153,6 +185,30 @@ impl Owned {
                 panic!("the listener printed {line:?} instead of `PORT <n>`");
             }
         }
+    }
+
+    /// What proc and the OS say about this process, for a failure message.
+    /// `list` and `info` measure CPU over their own 0.2 s window
+    /// (`Process::measure_cpu`), a different path from `stuck`'s two readings a
+    /// second apart, so a busy process shows a figure in both or in neither.
+    fn what_proc_saw(&mut self) -> String {
+        let dir = self.dir();
+        let pid = self.pid().to_string();
+        let text = |args: &[&str]| {
+            let out = proc_cmd().args(args).output().unwrap();
+            format!(
+                "exit {:?}\n{}{}",
+                out.status.code(),
+                String::from_utf8_lossy(&out.stdout),
+                String::from_utf8_lossy(&out.stderr)
+            )
+        };
+        format!(
+            "proc list --in {dir} --json:\n{}\nproc info {pid} --json:\n{}\nthe child's try_wait: {:?}",
+            text(&["list", "--in", &dir, "--json"]),
+            text(&["info", &pid, "--json"]),
+            self.child.try_wait()
+        )
     }
 
     fn pid(&self) -> u32 {
