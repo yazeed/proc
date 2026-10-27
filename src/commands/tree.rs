@@ -127,11 +127,8 @@ impl TreeCommand {
             match parse_target(target) {
                 TargetType::Port(_) | TargetType::Pid(_) => {
                     // For port or PID, resolve to specific process(es)
+                    // Errors (not found) rather than returning nothing
                     let resolved = resolve_target(target)?;
-                    if resolved.is_empty() {
-                        printer.warning(&format!("No process found for '{}'", target));
-                        return Ok(());
-                    }
                     // Find matching processes in all_processes
                     let pids: Vec<u32> = resolved.iter().map(|p| p.pid).collect();
                     all_processes
