@@ -1,0 +1,3 @@
+# Lines excluded from the coverage gate (scripts/coverage_gate.py --exclusions).
+# Format: src/path.rs:START-END  reason (one per line; a single line is src/path.rs:N).
+# Every entry needs a reason that says why the line cannot be exercised.
