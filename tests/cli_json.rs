@@ -339,6 +339,43 @@ mod unix {
     }
 
     #[test]
+    fn escape_sequences_in_process_data_are_never_printed_raw() {
+        // A process can run from a directory whose name holds terminal escape
+        // sequences; printing it as-is would let it recolour, retitle or rewrite
+        // the terminal of whoever runs proc
+        let parent = tempfile::tempdir().unwrap();
+        let evil = parent.path().join("evil\x1b]0;pwned\x07\x1b[31mred");
+        std::fs::create_dir(&evil).unwrap();
+        let sleeper = Sleeper(
+            StdCommand::new("sleep")
+                .arg("300")
+                .current_dir(&evil)
+                .spawn()
+                .unwrap(),
+        );
+
+        for command in ["info", "on", "why", "tree"] {
+            let output = proc_cmd()
+                .args([command, &sleeper.pid()])
+                .env("NO_COLOR", "1")
+                .output()
+                .unwrap();
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            assert!(
+                !stdout.contains('\x1b') && !stdout.contains('\x07'),
+                "{command} printed a raw escape sequence:\n{stdout:?}"
+            );
+        }
+        let (json, code) = run_json(&["info", &sleeper.pid(), "--json"]);
+        assert_eq!(code, 0);
+        let cwd = json["processes"][0]["cwd"].as_str().unwrap();
+        assert!(
+            cwd.ends_with("evil\\x1b]0;pwned\\x07\\x1b[31mred"),
+            "{cwd:?}"
+        );
+    }
+
+    #[test]
     fn zombies_are_listed() {
         let sleeper = Sleeper::exiting_after("0");
         std::thread::sleep(std::time::Duration::from_millis(500));

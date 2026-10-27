@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Signals can't reach a process that reused the PID.** Every signal (`kill`, `stop`, `free`, `freeze`, `thaw`, `unstick` and the `--kill` flags) first checks that the PID still belongs to the same process, by its start time. `stop` sends its SIGKILL up to `--timeout` seconds after finding the target, long enough for a PID to be reused
 - **Process names from lsof can't inject terminal escapes or crash proc (macOS).** The full-name change above decodes lsof's `\xNN` escapes; only printable characters are decoded now, so a process named with escape sequences can't control the terminal, and a name with `\x` before a multi-byte character can't make `proc ports` panic. Neither was in a release
+- **Process data can't control the terminal.** Names, command lines, working directories, executable paths and users are set by whoever runs a process, and proc printed them as they were, so a process with escape sequences in its arguments, or running from a directory named with them, could recolour, retitle or rewrite the terminal of whoever ran `proc list`, `info`, `ports` or `watch`, or write to its clipboard. Control characters are now shown as visible escapes (`\x1b`, `\n`, `\u{202e}`), as `ps` and `lsof` do, in every view and in JSON. Ordinary text, non-ASCII included, is unchanged
 
 ### Added
 

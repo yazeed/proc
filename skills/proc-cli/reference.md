@@ -50,6 +50,7 @@ Fields `exe_path`, `cwd`, `command`, `user`, `parent_pid`, `start_time`, `uptime
 `user` is the user name; it falls back to the numeric user ID when the ID has no name on the system.
 `start_time` is a Unix timestamp; `uptime_secs` is how long the process has been running, in seconds. Both are left out when the start time can't be read (on macOS, processes owned by other users), and `--min-uptime` never matches those processes.
 Status is one of: `running`, `sleeping`, `stopped`, `zombie`, `dead`, `unknown` — the same lowercase values everywhere, including `why` and `tree`.
+`name`, `exe_path`, `cwd`, `command` and `user` (and a port's `process_name`) have control characters written as visible escapes, as `ps` and `lsof` do: `\x1b`, `\n`, `\t`, and `\u{202e}` for text-reordering characters. A process sets these itself, so this keeps them from controlling the terminal. Ordinary text, non-ASCII included, is unchanged.
 
 ## Port Object
 

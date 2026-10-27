@@ -3,7 +3,7 @@
 //! Provides cross-platform utilities for discovering which processes
 //! are listening on network ports.
 
-use crate::core::Process;
+use crate::core::{escape_control, Process};
 use crate::error::{ProcError, Result};
 use serde::{Deserialize, Serialize};
 // lsof on macOS, netstat and tasklist on Windows; Linux reads /proc instead
@@ -132,7 +132,7 @@ impl PortInfo {
             return None;
         }
 
-        let process_name = Self::unescape_lsof(parts[0]);
+        let process_name = escape_control(&Self::unescape_lsof(parts[0])).into_owned();
         let pid: u32 = parts[1].parse().ok()?;
 
         // Find the NAME column - it's after the NODE (TCP/UDP) column
@@ -205,8 +205,12 @@ impl PortInfo {
             if !seen.insert((port, pid)) {
                 continue;
             }
+            // any process can set its own comm (prctl), escape sequences included
             let process_name = std::fs::read_to_string(format!("/proc/{pid}/comm"))
-                .map(|name| name.trim_end().to_string())
+                .map(|name| {
+                    let name = name.strip_suffix('\n').unwrap_or(&name);
+                    escape_control(name).into_owned()
+                })
                 .unwrap_or_else(|_| "unknown".to_string());
             ports.push(PortInfo {
                 port,
@@ -359,7 +363,7 @@ impl PortInfo {
         let stdout = String::from_utf8_lossy(&output.stdout);
         let line = stdout.lines().next()?;
         let name = line.split(',').next()?;
-        Some(name.trim_matches('"').to_string())
+        Some(escape_control(name.trim_matches('"')).into_owned())
     }
 }
 

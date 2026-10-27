@@ -20,6 +20,39 @@ fn user_name(uid: &Uid) -> String {
         .unwrap_or_else(|| uid.to_string())
 }
 
+/// Make text from other processes safe to print: control characters become
+/// visible escapes, as `lsof` and `ps` do. Names, command lines and paths are
+/// set by whoever runs a process, and printed raw an ESC sequence could
+/// recolour, retitle or rewrite the terminal of whoever runs proc (and a
+/// newline would split a table row). Applied where process data is read, so
+/// every view and the JSON show the same text.
+///
+/// Escaped: C0 controls and DEL (`\x1b`, with `\n`, `\r`, `\t` by name), C1
+/// controls (`\x9b`), and bidirectional overrides that reorder text on screen
+/// (`\u{202e}`). Everything else, non-ASCII included, is unchanged. Works on
+/// chars, never byte offsets, so it can't split a character.
+pub fn escape_control(text: &str) -> std::borrow::Cow<'_, str> {
+    fn needs_escape(c: char) -> bool {
+        c.is_control()
+            || matches!(c, '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
+    }
+    if !text.chars().any(needs_escape) {
+        return std::borrow::Cow::Borrowed(text);
+    }
+    let mut out = String::with_capacity(text.len() + 8);
+    for c in text.chars() {
+        match c {
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if c.is_control() => out.push_str(&format!("\\x{:02x}", c as u32)),
+            c if needs_escape(c) => out.push_str(&format!("\\u{{{:x}}}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    std::borrow::Cow::Owned(out)
+}
+
 /// `stuck` and `unstick` take this many readings, this far apart, and a process
 /// must look stuck in every one
 const STUCK_READINGS: usize = 2;
@@ -93,7 +126,7 @@ fn macos_zombies(known: &std::collections::HashSet<u32>) -> Vec<Process> {
             }
             let comm = &p[P_COMM..P_COMM + 17];
             let comm = &comm[..comm.iter().position(|&c| c == 0).unwrap_or(comm.len())];
-            let name = String::from_utf8_lossy(comm).into_owned();
+            let name = escape_control(&String::from_utf8_lossy(comm)).into_owned();
             let start =
                 u64::from_ne_bytes(p[P_STARTTIME_SEC..P_STARTTIME_SEC + 8].try_into().unwrap());
             Some(Process {
@@ -111,7 +144,7 @@ fn macos_zombies(known: &std::collections::HashSet<u32>) -> Vec<Process> {
                 status: ProcessStatus::Zombie,
                 user: Uid::try_from(read_u32(p, P_RUID) as usize)
                     .ok()
-                    .map(|uid| user_name(&uid)),
+                    .map(|uid| escape_control(&user_name(&uid)).into_owned()),
                 parent_pid: Some(read_u32(p, E_PPID)),
                 start_time: (start > 0).then_some(start),
                 uptime_secs: (start > 0).then(|| now.saturating_sub(start)),
@@ -610,33 +643,39 @@ impl Process {
     /// Convert from sysinfo Process
     pub(crate) fn from_sysinfo(pid: Pid, proc: &sysinfo::Process) -> Self {
         let cmd_vec = proc.cmd();
+        // Every text field is set by whoever runs the process: escape control
+        // characters before anything prints them
         let command = if cmd_vec.is_empty() {
             None
         } else {
-            Some(
-                cmd_vec
-                    .iter()
-                    .map(|s| s.to_string_lossy())
-                    .collect::<Vec<_>>()
-                    .join(" "),
-            )
+            let joined = cmd_vec
+                .iter()
+                .map(|s| s.to_string_lossy())
+                .collect::<Vec<_>>()
+                .join(" ");
+            Some(escape_control(&joined).into_owned())
         };
 
-        let exe_path = proc.exe().map(|p| p.to_string_lossy().to_string());
-        let cwd = proc
-            .cwd()
-            .map(|p| strip_deleted_marker(p.to_string_lossy().to_string()));
+        let exe_path = proc
+            .exe()
+            .map(|p| escape_control(&p.to_string_lossy()).into_owned());
+        let cwd = proc.cwd().map(|p| {
+            let path = strip_deleted_marker(p.to_string_lossy().to_string());
+            escape_control(&path).into_owned()
+        });
 
         Process {
             pid: pid.as_u32(),
-            name: proc.name().to_string_lossy().to_string(),
+            name: escape_control(&proc.name().to_string_lossy()).into_owned(),
             exe_path,
             cwd,
             command,
             cpu_percent: proc.cpu_usage(),
             memory_mb: proc.memory() as f64 / 1024.0 / 1024.0,
             status: ProcessStatus::from(proc.status()),
-            user: proc.user_id().map(user_name),
+            user: proc
+                .user_id()
+                .map(|uid| escape_control(&user_name(uid)).into_owned()),
             parent_pid: proc.parent().map(|p| p.as_u32()),
             // sysinfo reports 0 when it can't read the start time (on macOS, any
             // other user's process), which would make the uptime about 56 years
@@ -700,6 +739,22 @@ mod tests {
             me.start_time = Some(start - 3600);
             assert!(!me.is_running(), "a reused PID counted as the same process");
         }
+    }
+
+    #[test]
+    fn test_escape_control_makes_terminal_input_harmless() {
+        // Ordinary text, including non-ASCII, is untouched
+        assert_eq!(escape_control("node server.js"), "node server.js");
+        assert_eq!(escape_control("café ✓ 日本"), "café ✓ 日本");
+        // ESC sequences: colours, window title (OSC), clipboard (OSC 52)
+        assert_eq!(escape_control("a\x1b[31mb"), "a\\x1b[31mb");
+        assert_eq!(escape_control("\x1b]0;pwned\x07"), "\\x1b]0;pwned\\x07");
+        // Line breaks and tabs would split or shift a table row
+        assert_eq!(escape_control("one\ntwo\tthree\r"), "one\\ntwo\\tthree\\r");
+        // DEL, and C1 controls such as the 8-bit CSI (U+009B)
+        assert_eq!(escape_control("x\x7fy\u{9b}2J"), "x\\x7fy\\x9b2J");
+        // Bidirectional overrides can reorder text on screen ("Trojan Source")
+        assert_eq!(escape_control("ab\u{202e}cd"), "ab\\u{202e}cd");
     }
 
     #[cfg(unix)]
