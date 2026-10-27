@@ -5,7 +5,7 @@ description: "Pause processes with SIGSTOP."
 permalink: /commands/freeze
 ---
 
-Send SIGSTOP to pause processes. They remain in memory but stop executing. Asks for confirmation unless `--yes`.
+Send SIGSTOP to pause processes. They remain in memory but stop executing. Asks for confirmation unless `--yes`. Not available on Windows, which has no SIGSTOP: it exits 4.
 
 ```bash
 proc freeze node             # freeze all node processes

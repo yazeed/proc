@@ -5,7 +5,7 @@ description: "Resume frozen processes with SIGCONT."
 permalink: /commands/thaw
 ---
 
-Send SIGCONT to resume processes paused by `proc freeze`. Asks for confirmation unless `--yes`.
+Send SIGCONT to resume processes paused by `proc freeze`. Asks for confirmation unless `--yes`. Not available on Windows: it exits 4.
 
 ```bash
 proc thaw node             # resume all frozen node processes

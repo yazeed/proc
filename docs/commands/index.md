@@ -59,7 +59,7 @@ proc kill :3000,:8080  # multiple (comma-separated)
 
 ## Scripting
 
-With `--json`, every command prints one JSON document with `action` (the command name) and `success`. `proc watch --json` streams one per refresh. Errors, including invalid flags, are JSON too.
+With `--json`, every command prints one JSON document with `action` (the command name) and `success`. `proc watch --json` streams one per refresh. Errors, including invalid flags, are JSON too. A command that changes processes run with `--json` but without `--yes` exits 4 and adds `"needs_confirmation": true` and `"processes"` (the ones it would have changed).
 
 | Exit code | Meaning |
 |-----------|---------|
@@ -67,6 +67,6 @@ With `--json`, every command prints one JSON document with `action` (the command
 | `1` | Error, or not fully successful: a process failed, a port stayed busy, `wait` timed out |
 | `2` | Process or port not found |
 | `3` | Permission denied |
-| `4` | Invalid input (unknown flag, bad argument, invalid signal) |
+| `4` | Invalid input (unknown flag, bad argument, invalid signal), an action this OS doesn't support (`freeze`, `thaw` and `stop --signal` on Windows), or a command that changes processes run without `--yes` where nobody can confirm (`--json`, or no terminal): nothing was changed |
 
 `"success": false` always comes with a non-zero exit code.

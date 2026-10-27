@@ -16,7 +16,7 @@ proc is a semantic CLI for processes and ports on macOS, Linux, and Windows. You
 ## Critical Rules
 
 1. **Always pass `--json`** on every command for structured output
-2. **Always pass `--yes`** on destructive commands. `--json` doesn't replace it: without `--yes`, a command that changes processes exits 4 and touches nothing (with `--json`, or with no terminal to ask in). Pass `--yes`, or `--dry-run` to preview, and run it again
+2. **Always pass `--yes`** on destructive commands. `--json` doesn't replace it: without `--yes`, a command that changes processes exits 4 and touches nothing (with `--json`, or with no terminal to ask in). Pass `--yes`, or `--dry-run` to preview, and run it again. With `--json` that exit 4 carries `"needs_confirmation": true` and the `processes` it would have changed, so you can show the user what it would do and ask before retrying with `--yes`
 3. **Use `--dry-run`** before destructive actions to preview what would happen
 4. **Check the exit code**: 0=success, 1=general error (including partial failures and `wait` timeouts), 2=not found, 3=permission denied, 4=invalid input. `"success": false` always comes with a non-zero exit code
 5. **Errors with `--json`** produce `{"action":"<cmd>", "success":false, "error":"...", "exit_code":N}` on stdout — including invalid flags or arguments
@@ -87,7 +87,7 @@ To inspect a process, use `proc info` (aliases: `inspect`, `i`; JSON `action` is
 
 ```bash
 proc kill :3000 --yes --json               # force kill (SIGKILL)
-proc kill node --in . --graceful --yes --json  # SIGTERM instead of SIGKILL
+proc kill node --in . --graceful --yes --json  # SIGTERM instead of SIGKILL (Windows: asks the program to close its windows)
 proc stop node --yes --json                # SIGTERM, then SIGKILL after --timeout (default 10s)
 proc stop nginx --signal HUP --yes --json  # send a different initial signal
 proc freeze node --yes --json              # pause (SIGSTOP)
@@ -204,8 +204,8 @@ For complete JSON output schemas and field definitions, see [reference.md](refer
 - If any process fails in `kill`/`stop`/`freeze`/`thaw`/`orphans --kill`/`stuck --kill`, the exit code is 1 and `failed` lists why; the ones in `succeeded` were still acted on.
 - `proc wait` on timeout prints its result with `timed_out: true` and exits 1.
 - `--signal` is only on `proc stop`. Valid signals: HUP, INT, QUIT, ABRT, KILL, TERM, STOP, CONT, USR1, USR2 (with or without `SIG`, any case). Windows has no signals, so there `--signal` exits 4.
-- `--graceful` is only on `proc kill`.
+- `--graceful` is only on `proc kill`. On Windows it asks the program to close its windows, so a console program (a server, a script) refuses and `kill` exits 1; use `proc stop` for a stop that escalates to a force kill after `--timeout`.
 - Unknown flags exit 4; with `--json` the error is a JSON object on stdout, otherwise plain text on stderr.
-- `freeze` and `thaw` are Unix only — on Windows they fail with exit 1.
+- `freeze` and `thaw` are Unix only — on Windows they exit 4 (not supported on this OS).
 - `proc stuck` is a heuristic: over 50% CPU or blocked in the kernel, in two readings a second apart. A long build at full CPU looks the same as a loop that never ends, so check what it found before `--kill`.
 - An orphan (parent PID 1) isn't necessarily abandoned: daemons and `tmux`/`nohup` jobs are orphaned on purpose. Check `cwd`, `command` and uptime before treating one as a leftover.

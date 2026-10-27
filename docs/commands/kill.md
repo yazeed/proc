@@ -19,7 +19,7 @@ proc kill :3000,:8080,node # kill multiple targets
 |------|-------|-------------|
 | `--yes` | `-y` | Skip confirmation |
 | `--dry-run` | | Show what would be killed |
-| `--graceful` | `-g` | Send SIGTERM instead of SIGKILL |
+| `--graceful` | `-g` | Send SIGTERM instead of SIGKILL. On Windows it asks the program to close its windows, so a console program refuses (exit 1); use [`proc stop`](stop) for a stop that escalates |
 | `--in [<dir>]` | `-i` | Filter by directory |
 | `--by <name>` | `-b` | Filter by process name |
 | `--json` | `-j` | Output as JSON |

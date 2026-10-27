@@ -185,7 +185,7 @@ fn test_find_process_by_name() {
 CI fails a change that lowers line coverage or leaves a flag without a test. The `Coverage gate` job checks:
 
 - 100% of the lines in `src/`, merged across Linux, macOS and Windows. A line counts as covered if it ran on any of the three, so code that only exists on one OS is measured on that OS
-- Every flag of every command is exercised: `every_flag_is_exercised` in `tests/flags.rs` walks the CLI definition and fails for a flag no test uses
+- Every long flag of every process command is exercised: `every_flag_is_exercised` in `tests/flags.rs` walks the CLI definition and fails for a long flag no test uses. It skips `completions` and `manpage`, flags that only have a short form, `--help` and `--version`
 - All three lcov files are present. If one OS's coverage job fails, the gate fails instead of judging a partial merge
 - No file in `src/` that contains code has no coverage data, which would mean it was never compiled or linked
 
