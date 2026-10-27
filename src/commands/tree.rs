@@ -76,23 +76,23 @@ impl TreeCommand {
     /// Build the set of ancestor PIDs to exclude from name matching.
     ///
     /// Walks up the process tree from the current process to avoid matching
-    /// shells whose command lines contain proc's own arguments.
+    /// shells whose command lines contain proc's own arguments. `all_processes`
+    /// leaves proc itself out, so its parent is looked up separately.
     fn ancestor_pids(all_processes: &[Process]) -> std::collections::HashSet<u32> {
         let mut pids = std::collections::HashSet::new();
         let self_pid = std::process::id();
         pids.insert(self_pid);
-        let mut current = self_pid;
+        let mut next = Process::find_by_pid(self_pid)
+            .ok()
+            .flatten()
+            .and_then(|me| me.parent_pid);
         for _ in 0..10 {
-            if let Some(parent_pid) = all_processes
+            let Some(parent_pid) = next else { break };
+            pids.insert(parent_pid);
+            next = all_processes
                 .iter()
-                .find(|p| p.pid == current)
-                .and_then(|p| p.parent_pid)
-            {
-                pids.insert(parent_pid);
-                current = parent_pid;
-            } else {
-                break;
-            }
+                .find(|p| p.pid == parent_pid)
+                .and_then(|p| p.parent_pid);
         }
         pids
     }

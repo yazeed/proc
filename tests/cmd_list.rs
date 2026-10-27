@@ -203,3 +203,29 @@ fn in_follows_a_symlink_to_the_directory() {
     assert_eq!(code, 0);
     assert!(lists(&json, owned.pid()), "{json}");
 }
+
+// --- `tree NAME` does not match the shell that launched it --------------------
+
+#[cfg(unix)]
+#[test]
+fn tree_by_name_skips_the_shell_whose_command_line_holds_the_name() {
+    let owned = Owned::listener();
+    let proc_exe = assert_cmd::cargo::cargo_bin("proc");
+    // The `exit` keeps sh alive as proc's parent (a bare `sh -c cmd` may exec
+    // cmd in place); sh's own command line holds the name
+    let output = std::process::Command::new("sh")
+        .args(["-c", r#""$0" "$@"; exit $?"#])
+        .arg(&proc_exe)
+        .args(["tree", &owned.name, "--json", "--depth", "0"])
+        .env("NO_COLOR", "1")
+        .output()
+        .unwrap();
+    let json: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let pids: Vec<u64> = json["tree"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|n| n["pid"].as_u64().unwrap())
+        .collect();
+    assert_eq!(pids, vec![u64::from(owned.pid())], "{json}");
+}
