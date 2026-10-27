@@ -12,7 +12,9 @@ use crate::core::{
     parse_target, resolve_in_dir, sort_processes, Process, ProcessStatus, SortKey, TargetType,
 };
 use crate::error::Result;
-use crate::ui::format::{format_duration, format_memory, truncate_string};
+use crate::ui::format::{
+    format_duration, format_memory, process_table_budget, truncate_path, truncate_string,
+};
 use clap::{Args, ValueEnum};
 use comfy_table::presets::NOTHING;
 use comfy_table::{Attribute, Cell, CellAlignment, Color, ContentArrangement, Table};
@@ -74,6 +76,10 @@ pub struct WatchCommand {
     /// Show verbose output
     #[arg(long, short = 'v')]
     pub verbose: bool,
+
+    /// Print full directories and arguments instead of fitting the terminal width
+    #[arg(long, short = 'w')]
+    pub wide: bool,
 
     /// Limit the number of results shown
     #[arg(long, short = 'l')]
@@ -413,15 +419,17 @@ impl WatchCommand {
             }
         } else {
             // Table mode
+            // Same budget as the other process table, so the two cannot drift.
+            let budget = process_table_budget(width);
+            let show_uptime = budget.show_uptime;
+
             let mut table = Table::new();
+            // Disabled never reflows a cell, so one process is always one line.
+            // Fitting the terminal is done by truncating content below, not by
+            // letting comfy-table wrap.
             table
                 .load_preset(NOTHING)
-                .set_content_arrangement(ContentArrangement::Dynamic)
-                .set_width(width);
-
-            // UPTIME only fits next to a readable ARGS column on wider terminals,
-            // the same rule as the other process tables
-            let show_uptime = width >= 100;
+                .set_content_arrangement(ContentArrangement::Disabled);
 
             let mut header = vec![
                 Cell::new("PID")
@@ -461,54 +469,51 @@ impl WatchCommand {
             );
             table.set_header(header);
 
-            use comfy_table::ColumnConstraint::*;
-            use comfy_table::Width::*;
-
-            let args_max = (width / 2).max(30);
-
-            table
-                .column_mut(0)
-                .expect("PID column")
-                .set_constraint(Absolute(Fixed(8)));
-            table
-                .column_mut(1)
-                .expect("DIR column")
-                .set_constraint(LowerBoundary(Fixed(20)));
-            table
-                .column_mut(2)
-                .expect("NAME column")
-                .set_constraint(LowerBoundary(Fixed(10)));
-            table
-                .column_mut(3)
-                .expect("ARGS column")
-                .set_constraint(UpperBoundary(Fixed(args_max)));
-            table
-                .column_mut(4)
-                .expect("CPU% column")
-                .set_constraint(Absolute(Fixed(8)));
-            table
-                .column_mut(5)
-                .expect("MEM column")
-                .set_constraint(Absolute(Fixed(11)));
-            let status_column = if show_uptime {
+            if !self.wide {
+                use comfy_table::ColumnConstraint::*;
+                use comfy_table::Width::*;
                 table
-                    .column_mut(6)
-                    .expect("UPTIME column")
-                    .set_constraint(Absolute(Fixed(10))); // 8 content — fits "999d 23h"
-                7
-            } else {
-                6
-            };
-            table
-                .column_mut(status_column)
-                .expect("STATUS column")
-                .set_constraint(Absolute(Fixed(12)));
+                    .column_mut(0)
+                    .expect("PID column")
+                    .set_constraint(Absolute(Fixed(budget.pid as u16)));
+                table
+                    .column_mut(4)
+                    .expect("CPU% column")
+                    .set_constraint(Absolute(Fixed(budget.cpu as u16)));
+                table
+                    .column_mut(5)
+                    .expect("MEM column")
+                    .set_constraint(Absolute(Fixed(budget.mem as u16)));
+                let status_column = if show_uptime {
+                    table
+                        .column_mut(6)
+                        .expect("UPTIME column")
+                        .set_constraint(Absolute(Fixed(budget.uptime as u16)));
+                    7
+                } else {
+                    6
+                };
+                table
+                    .column_mut(status_column)
+                    .expect("STATUS column")
+                    .set_constraint(Absolute(Fixed(budget.status as u16)));
+            }
 
             let display_count = processes.len().min(max_rows);
             for proc in processes.iter().take(display_count) {
                 let status_str = format!("{:?}", proc.status);
 
-                let path_display = proc.cwd.as_deref().unwrap_or("-").to_string();
+                let cwd = proc.cwd.as_deref().unwrap_or("-");
+                let path_display = if self.wide {
+                    cwd.to_string()
+                } else {
+                    truncate_path(cwd, budget.dir)
+                };
+                let name_display = if self.wide {
+                    proc.name.clone()
+                } else {
+                    truncate_string(&proc.name, budget.name)
+                };
 
                 let cmd_display = proc
                     .command
@@ -532,8 +537,10 @@ impl WatchCommand {
                             let result = args.join(" ");
                             if result.is_empty() {
                                 "-".to_string()
+                            } else if self.wide {
+                                result
                             } else {
-                                truncate_string(&result, (args_max as usize).saturating_sub(2))
+                                truncate_string(&result, budget.args)
                             }
                         } else {
                             "-".to_string()
@@ -554,7 +561,7 @@ impl WatchCommand {
                 let mut row = vec![
                     Cell::new(proc.pid).fg(Color::Cyan),
                     Cell::new(&path_display).fg(Color::DarkGrey),
-                    Cell::new(&proc.name).fg(Color::White),
+                    Cell::new(&name_display).fg(Color::White),
                     Cell::new(&cmd_display).fg(Color::DarkGrey),
                     Cell::new(format!("{:.1}", proc.cpu_percent))
                         .set_alignment(CellAlignment::Right),

@@ -31,6 +31,7 @@ The table has the same columns as `proc list`, including uptime on terminals at 
 | `--min-mem <n>` | | Minimum memory (MB) |
 | `--json` | `-j` | NDJSON output (one object per refresh) |
 | `--verbose` | `-v` | Show extra details |
+| `--wide` | `-w` | Print full directories and arguments instead of fitting the terminal |
 
 ## Modes
 

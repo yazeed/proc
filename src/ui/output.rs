@@ -5,7 +5,8 @@
 use crate::core::{PortInfo, Process};
 use crate::error::{ExitCode, ProcError, Result};
 use crate::ui::format::{
-    colorize_status, format_duration, format_memory, plural, truncate_path, truncate_string,
+    colorize_status, format_duration, format_memory, plural, process_table_budget, truncate_path,
+    truncate_string,
 };
 use colored::*;
 use comfy_table::presets::NOTHING;
@@ -224,40 +225,9 @@ impl Printer {
             }
         } else {
             let width = terminal_width();
-            // UPTIME only fits next to a readable ARGS column on wider terminals
-            let show_uptime = width >= 100;
-
-            // Column budget. The fixed columns below consume a known number of
-            // terminal columns (content plus comfy-table's 1-column padding on
-            // each side); DIR, NAME and ARGS share what is left. Pre-truncating
-            // each of those to its share is what keeps one process on one line:
-            // comfy-table wraps any cell that does not fit, and a wrapped cell
-            // destroys the column alignment that makes a table readable.
-            const PID_W: usize = 8;
-            const CPU_W: usize = 8;
-            const MEM_W: usize = 11;
-            const UPTIME_W: usize = 10;
-            const STATUS_W: usize = 12;
-            let fixed = PID_W + CPU_W + MEM_W + STATUS_W + if show_uptime { UPTIME_W } else { 0 };
-            // Each flexible column renders as its Fixed() content width plus
-            // comfy-table's 2 columns of padding, so reserve those 6 up front.
-            const FLEX_PADDING: usize = 6;
-            // Measured slack: with arrangement disabled the fixed columns render
-            // a few columns wider than their constraints, and a line exactly as
-            // wide as the terminal wraps in some emulators. Verified against
-            // rendered output at 80/100/120/160/200 columns.
-            const SAFETY: usize = 7;
-            let avail = (width as usize)
-                .saturating_sub(fixed + FLEX_PADDING + SAFETY)
-                .max(24);
-            let name_w = (avail / 4).clamp(8, 16);
-            let rest = avail - name_w;
-            let args_w = (rest / 2).max(12);
-            let dir_w = rest - args_w;
-            // An UpperBoundary column fits exactly its Fixed() value of content.
-            let dir_content = dir_w;
-            let name_content = name_w;
-            let args_content = args_w;
+            let budget = process_table_budget(width);
+            let show_uptime = budget.show_uptime;
+            let (dir_content, name_content, args_content) = (budget.dir, budget.name, budget.args);
 
             let mut table = Table::new();
             // Disabled never reflows a cell, so one process is always one line.
@@ -315,20 +285,20 @@ impl Printer {
                 table
                     .column_mut(0)
                     .expect("PID column")
-                    .set_constraint(Absolute(Fixed(PID_W as u16))); // 6 content — fits "999999"
+                    .set_constraint(Absolute(Fixed(budget.pid as u16))); // 6 content — fits "999999"
                 table
                     .column_mut(4)
                     .expect("CPU% column")
-                    .set_constraint(Absolute(Fixed(CPU_W as u16))); // 6 content — fits "100.0"
+                    .set_constraint(Absolute(Fixed(budget.cpu as u16))); // 6 content — fits "100.0"
                 table
                     .column_mut(5)
                     .expect("MEM column")
-                    .set_constraint(Absolute(Fixed(MEM_W as u16))); // 9 content — fits "9999.9MB"
+                    .set_constraint(Absolute(Fixed(budget.mem as u16))); // 9 content — fits "9999.9MB"
                 let status_column = if show_uptime {
                     table
                         .column_mut(6)
                         .expect("UPTIME column")
-                        .set_constraint(Absolute(Fixed(UPTIME_W as u16))); // 8 content
+                        .set_constraint(Absolute(Fixed(budget.uptime as u16))); // 8 content
                     7
                 } else {
                     6
@@ -336,7 +306,7 @@ impl Printer {
                 table
                     .column_mut(status_column)
                     .expect("STATUS column")
-                    .set_constraint(Absolute(Fixed(STATUS_W as u16))); // 10 content
+                    .set_constraint(Absolute(Fixed(budget.status as u16))); // 10 content
             }
 
             for proc in processes {
