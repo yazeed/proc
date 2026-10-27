@@ -395,17 +395,19 @@ mod unix {
                 .as_f64()
         };
 
+        // unmeasured reads ~0.4; a full core measured can read under 50 on a
+        // loaded CI runner (49% seen), so 20 tells the two apart without flaking
         let (info, _) = run_json(&["info", &pid, "--json"]);
-        assert!(cpu_of(&info["processes"]).unwrap() > 50.0, "info: {info}");
+        assert!(cpu_of(&info["processes"]).unwrap() > 20.0, "info: {info}");
 
         let (on, _) = run_json(&["on", &pid, "--json"]);
         let on_cpu = on["process"]["cpu_percent"].as_f64().unwrap();
-        assert!(on_cpu > 50.0, "on: {on}");
+        assert!(on_cpu > 20.0, "on: {on}");
 
-        let (busy, _) = run_json(&["list", "--min-cpu", "50", "--json"]);
+        let (busy, _) = run_json(&["list", "--min-cpu", "20", "--json"]);
         assert!(
             cpu_of(&busy["processes"]).is_some(),
-            "--min-cpu 50 missed it: {busy}"
+            "--min-cpu 20 missed it: {busy}"
         );
 
         let (top, _) = run_json(&["list", "--sort", "cpu", "--limit", "5", "--json"]);

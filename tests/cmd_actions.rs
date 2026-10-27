@@ -19,6 +19,11 @@ use std::sync::mpsc::{self, Receiver};
 use std::sync::{Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
+/// A busy process's CPU reads well above this once measured, and ~0 when it
+/// isn't (a lookup reads CPU a few milliseconds after its first refresh). Not
+/// 50: a full core read 49% on a loaded, instrumented CI runner
+const MEASURED: f64 = 20.0;
+
 fn proc_cmd() -> Command {
     let mut cmd = Command::cargo_bin("proc").unwrap();
     cmd.env("NO_COLOR", "1");
@@ -664,7 +669,7 @@ fn stop_without_yes_and_json_asks_for_yes_with_measured_cpu() {
     assert_eq!(json["needs_confirmation"], true, "{json}");
     assert_eq!(json["processes"][0]["pid"], busy.pid(), "{json}");
     let cpu = json["processes"][0]["cpu_percent"].as_f64().unwrap();
-    assert!(cpu > 50.0, "cpu_percent {cpu} was not measured: {json}");
+    assert!(cpu > MEASURED, "cpu_percent {cpu} was not measured: {json}");
     assert!(busy.alive());
 }
 
@@ -907,7 +912,7 @@ fn freeze_and_thaw_without_yes_and_json_ask_for_yes_with_measured_cpu() {
         assert_eq!(json["processes"][0]["pid"], busy.pid(), "{action}: {json}");
         let cpu = json["processes"][0]["cpu_percent"].as_f64().unwrap();
         assert!(
-            cpu > 50.0,
+            cpu > MEASURED,
             "{action}: cpu_percent {cpu} was not measured: {json}"
         );
     }
@@ -1283,7 +1288,7 @@ fn orphans_kill_without_yes_and_json_asks_for_yes_with_measured_cpu() {
     assert_eq!(json["needs_confirmation"], true, "{json}");
     assert_eq!(json["processes"][0]["pid"], pid, "{json}");
     let cpu = json["processes"][0]["cpu_percent"].as_f64().unwrap();
-    assert!(cpu > 50.0, "cpu_percent {cpu} was not measured: {json}");
+    assert!(cpu > MEASURED, "cpu_percent {cpu} was not measured: {json}");
     assert!(orphan.alive());
 }
 
@@ -1373,7 +1378,7 @@ fn unstick_dry_run_shows_measured_cpu_and_attempts_nothing() {
     let r = run(&["unstick", &pid, "--dry-run"]);
     assert_eq!(r.code, 0, "{}{}", r.stdout, r.stderr);
     let cpu = cpu_in_line(&r.stdout, busy.pid());
-    assert!(cpu > 50.0, "cpu {cpu} was not measured:\n{}", r.stdout);
+    assert!(cpu > MEASURED, "cpu {cpu} was not measured:\n{}", r.stdout);
     assert!(
         r.stdout
             .contains("Dry run: Would attempt to unstick 1 process"),
@@ -1411,7 +1416,7 @@ fn unstick_without_yes_and_json_asks_for_yes_with_measured_cpu() {
     assert_eq!(json["needs_confirmation"], true, "{json}");
     assert_eq!(json["processes"][0]["pid"], busy.pid(), "{json}");
     let cpu = json["processes"][0]["cpu_percent"].as_f64().unwrap();
-    assert!(cpu > 50.0, "cpu_percent {cpu} was not measured: {json}");
+    assert!(cpu > MEASURED, "cpu_percent {cpu} was not measured: {json}");
     assert!(busy.alive());
 }
 

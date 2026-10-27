@@ -311,8 +311,9 @@ fn by_min_cpu_keeps_a_busy_process_and_drops_an_idle_one() {
     let (json, _) = run_json(&["by", &idle.name, "--min-cpu", "50", "--json"]);
     assert!(!lists(&json, "processes", idle.pid()), "{json}");
 
+    // a full core measured can read under 50 on a loaded CI runner (49% seen)
     let busy = Owned::busy();
-    let (json, _) = run_json(&["by", &busy.name, "--min-cpu", "50", "--json"]);
+    let (json, _) = run_json(&["by", &busy.name, "--min-cpu", "20", "--json"]);
     assert!(lists(&json, "processes", busy.pid()), "{json}");
 }
 

@@ -154,5 +154,7 @@ fn the_missing_yes_error_lists_processes_with_measured_cpu() {
     assert_eq!(code, Some(4), "after {took:.1}s: {json}");
     assert_eq!(json["needs_confirmation"], true, "{json}");
     let cpu = json["processes"][0]["cpu_percent"].as_f64().unwrap();
-    assert!(cpu > 50.0, "cpu_percent {cpu} was not measured: {json}");
+    // unmeasured reads ~0; a full core measured can read under 50 on a loaded
+    // CI runner, so 20 tells the two apart without flaking
+    assert!(cpu > 20.0, "cpu_percent {cpu} was not measured: {json}");
 }

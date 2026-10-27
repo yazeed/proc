@@ -232,8 +232,10 @@ const CASES: &[Case] = &[
     // ---- kill ----
     code("kill", &["{pid}", "--yes"], 0),
     code("kill", &[":{port}", "-y", "-j"], 0),
-    code("kill", &["{pid}", "--graceful", "--yes"], 0),
-    code("kill", &["{pid}", "-g", "-y", "--verbose"], 0),
+    // on Windows a graceful kill is taskkill without /F, which a console
+    // program refuses ("can only be terminated forcefully"): exit 1
+    per_os("kill", &["{pid}", "--graceful", "--yes"], 0, 1),
+    per_os("kill", &["{pid}", "-g", "-y", "--verbose"], 0, 1),
     code("kill", &["{pid}", "-y", "-v"], 0),
     code("kill", &["{pid}", "--dry-run"], 0),
     code("kill", &["{pid}", "--yes", "--in", "{dir}"], 0),
