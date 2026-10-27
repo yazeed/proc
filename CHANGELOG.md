@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`proc stuck` needs a process to stay stuck.** A process counts as stuck when it has been running longer than `--timeout` and, in two readings a second apart, is using over 50% CPU or is blocked in uninterruptible sleep (waiting in the kernel, usually for I/O). A single half-second reading used to be enough, so any long-running process that was busy for a moment counted, and `stuck --kill` could catch it; a hang that uses no CPU wasn't found at all. `stuck` now takes about 2 seconds. A long build at full CPU still looks the same as a loop that never ends, so the docs say to check the list before `--kill`
 - **Port lookups on Linux need nothing installed.** proc reads the kernel's socket tables in `/proc` itself instead of running `ss`, so `on :port`, `ports`, `free` and `wait :port` work on minimal systems without iproute2 (Alpine, debian-slim, distroless). The Docker image no longer installs iproute2. The same port listening on IPv4 and IPv6 is listed once, as on macOS
 
+### Removed
+
+- **Printing helpers nothing called.** `Printer::error`, `Printer::print_ports`, `Printer::print_port_info` and `Printer::print_kill_result` (in `proc_cli::ui::output`) are gone, along with the output types behind the two port printers. proc itself never used them: `ports` and `on` print through their own code, and `kill` reports through `print_action_result`
+
 ### Fixed
 
 - **`proc kill --graceful` reported success on Windows when nothing happened.** A graceful kill there runs `taskkill` without `/F`, which only asks a program to close its windows, so a console program (a server, a script, anything without a window) is left running and taskkill fails; proc ignored taskkill's answer and reported the process as killed. It now reports the failure with taskkill's own reason. `proc stop` still stops such a process: when the polite request can't be delivered, it waits out `--timeout` and force-kills, as before

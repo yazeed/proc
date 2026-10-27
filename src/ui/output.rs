@@ -2,7 +2,7 @@
 //!
 //! Provides colored terminal output and JSON formatting.
 
-use crate::core::{PortInfo, Process};
+use crate::core::Process;
 use crate::error::{ExitCode, ProcError, Result};
 use crate::ui::format::{
     colorize_status, format_duration, format_memory, plural, process_table_budget, truncate_path,
@@ -136,18 +136,6 @@ impl Printer {
                 count: 0,
                 message,
             }),
-        }
-    }
-
-    /// Print an error message
-    pub fn error(&self, message: &str) {
-        match self.format {
-            OutputFormat::Human => {
-                eprintln!("{} {}", "✗".red().bold(), message.red());
-            }
-            OutputFormat::Json => {
-                // JSON output handled separately
-            }
         }
     }
 
@@ -413,9 +401,7 @@ impl Printer {
                                 })
                                 .collect();
                             let result = args.join(" ");
-                            if result.is_empty() {
-                                "-".to_string()
-                            } else if self.wide {
+                            if self.wide {
                                 result
                             } else {
                                 truncate_string(&result, args_content)
@@ -464,133 +450,6 @@ impl Printer {
             writeln!(out, "{table}")?;
         }
         writeln!(out)
-    }
-
-    /// Print port information
-    pub fn print_ports(&self, ports: &[PortInfo]) {
-        match self.format {
-            OutputFormat::Human => self.print_ports_human(ports),
-            OutputFormat::Json => self.print_json(&PortListOutput {
-                action: "ports",
-                success: true,
-                count: ports.len(),
-                ports,
-            }),
-        }
-    }
-
-    fn print_ports_human(&self, ports: &[PortInfo]) {
-        if ports.is_empty() {
-            self.warning("No listening ports found");
-            return;
-        }
-
-        println!(
-            "{} Found {} listening port{}",
-            "✓".green().bold(),
-            ports.len().to_string().cyan().bold(),
-            if ports.len() == 1 { "" } else { "s" }
-        );
-        println!();
-
-        let width = terminal_width();
-
-        let mut table = Table::new();
-        table
-            .load_preset(NOTHING)
-            .set_content_arrangement(ContentArrangement::Dynamic)
-            .set_width(width);
-
-        table.set_header(vec![
-            Cell::new("PORT")
-                .fg(Color::Blue)
-                .add_attribute(Attribute::Bold),
-            Cell::new("PROTO")
-                .fg(Color::Blue)
-                .add_attribute(Attribute::Bold),
-            Cell::new("PID")
-                .fg(Color::Blue)
-                .add_attribute(Attribute::Bold),
-            Cell::new("PROCESS")
-                .fg(Color::Blue)
-                .add_attribute(Attribute::Bold),
-            Cell::new("ADDRESS")
-                .fg(Color::Blue)
-                .add_attribute(Attribute::Bold),
-        ]);
-
-        use comfy_table::ColumnConstraint::*;
-        use comfy_table::Width::*;
-        table
-            .column_mut(0)
-            .expect("PORT column")
-            .set_constraint(Absolute(Fixed(8)));
-        table
-            .column_mut(1)
-            .expect("PROTO column")
-            .set_constraint(Absolute(Fixed(6)));
-        table
-            .column_mut(2)
-            .expect("PID column")
-            .set_constraint(Absolute(Fixed(8)));
-        table
-            .column_mut(3)
-            .expect("PROCESS column")
-            .set_constraint(LowerBoundary(Fixed(12)));
-        table
-            .column_mut(4)
-            .expect("ADDRESS column")
-            .set_constraint(LowerBoundary(Fixed(10)));
-
-        for port in ports {
-            let addr = port.address.as_deref().unwrap_or("*");
-            let proto = format!("{:?}", port.protocol).to_uppercase();
-
-            table.add_row(vec![
-                Cell::new(port.port).fg(Color::Cyan),
-                Cell::new(&proto).fg(Color::White),
-                Cell::new(port.pid).fg(Color::Cyan),
-                Cell::new(truncate_string(&port.process_name, 19)).fg(Color::White),
-                Cell::new(addr).fg(Color::DarkGrey),
-            ]);
-        }
-
-        println!("{table}");
-        println!();
-    }
-
-    /// Print a single port info (for `proc on :port`)
-    pub fn print_port_info(&self, port_info: &PortInfo) {
-        match self.format {
-            OutputFormat::Human => {
-                println!(
-                    "{} Process on port {}:",
-                    "✓".green().bold(),
-                    port_info.port.to_string().cyan().bold()
-                );
-                println!();
-                println!(
-                    "  {} {}",
-                    "Name:".bright_black(),
-                    port_info.process_name.white().bold()
-                );
-                println!(
-                    "  {} {}",
-                    "PID:".bright_black(),
-                    port_info.pid.to_string().cyan()
-                );
-                println!("  {} {:?}", "Protocol:".bright_black(), port_info.protocol);
-                if let Some(ref addr) = port_info.address {
-                    println!("  {} {}", "Address:".bright_black(), addr);
-                }
-                println!();
-            }
-            OutputFormat::Json => self.print_json(&SinglePortOutput {
-                action: "on",
-                success: true,
-                port: port_info,
-            }),
-        }
     }
 
     /// Print JSON output for any serializable type
@@ -747,15 +606,6 @@ impl Printer {
         Ok(())
     }
 
-    /// Print kill result (delegates to print_action_result)
-    pub fn print_kill_result(
-        &self,
-        killed: &[Process],
-        failed: &[(Process, String)],
-    ) -> Result<()> {
-        self.print_action_result("kill", killed, failed)
-    }
-
     /// Print dry-run summary for a destructive command.
     ///
     /// The `action` is the command name (e.g. "kill", "stop", "freeze", "thaw"),
@@ -869,21 +719,6 @@ struct DryRunOutput<'a> {
     dry_run: bool,
     count: usize,
     processes: &'a [Process],
-}
-
-#[derive(Serialize)]
-struct PortListOutput<'a> {
-    action: &'static str,
-    success: bool,
-    count: usize,
-    ports: &'a [PortInfo],
-}
-
-#[derive(Serialize)]
-struct SinglePortOutput<'a> {
-    action: &'static str,
-    success: bool,
-    port: &'a PortInfo,
 }
 
 #[derive(Serialize)]
