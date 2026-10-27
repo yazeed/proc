@@ -122,6 +122,55 @@ class GateTest(unittest.TestCase):
         r = self.run_gate(self.mac)
         self.assertEqual(r.returncode, 0)
 
+    def test_custom_cargo_home_registry_is_ignored(self):
+        # CARGO_HOME=/out/cargo-home (coverage-local.sh): no ".cargo" segment
+        dep = self.write(
+            "dep.info",
+            "SF:/out/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/"
+            "serde-1.0.228/src/a.rs\nDA:1,0\nDA:2,0\nend_of_record\n"
+            "SF:/out/cargo-home/git/checkouts/foo-1234/abcdef/src/a.rs\n"
+            "DA:3,0\nend_of_record\n"
+            "SF:/rustc/abc123/library/core/src/a.rs\nDA:4,0\nend_of_record\n"
+            "SF:/work/src/a.rs\nDA:1,1\nend_of_record\n",
+        )
+        r = self.run_gate(dep, "--enforce")
+        self.assertEqual(r.returncode, 0, r.stdout)
+        self.assertIn("1/1", r.stdout)
+
+    def test_exclusion_without_reason_is_rejected(self):
+        ex = self.write("ex.txt", "src/a.rs:5-6\n")
+        r = self.run_gate(self.mac, "--exclusions", ex)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("reason", r.stderr)
+
+    def test_exclusion_of_unknown_file_or_reversed_range_is_rejected(self):
+        ex = self.write("ex.txt", "src/nope.rs:1-2  gone\n")
+        r = self.run_gate(self.mac, "--exclusions", ex)
+        self.assertNotEqual(r.returncode, 0)
+        ex = self.write("ex2.txt", "src/a.rs:6-5  backwards\n")
+        r = self.run_gate(self.mac, "--exclusions", ex)
+        self.assertNotEqual(r.returncode, 0)
+
+    def test_stale_exclusion_warns_and_fails_under_enforce(self):
+        # line 1 is covered in the merged data, so excluding it hides nothing
+        ex = self.write("ex.txt", "src/a.rs:5-7  real\nsrc/a.rs:1  stale\n")
+        r = self.run_gate(self.mac, self.win, "--exclusions", ex)
+        self.assertEqual(r.returncode, 0, r.stdout)
+        self.assertIn("stale exclusion", r.stdout)
+        self.assertIn("src/a.rs:1", r.stdout)
+        r = self.run_gate(self.mac, self.win, "--exclusions", ex, "--enforce")
+        self.assertEqual(r.returncode, 1)
+
+    def test_stale_exclusion_for_file_without_data(self):
+        ex = self.write("ex.txt", "src/sub/a.rs:1-2  no data for this file\n")
+        r = self.run_gate(self.mac, "--exclusions", ex)
+        self.assertIn("stale exclusion", r.stdout)
+
+    def test_report_counts_excluded_lines_per_file(self):
+        ex = self.write("ex.txt", "src/a.rs:5-6  two lines\n")
+        r = self.run_gate(self.mac, self.win, "--exclusions", ex)
+        self.assertIn("excluded: src/a.rs 2", r.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

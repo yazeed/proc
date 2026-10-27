@@ -177,6 +177,7 @@ jobs:
     name: Coverage gate
     runs-on: ubuntu-latest
     needs: coverage
+    if: ${{ !cancelled() }}
     steps:
       - uses: actions/checkout@v4
 

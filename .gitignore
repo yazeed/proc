@@ -35,3 +35,6 @@ premortem-*.html
 HANDOVER-*.md
 # Local design notes and specs (never committed or published)
 /docs/superpowers/
+
+# Python
+__pycache__/

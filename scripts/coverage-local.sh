@@ -42,6 +42,7 @@ rustup component add llvm-tools-preview >/dev/null 2>&1
 sysroot="$(rustc --print sysroot)"
 bin="$(find "$sysroot" -name llvm-profdata -type f | head -1)"
 bin="$(dirname "$bin")"
+# Same dependency paths coverage_gate.py ignores, whatever CARGO_HOME is
 cd /work
 
 export LLVM_PROFILE_FILE=/out/profiles/%p-%m.profraw
@@ -60,7 +61,7 @@ for f in /out/target/debug/deps/*; do
 done
 objects+=(-object /out/target/debug/proc)
 "$bin/llvm-cov" export -format=lcov -instr-profile=/out/coverage.profdata \
-  -ignore-filename-regex="(\.cargo/registry|/rustc/)" "${objects[@]}" > /out/lcov.info
+  -ignore-filename-regex="(/registry/src/|/git/checkouts/|/rustc/)" "${objects[@]}" > /out/lcov.info
 
 # Timing tests, one at a time, from the same instrumented build.
 export LLVM_PROFILE_FILE=/out/timing-profiles/%p-%m.profraw
