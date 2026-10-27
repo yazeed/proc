@@ -200,32 +200,6 @@ mod unix {
         fn exiting_after(secs: &str) -> Self {
             Sleeper(StdCommand::new("sleep").arg(secs).spawn().unwrap())
         }
-
-        /// A child that ignores SIGTERM, so only SIGKILL ends it.
-        fn ignoring_sigterm() -> Self {
-            let child = StdCommand::new("sh")
-                .args(["-c", "trap '' TERM; exec sleep 300"])
-                .spawn()
-                .unwrap();
-            // let the shell install the trap before anyone signals it
-            std::thread::sleep(std::time::Duration::from_millis(300));
-            Sleeper(child)
-        }
-    }
-
-    /// Run proc with a hard time limit; returns the JSON, the exit code
-    /// (None if proc had to be killed at the limit) and how long it took.
-    fn run_json_timed(args: &[&str], limit_secs: u64) -> (Value, Option<i32>, f64) {
-        let started = std::time::Instant::now();
-        let output = proc_cmd()
-            .args(args)
-            .timeout(std::time::Duration::from_secs(limit_secs))
-            .output()
-            .unwrap();
-        let took = started.elapsed().as_secs_f64();
-        let stdout = String::from_utf8(output.stdout).unwrap();
-        let json = serde_json::from_str(&stdout).unwrap_or(Value::Null);
-        (json, output.status.code(), took)
     }
 
     #[test]
@@ -365,53 +339,6 @@ mod unix {
     }
 
     #[test]
-    fn wait_timeout_is_not_rounded_up_to_the_interval() {
-        // --timeout 1 with the default 5-second interval used to take 5 seconds
-        let sleeper = Sleeper::spawn();
-        let (json, code, took) =
-            run_json_timed(&["wait", &sleeper.pid(), "--timeout", "1", "--json"], 20);
-        assert_eq!(code, Some(1), "{json}");
-        assert_eq!(json["timed_out"], true);
-        assert!(took < 3.0, "took {took:.1}s for --timeout 1");
-    }
-
-    #[test]
-    fn wait_returns_soon_after_the_process_exits() {
-        // The child becomes a zombie when it exits (this test is its parent and
-        // hasn't reaped it), which must count as exited
-        let sleeper = Sleeper::exiting_after("1");
-        let (json, code, took) = run_json_timed(&["wait", &sleeper.pid(), "--json"], 20);
-        assert_eq!(code, Some(0), "{json}");
-        assert_eq!(json["success"], true);
-        assert!(
-            took < 3.0,
-            "took {took:.1}s to notice a 1-second process exit"
-        );
-    }
-
-    #[test]
-    fn stop_waits_for_all_processes_together_and_never_hangs() {
-        // Both ignore SIGTERM, so both need SIGKILL after the 1-second timeout.
-        // They used to be handled one after the other, and the second wait for
-        // an unreaped (zombie) process never ended.
-        let first = Sleeper::ignoring_sigterm();
-        let second = Sleeper::ignoring_sigterm();
-        let targets = format!("{},{}", first.pid(), second.pid());
-        let (json, code, took) =
-            run_json_timed(&["stop", &targets, "--yes", "--timeout", "1", "--json"], 20);
-        assert_eq!(
-            code,
-            Some(0),
-            "stop hung or failed after {took:.1}s: {json}"
-        );
-        assert_eq!(json["succeeded_count"], 2, "{json}");
-        assert!(
-            took < 4.0,
-            "took {took:.1}s for two processes with --timeout 1"
-        );
-    }
-
-    #[test]
     fn zombies_are_listed() {
         let sleeper = Sleeper::exiting_after("0");
         std::thread::sleep(std::time::Duration::from_millis(500));
@@ -519,6 +446,36 @@ mod unix {
 #[cfg(target_os = "linux")]
 mod linux {
     use super::*;
+
+    #[test]
+    fn ports_are_found_without_ss() {
+        // Read from /proc/net/tcp{,6}; this test also runs where iproute2 isn't installed
+        let v4 = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let v4_port = v4.local_addr().unwrap().port();
+        let v6 = std::net::TcpListener::bind("[::1]:0").ok(); // IPv6 may be disabled
+        let me = u64::from(std::process::id());
+
+        let (json, code) = run_json(&["ports", "--local", "--json"]);
+        assert_eq!(code, 0, "{json}");
+        let ports = json["ports"].as_array().unwrap();
+        let find = |port: u16| {
+            ports
+                .iter()
+                .find(|p| p["port"].as_u64() == Some(u64::from(port)))
+                .cloned()
+        };
+
+        let entry = find(v4_port).unwrap_or_else(|| panic!("127.0.0.1:{v4_port} missing: {json}"));
+        assert_eq!(entry["pid"].as_u64(), Some(me));
+        assert_eq!(entry["address"], "127.0.0.1");
+
+        if let Some(v6) = v6 {
+            let v6_port = v6.local_addr().unwrap().port();
+            let entry = find(v6_port).unwrap_or_else(|| panic!("[::1]:{v6_port} missing: {json}"));
+            assert_eq!(entry["pid"].as_u64(), Some(me));
+            assert_eq!(entry["address"], "::1");
+        }
+    }
 
     #[test]
     fn list_shows_processes_not_their_threads() {

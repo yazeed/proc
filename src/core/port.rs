@@ -6,6 +6,8 @@
 use crate::core::Process;
 use crate::error::{ProcError, Result};
 use serde::{Deserialize, Serialize};
+// lsof on macOS, netstat and tasklist on Windows; Linux reads /proc instead
+#[cfg(not(target_os = "linux"))]
 use std::process::Command;
 
 /// Network protocol
@@ -163,85 +165,136 @@ impl PortInfo {
         })
     }
 
+    /// Linux: read the kernel's socket tables directly, as `ss` does, so nothing
+    /// needs to be installed. Listening sockets come from /proc/net/tcp and tcp6,
+    /// and each socket's process is the one with that socket open in /proc/<pid>/fd.
+    /// Sockets of other users' processes have no visible owner without root, so
+    /// they are left out, as with `ss -p`.
     #[cfg(target_os = "linux")]
     fn get_listening_linux() -> Result<Vec<PortInfo>> {
-        // Use ss on Linux (more modern than netstat)
-        let output = Command::new("ss").args(["-tlnp"]).output().map_err(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                ProcError::SystemError(
-                    "Port lookups on Linux need `ss`, from the iproute2 package \
-                     (e.g. apt install iproute2, apk add iproute2)"
-                        .to_string(),
-                )
-            } else {
-                ProcError::SystemError(format!("Failed to run ss: {}", e))
-            }
-        })?;
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let mut ports = Vec::new();
-
-        for line in stdout.lines().skip(1) {
-            if let Some(port_info) = Self::parse_ss_line(line) {
-                ports.push(port_info);
-            }
+        let mut sockets = Vec::new();
+        let mut read_any = false;
+        for (table, v6) in [("/proc/net/tcp", false), ("/proc/net/tcp6", true)] {
+            // tcp6 is missing when IPv6 is disabled
+            let Ok(text) = std::fs::read_to_string(table) else {
+                continue;
+            };
+            read_any = true;
+            sockets.extend(
+                text.lines()
+                    .skip(1)
+                    .filter_map(|line| Self::parse_proc_net_line(line, v6)),
+            );
+        }
+        if !read_any {
+            return Err(ProcError::SystemError(
+                "Can't read /proc/net/tcp to look up ports".to_string(),
+            ));
         }
 
+        let wanted: std::collections::HashSet<u64> = sockets.iter().map(|s| s.0).collect();
+        let owners = Self::socket_owners(&wanted);
+
+        let mut ports = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for (inode, port, address) in sockets {
+            let Some(&pid) = owners.get(&inode) else {
+                continue;
+            };
+            // Same port on IPv4 and IPv6 is listed once, as on macOS
+            if !seen.insert((port, pid)) {
+                continue;
+            }
+            let process_name = std::fs::read_to_string(format!("/proc/{pid}/comm"))
+                .map(|name| name.trim_end().to_string())
+                .unwrap_or_else(|_| "unknown".to_string());
+            ports.push(PortInfo {
+                port,
+                protocol: Protocol::Tcp,
+                pid,
+                process_name,
+                address: Some(address),
+            });
+        }
         Ok(ports)
     }
 
+    /// Parse a line of /proc/net/tcp or tcp6 into (socket inode, port, address),
+    /// keeping only listening sockets. Addresses are hex in the kernel's byte
+    /// order: 0100007F:1F90 is 127.0.0.1:8080.
     #[cfg(target_os = "linux")]
-    fn parse_ss_line(line: &str) -> Option<PortInfo> {
-        let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() < 6 {
+    fn parse_proc_net_line(line: &str, v6: bool) -> Option<(u64, u16, String)> {
+        const LISTEN: &str = "0A";
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        let (local, state, inode) = (fields.get(1)?, fields.get(3)?, fields.get(9)?);
+        if *state != LISTEN {
             return None;
         }
+        let (addr_hex, port_hex) = local.split_once(':')?;
+        let port = u16::from_str_radix(port_hex, 16).ok()?;
+        let inode: u64 = inode.parse().ok()?;
 
-        // Local address is typically in column 4 (e.g., "0.0.0.0:22" or "*:80")
-        let local_addr = parts[3];
-        let port_str = local_addr.rsplit(':').next()?;
-        let port: u16 = port_str.parse().ok()?;
-
-        let address = local_addr.rsplit(':').nth(1).map(|s| {
-            if s == "*" {
-                "0.0.0.0".to_string()
-            } else {
-                s.to_string()
+        // Each 32-bit word is printed as a number in host byte order
+        let word = |i: usize| -> Option<[u8; 4]> {
+            let hex = addr_hex.get(i * 8..i * 8 + 8)?;
+            Some(u32::from_str_radix(hex, 16).ok()?.to_ne_bytes())
+        };
+        let address = if v6 {
+            if addr_hex.len() != 32 {
+                return None;
             }
-        });
-
-        // Process info is in the last column, format: users:(("name",pid=1234,fd=5))
-        let proc_info = parts.last()?;
-        let pid = Self::extract_pid_from_ss(proc_info)?;
-        let process_name =
-            Self::extract_name_from_ss(proc_info).unwrap_or_else(|| "unknown".to_string());
-
-        Some(PortInfo {
-            port,
-            protocol: Protocol::Tcp,
-            pid,
-            process_name,
-            address,
-        })
+            let mut bytes = [0u8; 16];
+            for i in 0..4 {
+                bytes[i * 4..i * 4 + 4].copy_from_slice(&word(i)?);
+            }
+            std::net::Ipv6Addr::from(bytes).to_string()
+        } else {
+            if addr_hex.len() != 8 {
+                return None;
+            }
+            std::net::Ipv4Addr::from(word(0)?).to_string()
+        };
+        Some((inode, port, address))
     }
 
+    /// Map socket inodes to the PID that has them open, by reading the
+    /// "socket:[inode]" links in /proc/<pid>/fd. Unreadable processes are skipped.
     #[cfg(target_os = "linux")]
-    fn extract_pid_from_ss(info: &str) -> Option<u32> {
-        // Format: users:(("sshd",pid=1234,fd=3))
-        let pid_marker = "pid=";
-        let start = info.find(pid_marker)? + pid_marker.len();
-        let rest = &info[start..];
-        let end = rest.find(|c: char| !c.is_ascii_digit())?;
-        rest[..end].parse().ok()
-    }
-
-    #[cfg(target_os = "linux")]
-    fn extract_name_from_ss(info: &str) -> Option<String> {
-        // Format: users:(("sshd",pid=1234,fd=3))
-        let start = info.find("((\"")? + 3;
-        let rest = &info[start..];
-        let end = rest.find('"')?;
-        Some(rest[..end].to_string())
+    fn socket_owners(
+        wanted: &std::collections::HashSet<u64>,
+    ) -> std::collections::HashMap<u64, u32> {
+        let mut owners = std::collections::HashMap::new();
+        let Ok(procs) = std::fs::read_dir("/proc") else {
+            return owners;
+        };
+        for entry in procs.flatten() {
+            let Some(pid) = entry
+                .file_name()
+                .to_str()
+                .and_then(|s| s.parse::<u32>().ok())
+            else {
+                continue;
+            };
+            let Ok(fds) = std::fs::read_dir(entry.path().join("fd")) else {
+                continue;
+            };
+            for fd in fds.flatten() {
+                let Ok(target) = std::fs::read_link(fd.path()) else {
+                    continue;
+                };
+                let inode = target
+                    .to_str()
+                    .and_then(|t| t.strip_prefix("socket:["))
+                    .and_then(|t| t.strip_suffix(']'))
+                    .and_then(|t| t.parse::<u64>().ok());
+                if let Some(inode) = inode.filter(|i| wanted.contains(i)) {
+                    // the first process seen keeps it; a forked child sharing
+                    // the socket usually comes later in PID order
+                    owners.entry(inode).or_insert(pid);
+                }
+            }
+        }
+        owners
     }
 
     #[cfg(target_os = "windows")]
@@ -362,6 +415,43 @@ mod tests {
         assert_eq!(PortInfo::unescape_lsof("x\\xé1"), "x\\xé1");
         assert_eq!(PortInfo::unescape_lsof("x\\x"), "x\\x");
         assert_eq!(PortInfo::unescape_lsof("x\\x4"), "x\\x4");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_parse_proc_net_tcp_lines() {
+        // 127.0.0.1:8080 listening (state 0A), socket inode 123456
+        let v4 = "   0: 0100007F:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 123456 1 0000000000000000 100 0 0 10 0";
+        assert_eq!(
+            PortInfo::parse_proc_net_line(v4, false),
+            Some((123456, 8080, "127.0.0.1".to_string()))
+        );
+        // 0.0.0.0:22
+        let any = "   1: 00000000:0016 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 777 1 0000000000000000 100 0 0 10 0";
+        assert_eq!(
+            PortInfo::parse_proc_net_line(any, false),
+            Some((777, 22, "0.0.0.0".to_string()))
+        );
+        // An established connection (state 01) is not a listening port
+        let established = "   2: 0100007F:1F90 0100007F:D431 01 00000000:00000000 00:00000000 00000000  1000        0 888 1 0000000000000000 20 4 30 10 -1";
+        assert_eq!(PortInfo::parse_proc_net_line(established, false), None);
+        // [::]:80 and [::1]:3000 from /proc/net/tcp6
+        let v6_any = "   0: 00000000000000000000000000000000:0050 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 222 1 0000000000000000 100 0 0 10 0";
+        assert_eq!(
+            PortInfo::parse_proc_net_line(v6_any, true),
+            Some((222, 80, "::".to_string()))
+        );
+        let v6_local = "   1: 00000000000000000000000001000000:0BB8 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 333 1 0000000000000000 100 0 0 10 0";
+        assert_eq!(
+            PortInfo::parse_proc_net_line(v6_local, true),
+            Some((333, 3000, "::1".to_string()))
+        );
+        // Malformed lines are skipped, never a panic
+        assert_eq!(PortInfo::parse_proc_net_line("garbage", false), None);
+        assert_eq!(
+            PortInfo::parse_proc_net_line("  0: ZZ:1F90 0:0 0A", false),
+            None
+        );
     }
 
     #[test]
