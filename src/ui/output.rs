@@ -13,6 +13,13 @@ use comfy_table::presets::NOTHING;
 use comfy_table::{Attribute, Cell, CellAlignment, Color, ContentArrangement, Table};
 use dialoguer::Confirm;
 use serde::Serialize;
+use std::io::Write;
+
+/// Run a writer-based print against stdout. A failed write panics, as
+/// `println!` does.
+fn to_stdout(write: impl FnOnce(&mut std::io::Stdout) -> std::io::Result<()>) {
+    write(&mut std::io::stdout()).expect("failed printing to stdout");
+}
 
 /// Whether a command that changes processes should ask before acting.
 ///
@@ -105,13 +112,14 @@ impl Printer {
 
     /// Print a success message (human only — use `print_empty_result` for JSON-safe success)
     pub fn success(&self, message: &str) {
+        to_stdout(|out| self.write_success(out, message));
+    }
+
+    fn write_success(&self, out: &mut impl Write, message: &str) -> std::io::Result<()> {
         match self.format {
-            OutputFormat::Human => {
-                println!("{} {}", "✓".green().bold(), message.green());
-            }
-            OutputFormat::Json => {
-                // JSON output handled separately
-            }
+            OutputFormat::Human => writeln!(out, "{} {}", "✓".green().bold(), message.green()),
+            // JSON output handled separately
+            OutputFormat::Json => Ok(()),
         }
     }
 
@@ -145,13 +153,14 @@ impl Printer {
 
     /// Print a warning message
     pub fn warning(&self, message: &str) {
+        to_stdout(|out| self.write_warning(out, message));
+    }
+
+    fn write_warning(&self, out: &mut impl Write, message: &str) -> std::io::Result<()> {
         match self.format {
-            OutputFormat::Human => {
-                println!("{} {}", "⚠".yellow().bold(), message.yellow());
-            }
-            OutputFormat::Json => {
-                // JSON output handled separately
-            }
+            OutputFormat::Human => writeln!(out, "{} {}", "⚠".yellow().bold(), message.yellow()),
+            // JSON output handled separately
+            OutputFormat::Json => Ok(()),
         }
     }
 
@@ -182,26 +191,37 @@ impl Printer {
     }
 
     fn print_processes_human(&self, processes: &[Process], context: Option<&str>) {
+        to_stdout(|out| self.write_processes_human(out, terminal_width(), processes, context));
+    }
+
+    /// `width` is the terminal width the table is fitted to.
+    fn write_processes_human(
+        &self,
+        out: &mut impl Write,
+        width: u16,
+        processes: &[Process],
+        context: Option<&str>,
+    ) -> std::io::Result<()> {
         if processes.is_empty() {
             let msg = match context {
                 Some(ctx) => format!("No processes found {}", ctx),
                 None => "No processes found".to_string(),
             };
-            self.warning(&msg);
-            return;
+            return self.write_warning(out, &msg);
         }
 
         let context_str = context.map(|c| format!(" {}", c)).unwrap_or_default();
-        println!(
+        writeln!(
+            out,
             "{} Found {} process{}{}",
             "✓".green().bold(),
             processes.len().to_string().cyan().bold(),
             if processes.len() == 1 { "" } else { "es" },
             context_str.bright_black()
-        );
-        println!();
+        )?;
+        writeln!(out)?;
 
-        self.print_process_rows(processes);
+        self.write_process_rows(out, width, processes)
     }
 
     /// Like `print_processes_as`, for a caller that has printed its own headline
@@ -209,23 +229,30 @@ impl Printer {
     /// would repeat it, so only the table is printed.
     pub fn print_processes_under_headline(&self, action: &str, processes: &[Process]) {
         match self.format {
-            OutputFormat::Human => {
-                println!();
-                self.print_process_rows(processes);
-            }
+            OutputFormat::Human => to_stdout(|out| {
+                writeln!(out)?;
+                self.write_process_rows(out, terminal_width(), processes)
+            }),
             OutputFormat::Json => self.print_processes_as(action, processes, None),
         }
     }
 
-    /// The process table (or the verbose list), without a headline
-    fn print_process_rows(&self, processes: &[Process]) {
+    /// The process table (or the verbose list), without a headline, fitted to
+    /// a terminal `width` columns wide
+    fn write_process_rows(
+        &self,
+        out: &mut impl Write,
+        width: u16,
+        processes: &[Process],
+    ) -> std::io::Result<()> {
         if self.verbose {
             // Verbose: full details, nothing truncated
             for proc in processes {
                 let status_str = format!("{:?}", proc.status);
                 let status_colored = colorize_status(&proc.status, &status_str);
 
-                println!(
+                writeln!(
+                    out,
                     "{} {} {}  {:.1}% CPU  {}  {}",
                     proc.pid.to_string().cyan().bold(),
                     proc.name.white().bold(),
@@ -233,35 +260,36 @@ impl Printer {
                     proc.cpu_percent,
                     format_memory(proc.memory_mb),
                     proc.user.as_deref().unwrap_or("-").bright_black()
-                );
+                )?;
 
                 if let Some(ref cmd) = proc.command {
-                    println!("    {} {}", "cmd:".bright_black(), cmd);
+                    writeln!(out, "    {} {}", "cmd:".bright_black(), cmd)?;
                 }
                 if let Some(ref path) = proc.exe_path {
-                    println!("    {} {}", "exe:".bright_black(), path.bright_black());
+                    writeln!(out, "    {} {}", "exe:".bright_black(), path.bright_black())?;
                 }
                 if let Some(ref cwd) = proc.cwd {
-                    println!("    {} {}", "cwd:".bright_black(), cwd.bright_black());
+                    writeln!(out, "    {} {}", "cwd:".bright_black(), cwd.bright_black())?;
                 }
                 if let Some(ppid) = proc.parent_pid {
-                    println!(
+                    writeln!(
+                        out,
                         "    {} {}",
                         "parent:".bright_black(),
                         ppid.to_string().bright_black()
-                    );
+                    )?;
                 }
                 if let Some(uptime) = proc.uptime_secs {
-                    println!(
+                    writeln!(
+                        out,
                         "    {} {}",
                         "uptime:".bright_black(),
                         format_duration(uptime).bright_black()
-                    );
+                    )?;
                 }
-                println!();
+                writeln!(out)?;
             }
         } else {
-            let width = terminal_width();
             let budget = process_table_budget(width);
             let show_uptime = budget.show_uptime;
             let (dir_content, name_content, args_content) = (budget.dir, budget.name, budget.args);
@@ -433,9 +461,9 @@ impl Printer {
                 table.add_row(row);
             }
 
-            println!("{table}");
+            writeln!(out, "{table}")?;
         }
-        println!();
+        writeln!(out)
     }
 
     /// Print port information
@@ -567,9 +595,19 @@ impl Printer {
 
     /// Print JSON output for any serializable type
     pub fn print_json<T: Serialize>(&self, data: &T) {
+        to_stdout(|out| self.write_json(out, &mut std::io::stderr(), data));
+    }
+
+    /// The JSON goes to `out`; a value that can't be serialized is reported on `err`.
+    fn write_json<T: Serialize>(
+        &self,
+        out: &mut impl Write,
+        err: &mut impl Write,
+        data: &T,
+    ) -> std::io::Result<()> {
         match serde_json::to_string_pretty(data) {
-            Ok(json) => println!("{}", json),
-            Err(e) => eprintln!("Failed to serialize JSON: {}", e),
+            Ok(json) => writeln!(out, "{}", json),
+            Err(e) => writeln!(err, "Failed to serialize JSON: {}", e),
         }
     }
 
@@ -598,6 +636,17 @@ impl Printer {
         succeeded: &[Process],
         failed: &[(Process, String)],
     ) -> Result<()> {
+        self.write_action_result_as(&mut std::io::stdout(), action, verb, succeeded, failed)
+    }
+
+    fn write_action_result_as(
+        &self,
+        out: &mut impl Write,
+        action: &str,
+        verb: &str,
+        succeeded: &[Process],
+        failed: &[(Process, String)],
+    ) -> Result<()> {
         // Past tense for human display: "kill" → "Killed", "stop" → "Stopped"
         let past_tense = match verb {
             "kill" => "Killed".to_string(),
@@ -607,46 +656,15 @@ impl Printer {
             _ => format!("{}{}ed", verb[..1].to_uppercase(), &verb[1..]),
         };
 
-        match self.format {
+        // A failed write panics, as `println!` does
+        let printed = match self.format {
             OutputFormat::Human => {
-                if !succeeded.is_empty() {
-                    println!(
-                        "{} {} {} process{}",
-                        "✓".green().bold(),
-                        past_tense,
-                        succeeded.len().to_string().cyan().bold(),
-                        plural(succeeded.len())
-                    );
-                    for proc in succeeded {
-                        println!(
-                            "  {} {} [PID {}]",
-                            "→".bright_black(),
-                            proc.name.white(),
-                            proc.pid.to_string().cyan()
-                        );
-                    }
-                }
-                if !failed.is_empty() {
-                    println!(
-                        "{} Failed to {} {} process{}",
-                        "✗".red().bold(),
-                        verb,
-                        failed.len(),
-                        plural(failed.len())
-                    );
-                    for (proc, err) in failed {
-                        println!(
-                            "  {} {} [PID {}]: {}",
-                            "→".bright_black(),
-                            proc.name.white(),
-                            proc.pid.to_string().cyan(),
-                            err.red()
-                        );
-                    }
-                }
+                Self::write_action_lines(out, &past_tense, verb, succeeded, failed)
             }
-            OutputFormat::Json => {
-                self.print_json(&ActionOutput {
+            OutputFormat::Json => self.write_json(
+                out,
+                &mut std::io::stderr(),
+                &ActionOutput {
                     action,
                     success: failed.is_empty(),
                     succeeded_count: succeeded.len(),
@@ -659,9 +677,10 @@ impl Printer {
                             error: e,
                         })
                         .collect::<Vec<_>>(),
-                });
-            }
-        }
+                },
+            ),
+        };
+        printed.expect("failed printing to stdout");
 
         if failed.is_empty() {
             Ok(())
@@ -676,6 +695,56 @@ impl Printer {
                 ),
             ))
         }
+    }
+
+    /// The human lines of an action result: what worked, then what failed
+    fn write_action_lines(
+        out: &mut impl Write,
+        past_tense: &str,
+        verb: &str,
+        succeeded: &[Process],
+        failed: &[(Process, String)],
+    ) -> std::io::Result<()> {
+        if !succeeded.is_empty() {
+            writeln!(
+                out,
+                "{} {} {} process{}",
+                "✓".green().bold(),
+                past_tense,
+                succeeded.len().to_string().cyan().bold(),
+                plural(succeeded.len())
+            )?;
+            for proc in succeeded {
+                writeln!(
+                    out,
+                    "  {} {} [PID {}]",
+                    "→".bright_black(),
+                    proc.name.white(),
+                    proc.pid.to_string().cyan()
+                )?;
+            }
+        }
+        if !failed.is_empty() {
+            writeln!(
+                out,
+                "{} Failed to {} {} process{}",
+                "✗".red().bold(),
+                verb,
+                failed.len(),
+                plural(failed.len())
+            )?;
+            for (proc, err) in failed {
+                writeln!(
+                    out,
+                    "  {} {} [PID {}]: {}",
+                    "→".bright_black(),
+                    proc.name.white(),
+                    proc.pid.to_string().cyan(),
+                    err.red()
+                )?;
+            }
+        }
+        Ok(())
     }
 
     /// Print kill result (delegates to print_action_result)
@@ -733,27 +802,23 @@ impl Printer {
         if !must_confirm(action, yes, json, processes)? {
             return Ok(true);
         }
-        match self.format {
-            OutputFormat::Json => unreachable!("must_confirm refuses --json without --yes"),
-            OutputFormat::Human => {
-                self.print_confirmation(action, processes);
-                let prompt = format!(
-                    "{}{} {} process{}?",
-                    action[..1].to_uppercase(),
-                    &action[1..],
-                    processes.len(),
-                    plural(processes.len())
-                );
-                let confirmed = Confirm::new()
-                    .with_prompt(prompt)
-                    .default(false)
-                    .interact()?;
-                if !confirmed {
-                    self.warning("Cancelled");
-                }
-                Ok(confirmed)
-            }
+        // A person is being asked: `must_confirm` never gets here with --json
+        self.print_confirmation(action, processes);
+        let prompt = format!(
+            "{}{} {} process{}?",
+            action[..1].to_uppercase(),
+            &action[1..],
+            processes.len(),
+            plural(processes.len())
+        );
+        let confirmed = Confirm::new()
+            .with_prompt(prompt)
+            .default(false)
+            .interact()?;
+        if !confirmed {
+            self.warning("Cancelled");
         }
+        Ok(confirmed)
     }
 
     /// Print a confirmation prompt showing processes about to be acted on
@@ -859,5 +924,436 @@ mod tests {
             "{refused}"
         );
         assert!(refused.to_string().contains("--yes"));
+    }
+
+    use crate::core::ProcessStatus;
+
+    /// What a writer-based print writes, with colours off
+    fn written(print: impl FnOnce(&mut Vec<u8>) -> std::io::Result<()>) -> String {
+        colored::control::set_override(false);
+        let mut out = Vec::new();
+        print(&mut out).unwrap();
+        plain(&String::from_utf8(out).unwrap())
+    }
+
+    /// `text` without the escape sequences a table adds when run in a terminal
+    fn plain(text: &str) -> String {
+        regex::Regex::new("\x1b\\[[0-9;]*m")
+            .unwrap()
+            .replace_all(text, "")
+            .into_owned()
+    }
+
+    fn process(pid: u32, name: &str) -> Process {
+        Process {
+            pid,
+            name: name.to_string(),
+            exe_path: None,
+            cwd: None,
+            command: None,
+            cpu_percent: 0.0,
+            memory_mb: 0.0,
+            status: ProcessStatus::Running,
+            user: None,
+            parent_pid: None,
+            start_time: None,
+            uptime_secs: None,
+        }
+    }
+
+    /// Output with every run of spaces collapsed, one entry per non-empty line,
+    /// so a table row can be compared without its column padding
+    fn rows(text: &str) -> Vec<String> {
+        text.lines()
+            .map(|l| l.split_whitespace().collect::<Vec<_>>().join(" "))
+            .filter(|l| !l.is_empty())
+            .collect()
+    }
+
+    fn human() -> Printer {
+        Printer::new(OutputFormat::Human, false)
+    }
+
+    fn json() -> Printer {
+        Printer::new(OutputFormat::Json, false)
+    }
+
+    #[test]
+    fn success_and_warning_print_a_line_for_people_and_nothing_for_json() {
+        assert_eq!(
+            written(|w| human().write_success(w, "all done")),
+            "✓ all done\n"
+        );
+        assert_eq!(
+            written(|w| human().write_warning(w, "careful")),
+            "⚠ careful\n"
+        );
+        assert_eq!(written(|w| json().write_success(w, "all done")), "");
+        assert_eq!(written(|w| json().write_warning(w, "careful")), "");
+    }
+
+    #[test]
+    fn no_processes_says_so_with_or_without_a_context() {
+        let out = written(|w| human().write_processes_human(w, 120, &[], None));
+        assert_eq!(out, "⚠ No processes found\n");
+        let out = written(|w| human().write_processes_human(w, 120, &[], Some("in /srv")));
+        assert_eq!(out, "⚠ No processes found in /srv\n");
+    }
+
+    #[test]
+    fn the_headline_counts_processes_and_names_the_context() {
+        let one = [process(42, "node")];
+        let out = written(|w| human().write_processes_human(w, 120, &one, Some("in /a")));
+        assert_eq!(out.lines().next(), Some("✓ Found 1 process in /a"));
+        assert_eq!(out.lines().nth(1), Some(""));
+
+        let two = [process(42, "node"), process(43, "deno")];
+        let out = written(|w| human().write_processes_human(w, 120, &two, None));
+        assert_eq!(out.lines().next(), Some("✓ Found 2 processes"));
+    }
+
+    #[test]
+    fn the_table_lists_a_process_per_row_and_ends_with_a_blank_line() {
+        let mut p = process(42, "node");
+        p.cwd = Some("/a/b".into());
+        p.command = Some("node /x/y/server.js --port 3000".into());
+        p.cpu_percent = 1.25;
+        p.memory_mb = 12.5;
+        p.uptime_secs = Some(65);
+        let out = written(|w| human().write_process_rows(w, 120, &[p]));
+        assert_eq!(
+            rows(&out),
+            [
+                "PID DIR NAME ARGS CPU% MEM UPTIME STATUS",
+                "42 /a/b node server.js --port 3000 1.2 12.5MB 1m 5s Running"
+            ]
+        );
+        assert!(out.ends_with("\n\n"), "{out:?}");
+    }
+
+    #[test]
+    fn a_narrow_terminal_drops_the_uptime_column_and_cuts_the_args() {
+        let mut p = process(42, "node");
+        p.cwd = Some("/a/b".into());
+        p.command = Some("node /x/y/server.js --port 3000".into());
+        p.uptime_secs = Some(65);
+        let out = written(|w| human().write_process_rows(w, 80, &[p.clone()]));
+        assert_eq!(
+            rows(&out),
+            [
+                "PID DIR NAME ARGS CPU% MEM STATUS",
+                "42 /a/b node server.js -… 0.0 0KB Running"
+            ]
+        );
+        // 100 columns is the first width with room for UPTIME
+        let out = written(|w| human().write_process_rows(w, 99, &[p.clone()]));
+        assert!(!out.contains("UPTIME"), "{out}");
+        let out = written(|w| human().write_process_rows(w, 100, &[p]));
+        assert!(out.contains("UPTIME"), "{out}");
+    }
+
+    #[test]
+    fn wide_prints_every_value_in_full() {
+        let mut p = process(42, "a-process-with-a-very-long-name");
+        p.cwd = Some("/srv/some/deeply/nested/working/directory/of/the/app".into());
+        p.command = Some("a-process /x/y/server.js --listen-on-all-interfaces-please 3000".into());
+
+        let cut = written(|w| human().write_process_rows(w, 80, &[p.clone()]));
+        assert!(cut.matches('…').count() >= 2, "{cut}");
+
+        let wide = written(|w| human().wide(true).write_process_rows(w, 80, &[p]));
+        assert_eq!(
+            rows(&wide)[1],
+            "42 /srv/some/deeply/nested/working/directory/of/the/app \
+             a-process-with-a-very-long-name \
+             server.js --listen-on-all-interfaces-please 3000 0.0 0KB Running"
+        );
+    }
+
+    #[test]
+    fn args_show_file_names_for_paths_and_dashes_when_there_are_none() {
+        let args_of = |command: Option<&str>| {
+            let mut p = process(42, "node");
+            p.command = command.map(str::to_string);
+            let out = written(|w| human().wide(true).write_process_rows(w, 120, &[p]));
+            // PID DIR NAME ARGS ...: the fourth cell of the row
+            rows(&out)[1]
+                .split(' ')
+                .skip(3)
+                .take_while(|c| *c != "0.0")
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        // Paths shrink to their file name, flags and plain words stay
+        assert_eq!(
+            args_of(Some(
+                "/usr/bin/node /opt/app/server.js -c /etc/x.conf -p/q start"
+            )),
+            "server.js -c x.conf -p/q start"
+        );
+        // Paths with no file name stay as they are
+        assert_eq!(args_of(Some("node / a/..")), "/ a/..");
+        // The executable alone has no args; a process with no command line neither
+        assert_eq!(args_of(Some("/usr/bin/node")), "-");
+        assert_eq!(args_of(None), "-");
+    }
+
+    #[test]
+    fn a_missing_directory_or_uptime_shows_a_dash() {
+        let p = process(42, "node");
+        let out = written(|w| human().write_process_rows(w, 120, &[p]));
+        assert_eq!(rows(&out)[1], "42 - node - 0.0 0KB - Running");
+    }
+
+    #[test]
+    fn the_table_names_every_status() {
+        let statuses = [
+            ProcessStatus::Running,
+            ProcessStatus::Sleeping,
+            ProcessStatus::Stopped,
+            ProcessStatus::Zombie,
+            ProcessStatus::Dead,
+            ProcessStatus::Unknown,
+        ];
+        let list: Vec<Process> = statuses
+            .iter()
+            .enumerate()
+            .map(|(i, status)| {
+                let mut p = process(100 + i as u32, "node");
+                p.status = *status;
+                p
+            })
+            .collect();
+        let table = written(|w| human().write_process_rows(w, 120, &list));
+        let verbose =
+            written(|w| Printer::new(OutputFormat::Human, true).write_process_rows(w, 120, &list));
+        for (i, status) in statuses.iter().enumerate() {
+            let name = format!("{status:?}");
+            assert!(rows(&table)[i + 1].ends_with(&name), "{table}");
+            assert!(verbose.contains(&format!("[{name}]")), "{verbose}");
+        }
+    }
+
+    #[test]
+    fn verbose_lists_every_known_detail_of_each_process() {
+        let mut p = process(42, "node");
+        p.cpu_percent = 2.5;
+        p.memory_mb = 1500.0;
+        p.user = Some("zee".into());
+        p.command = Some("node server.js".into());
+        p.exe_path = Some("/usr/bin/node".into());
+        p.cwd = Some("/srv/app".into());
+        p.parent_pid = Some(7);
+        p.uptime_secs = Some(3700);
+        let bare = process(43, "deno");
+        let verbose = Printer::new(OutputFormat::Human, true);
+        let out = written(|w| verbose.write_process_rows(w, 120, &[p, bare]));
+        assert_eq!(
+            out,
+            "42 node [Running]  2.5% CPU  1.5GB  zee\n\
+             \x20   cmd: node server.js\n\
+             \x20   exe: /usr/bin/node\n\
+             \x20   cwd: /srv/app\n\
+             \x20   parent: 7\n\
+             \x20   uptime: 1h 1m\n\
+             \n\
+             43 deno [Running]  0.0% CPU  0KB  -\n\
+             \n\
+             \n"
+        );
+    }
+
+    #[test]
+    fn an_action_result_lists_what_worked_and_what_failed() {
+        let ok = [process(1, "a"), process(2, "b")];
+        let out = written(|w| {
+            human()
+                .write_action_result_as(w, "kill", "kill", &ok, &[])
+                .map_err(std::io::Error::other)
+        });
+        assert_eq!(out, "✓ Killed 2 processes\n  → a [PID 1]\n  → b [PID 2]\n");
+
+        let one = [process(1, "a")];
+        let out = written(|w| {
+            human()
+                .write_action_result_as(w, "stop", "stop", &one, &[])
+                .map_err(std::io::Error::other)
+        });
+        assert_eq!(out, "✓ Stopped 1 process\n  → a [PID 1]\n");
+
+        // Mixed: both blocks, then the error a command exits with
+        let failed = [(process(3, "c"), "Permission denied".to_string())];
+        let mut buf = Vec::new();
+        let err = human()
+            .write_action_result_as(&mut buf, "freeze", "freeze", &one, &failed)
+            .unwrap_err();
+        assert_eq!(
+            plain(&String::from_utf8(buf).unwrap()),
+            "✓ Frozen 1 process\n  → a [PID 1]\n\
+             ✗ Failed to freeze 1 process\n  → c [PID 3]: Permission denied\n"
+        );
+        assert_eq!(err.to_string(), "Failed to freeze 1 process");
+        assert_eq!(ExitCode::from(&err) as i32, 1);
+    }
+
+    #[test]
+    fn only_failures_print_no_success_block_and_pluralize() {
+        let failed = [
+            (process(3, "c"), "gone".to_string()),
+            (process(4, "d"), "busy".to_string()),
+        ];
+        let mut buf = Vec::new();
+        let err = human()
+            .write_action_result_as(&mut buf, "thaw", "thaw", &[], &failed)
+            .unwrap_err();
+        assert_eq!(
+            plain(&String::from_utf8(buf).unwrap()),
+            "✗ Failed to thaw 2 processes\n  → c [PID 3]: gone\n  → d [PID 4]: busy\n"
+        );
+        assert_eq!(err.to_string(), "Failed to thaw 2 processes");
+    }
+
+    #[test]
+    fn a_verb_without_its_own_past_tense_gets_ed() {
+        let one = [process(1, "a")];
+        let out = written(|w| {
+            human()
+                .write_action_result_as(w, "restart", "restart", &one, &[])
+                .map_err(std::io::Error::other)
+        });
+        assert!(out.starts_with("✓ Restarted 1 process\n"), "{out}");
+    }
+
+    #[test]
+    fn json_action_results_carry_the_failures() {
+        let ok = [process(1, "a")];
+        let failed = [(process(3, "c"), "Permission denied".to_string())];
+        let mut buf = Vec::new();
+        let err = json()
+            .write_action_result_as(&mut buf, "orphans", "kill", &ok, &failed)
+            .unwrap_err();
+        let doc: serde_json::Value = serde_json::from_slice(&buf).unwrap();
+        assert_eq!(doc["action"], "orphans");
+        assert_eq!(doc["success"], false);
+        assert_eq!(doc["succeeded_count"], 1);
+        assert_eq!(doc["failed_count"], 1);
+        assert_eq!(doc["succeeded"][0]["pid"], 1);
+        assert_eq!(doc["failed"][0]["process"]["pid"], 3);
+        assert_eq!(doc["failed"][0]["error"], "Permission denied");
+        assert_eq!(err.to_string(), "Failed to kill 1 process");
+    }
+
+    #[test]
+    fn a_value_that_cannot_be_serialized_is_reported_on_stderr() {
+        struct Broken;
+        impl Serialize for Broken {
+            fn serialize<S: serde::Serializer>(
+                &self,
+                _: S,
+            ) -> std::result::Result<S::Ok, S::Error> {
+                Err(serde::ser::Error::custom("no can do"))
+            }
+        }
+        let (mut out, mut err) = (Vec::new(), Vec::new());
+        json().write_json(&mut out, &mut err, &Broken).unwrap();
+        assert!(out.is_empty());
+        assert_eq!(
+            String::from_utf8(err).unwrap(),
+            "Failed to serialize JSON: no can do\n"
+        );
+
+        let (mut out, mut err) = (Vec::new(), Vec::new());
+        json()
+            .write_json(&mut out, &mut err, &serde_json::json!({"a": 1}))
+            .unwrap();
+        assert!(err.is_empty());
+        assert_eq!(String::from_utf8(out).unwrap(), "{\n  \"a\": 1\n}\n");
+    }
+
+    #[test]
+    fn the_default_printer_is_plain_human_output() {
+        let printer = Printer::default();
+        assert!(matches!(printer.format, OutputFormat::Human));
+        assert!(!printer.verbose);
+        assert!(!printer.wide);
+    }
+
+    /// A writer that accepts `left` more bytes and then fails
+    struct FailsAfter {
+        left: usize,
+        written: Vec<u8>,
+    }
+
+    impl Write for FailsAfter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            if self.left == 0 {
+                return Err(std::io::Error::other("disk full"));
+            }
+            let n = buf.len().min(self.left);
+            self.written.extend_from_slice(&buf[..n]);
+            self.left -= n;
+            Ok(n)
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// Run `print` against a writer that fails after every possible number of
+    /// bytes: it must write exactly what fits, in order, and hand back the
+    /// writer's error instead of carrying on or panicking.
+    fn assert_stops_at_a_failed_write(print: impl Fn(&mut FailsAfter) -> std::io::Result<()>) {
+        let mut all = FailsAfter {
+            left: usize::MAX,
+            written: Vec::new(),
+        };
+        print(&mut all).unwrap();
+        all.flush().unwrap();
+        let full = all.written;
+        assert!(!full.is_empty());
+        for limit in 0..full.len() {
+            let mut out = FailsAfter {
+                left: limit,
+                written: Vec::new(),
+            };
+            let err = print(&mut out).expect_err(&format!("limit {limit}"));
+            assert_eq!(err.to_string(), "disk full", "limit {limit}");
+            assert_eq!(out.written, full[..limit], "limit {limit}");
+        }
+    }
+
+    #[test]
+    fn a_failed_write_ends_the_table() {
+        let mut p = process(42, "node");
+        p.cwd = Some("/a/b".into());
+        p.command = Some("node server.js".into());
+        assert_stops_at_a_failed_write(|w| {
+            human().write_processes_human(w, 120, &[p.clone()], Some("in /a"))
+        });
+        assert_stops_at_a_failed_write(|w| human().write_processes_human(w, 120, &[], None));
+    }
+
+    #[test]
+    fn a_failed_write_ends_the_verbose_list() {
+        let mut p = process(42, "node");
+        p.command = Some("node server.js".into());
+        p.exe_path = Some("/usr/bin/node".into());
+        p.cwd = Some("/srv/app".into());
+        p.parent_pid = Some(7);
+        p.uptime_secs = Some(3700);
+        let verbose = Printer::new(OutputFormat::Human, true);
+        assert_stops_at_a_failed_write(|w| verbose.write_process_rows(w, 120, &[p.clone()]));
+    }
+
+    #[test]
+    fn a_failed_write_ends_the_action_result() {
+        let ok = [process(1, "a")];
+        let failed = [(process(3, "c"), "Permission denied".to_string())];
+        assert_stops_at_a_failed_write(|w| {
+            Printer::write_action_lines(w, "Killed", "kill", &ok, &failed)
+        });
+        assert_stops_at_a_failed_write(|w| human().write_success(w, "done"));
+        assert_stops_at_a_failed_write(|w| human().write_warning(w, "careful"));
     }
 }

@@ -256,13 +256,10 @@ mod tests {
         for s in NON_ASCII {
             for max in 1..=40 {
                 let out = truncate_string(s, max);
+                let width = out.width();
                 assert!(
-                    out.width() <= max,
-                    "width {} exceeded max {} for {:?} -> {:?}",
-                    out.width(),
-                    max,
-                    s,
-                    out
+                    width <= max,
+                    "width {width} exceeded max {max} for {s:?} -> {out:?}"
                 );
             }
         }
@@ -273,13 +270,10 @@ mod tests {
         for s in NON_ASCII {
             for max in 1..=40 {
                 let out = truncate_path(s, max);
+                let width = out.width();
                 assert!(
-                    out.width() <= max,
-                    "width {} exceeded max {} for {:?} -> {:?}",
-                    out.width(),
-                    max,
-                    s,
-                    out
+                    width <= max,
+                    "width {width} exceeded max {max} for {s:?} -> {out:?}"
                 );
             }
         }
@@ -338,5 +332,79 @@ mod tests {
         let s = "日本語のプロセス名前";
         let out = truncate_string(s, 10);
         assert!(out.width() <= 10, "got width {} for {:?}", out.width(), out);
+    }
+
+    #[test]
+    fn durations_use_the_two_largest_units() {
+        for (secs, shown) in [
+            (0, "0s"),
+            (59, "59s"),
+            (60, "1m 0s"),
+            (3599, "59m 59s"),
+            (3600, "1h 0m"),
+            (86399, "23h 59m"),
+            (86400, "1d 0h"),
+            (90000 + 3600 * 5, "1d 6h"),
+        ] {
+            assert_eq!(format_duration(secs), shown, "{secs} seconds");
+        }
+    }
+
+    #[test]
+    fn the_uptime_label_is_empty_when_the_uptime_is_unknown() {
+        assert_eq!(uptime_label(None), "");
+        assert_eq!(uptime_label(Some(192)), "  up 3m 12s");
+    }
+
+    #[test]
+    fn only_one_process_is_singular() {
+        assert_eq!(plural(0), "es");
+        assert_eq!(plural(1), "");
+        assert_eq!(plural(2), "es");
+    }
+
+    #[test]
+    fn memory_switches_unit_at_a_megabyte_and_at_a_gigabyte() {
+        assert_eq!(format_memory(0.0), "0KB");
+        assert_eq!(format_memory(0.5), "500KB");
+        assert_eq!(format_memory(1.0), "1.0MB");
+        assert_eq!(format_memory(999.94), "999.9MB");
+        assert_eq!(format_memory(1000.0), "1.0GB");
+        assert_eq!(format_memory(3060.0), "3.1GB");
+    }
+
+    #[test]
+    fn each_status_has_its_own_colour() {
+        for (status, colour) in [
+            (ProcessStatus::Running, Color::Green),
+            (ProcessStatus::Sleeping, Color::Blue),
+            (ProcessStatus::Stopped, Color::Yellow),
+            (ProcessStatus::Zombie, Color::Red),
+            (ProcessStatus::Dead, Color::White),
+            (ProcessStatus::Unknown, Color::White),
+        ] {
+            let coloured = colorize_status(&status, "word");
+            assert_eq!(coloured.fgcolor, Some(colour), "{status:?}");
+            assert_eq!(coloured.input, "word");
+        }
+    }
+
+    #[test]
+    fn the_budget_adds_uptime_from_100_columns_and_always_fits_the_minimum() {
+        let narrow = process_table_budget(99);
+        assert!(!narrow.show_uptime);
+        let wide = process_table_budget(100);
+        assert!(wide.show_uptime);
+        // Never below the floor, however small the terminal
+        let tiny = process_table_budget(10);
+        assert_eq!(tiny.dir + tiny.name + tiny.args, 24);
+        assert_eq!((tiny.name, tiny.args, tiny.dir), (8, 12, 4));
+        // At 120 columns the three flexible columns share what the fixed ones leave
+        let b = process_table_budget(120);
+        assert_eq!((b.name, b.args, b.dir), (14, 22, 22));
+        assert_eq!(
+            (b.pid, b.cpu, b.mem, b.uptime, b.status),
+            (8, 8, 11, 10, 12)
+        );
     }
 }
