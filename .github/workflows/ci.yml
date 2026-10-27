@@ -163,8 +163,16 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-coverage-
 
+      # Plain `cargo test` under cargo-llvm-cov's environment, not `cargo llvm-cov`
+      # itself: that runs `cargo test --tests`, which doesn't build the listener
+      # example the flag matrix runs
       - name: Measure line coverage
-        run: cargo llvm-cov --lcov --output-path lcov-${{ matrix.os }}.info -- --test-threads=4
+        shell: bash
+        run: |
+          source <(cargo llvm-cov show-env --sh)
+          cargo llvm-cov clean --workspace
+          cargo test -- --test-threads=4
+          cargo llvm-cov report --lcov --output-path lcov-${{ matrix.os }}.info
 
       - name: Upload lcov
         uses: actions/upload-artifact@v4

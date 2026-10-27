@@ -99,6 +99,9 @@ def main():
     sources = repo_sources(Path(args.repo_root))
     hits = {}
     for path in args.lcov:
+        if not Path(path).is_file():
+            # an unmatched shell glob arrives as the literal pattern
+            sys.exit(f"no lcov file at {path}: did every coverage job fail?")
         parse_lcov(path, sources, hits)
     excluded, entries = (
         parse_exclusions(args.exclusions, set(sources)) if args.exclusions else ({}, [])
