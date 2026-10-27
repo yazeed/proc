@@ -230,6 +230,9 @@ fn free_kills_the_holder_and_says_the_port_is_free() {
     let (out, code) = run_text(&["free", &held.target(), "--yes"]);
     assert_eq!(code, 0, "{out}");
     assert!(out.contains(&format!("Freed port {}", held.port)), "{out}");
+    // Windows refuses the polite request for a console program; the force kill
+    // that follows is the plan, so it is not reported as a failure
+    assert!(!out.contains("Failed to"), "{out}");
     assert!(held.ended_within(Duration::from_secs(5)), "{out}");
 }
 

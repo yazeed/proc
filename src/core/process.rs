@@ -84,7 +84,15 @@ fn cpu_percent_between(used_before_ms: u64, used_after_ms: u64, wall: Duration) 
 fn command_failure(stdout: &[u8], stderr: &[u8], status: &str) -> String {
     [stderr, stdout]
         .iter()
-        .map(|out| String::from_utf8_lossy(out).trim().to_string())
+        .map(|out| {
+            // one line, whatever the tool wrapped its reason over
+            String::from_utf8_lossy(out)
+                .lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty())
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
         .find(|text| !text.is_empty())
         .unwrap_or_else(|| format!("exited with {status}"))
 }
@@ -918,6 +926,15 @@ mod tests {
         assert_eq!(
             command_failure(b"  not here\r\n", b"", "exit code: 1"),
             "not here"
+        );
+        // taskkill wraps its reason over several lines; the error keeps them on one
+        assert_eq!(
+            command_failure(
+                b"",
+                b"ERROR: first part\r\n  second part.\r\n\r\n",
+                "exit code: 1"
+            ),
+            "ERROR: first part second part."
         );
         assert_eq!(
             command_failure(b"", b"  \n", "exit code: 128"),

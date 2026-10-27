@@ -256,7 +256,8 @@ struct FreeResult {
     freed: bool,
 }
 
-/// Ask each process to end (SIGTERM), give them up to `grace` to do it, then
+/// Ask each process to end (SIGTERM; on Windows a refused request for a process
+/// that is still running is not a failure), give them up to `grace` to do it, then
 /// force kill whatever is still running. A signal that fails is a warning, not
 /// an error: the port check afterwards says whether it mattered. Returns the
 /// PIDs a signal failed for. The signals are parameters so a test can make them
@@ -270,12 +271,18 @@ fn stop_all(
 ) -> Vec<u32> {
     let mut failed = Vec::new();
     for proc in processes {
-        if let Err(e) = terminate(proc) {
-            printer.warning(&format!(
-                "Failed to send SIGTERM to {} [PID {}]: {}",
-                proc.name, proc.pid, e
-            ));
-            failed.push(proc.pid);
+        match terminate(proc) {
+            // Windows can't ask a console program to close (taskkill without
+            // /F needs a window); the force kill below still stops it
+            Err(_) if cfg!(not(unix)) && proc.is_running() => {}
+            Err(e) => {
+                printer.warning(&format!(
+                    "Failed to ask {} [PID {}] to stop: {}",
+                    proc.name, proc.pid, e
+                ));
+                failed.push(proc.pid);
+            }
+            Ok(()) => {}
         }
     }
 
@@ -332,8 +339,13 @@ mod tests {
             refuse,
             refuse,
         );
-        // It still counts as running, so the SIGKILL is tried after the SIGTERM
-        assert_eq!(failed, vec![me.pid, me.pid]);
+        // It still counts as running, so the SIGKILL is tried after the polite
+        // request; on Windows that request being refused is expected
+        if cfg!(unix) {
+            assert_eq!(failed, vec![me.pid, me.pid]);
+        } else {
+            assert_eq!(failed, vec![me.pid]);
+        }
     }
 
     #[test]
