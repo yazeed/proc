@@ -120,7 +120,7 @@ cd - && rm -rf /tmp/proc-skill-check
 
 # Is skills.sh's stored copy current? Prints "current" when its SKILL.md matches main's
 curl -s https://skills.sh/api/download/yazeed/proc-cli/proc-cli \
-  | python3 -c 'import json,sys; f={x["path"]:x["contents"] for x in json.load(sys.stdin)["files"]}; print("current" if f["SKILL.md"]==open("skills/proc-cli/SKILL.md").read() else "stale")'
+  | uv run python -c 'import json,sys; f={x["path"]:x["contents"] for x in json.load(sys.stdin)["files"]}; print("current" if f["SKILL.md"]==open("skills/proc-cli/SKILL.md").read() else "stale")'
 ```
 
 Also verify:
