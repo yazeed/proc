@@ -344,3 +344,71 @@ struct ForOutput<'a> {
     count: usize,
     results: &'a [ProcessForJson<'a>],
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::ProcessStatus;
+
+    fn command() -> ForCommand {
+        ForCommand {
+            file: "x".to_string(),
+            in_dir: None,
+            by_name: None,
+            min_cpu: None,
+            min_mem: None,
+            status: None,
+            min_uptime: None,
+            json: false,
+            verbose: false,
+            wide: false,
+            sort: SortKey::Cpu,
+            limit: None,
+        }
+    }
+
+    /// A process record with no working directory and no start time, which
+    /// some processes really are (a zombie has neither on Linux)
+    fn bare_process() -> Process {
+        Process {
+            pid: 1,
+            name: "x".to_string(),
+            exe_path: None,
+            cwd: None,
+            command: None,
+            cpu_percent: 0.0,
+            memory_mb: 0.0,
+            status: ProcessStatus::Sleeping,
+            user: None,
+            parent_pid: None,
+            start_time: None,
+            uptime_secs: None,
+        }
+    }
+
+    #[test]
+    fn a_process_with_no_working_directory_fails_in() {
+        let cmd = ForCommand {
+            in_dir: Some("/".to_string()),
+            ..command()
+        };
+        let mut processes = vec![bare_process()];
+        cmd.apply_filters(&mut processes);
+        assert!(processes.is_empty());
+
+        let mut processes = vec![bare_process()];
+        command().apply_filters(&mut processes);
+        assert_eq!(processes.len(), 1);
+    }
+
+    #[test]
+    fn a_process_with_no_start_time_fails_min_uptime() {
+        let cmd = ForCommand {
+            min_uptime: Some(0),
+            ..command()
+        };
+        let mut processes = vec![bare_process()];
+        cmd.apply_filters(&mut processes);
+        assert!(processes.is_empty());
+    }
+}

@@ -210,15 +210,41 @@ impl Owned {
             .stdin(Stdio::null())
             .spawn()
             .expect("spawn a busy shell");
-        // `--timeout 0` means older than a whole second, and proc reads a
-        // process's age in whole seconds, so a process started this instant
-        // is not yet old enough on Linux. Let it age past the first readings.
-        std::thread::sleep(Duration::from_secs(2));
-        Owned {
+        let busy = Owned {
             child,
             port: None,
             _tmp: tmp,
             dir,
+        };
+        busy.wait_until_stuck();
+        busy
+    }
+
+    /// Return once `proc stuck` lists this process. proc has no CPU reading for
+    /// a process that has used no CPU yet, so one started this instant is not
+    /// found until a later look; a command that runs before then would find
+    /// nothing.
+    fn wait_until_stuck(&self) {
+        let deadline = Instant::now() + Duration::from_secs(30);
+        loop {
+            let out = Command::new(env!("CARGO_BIN_EXE_proc"))
+                .args(["stuck", "--timeout", "0", "--in", &self.dir(), "--json"])
+                .output()
+                .expect("run proc stuck");
+            let json: serde_json::Value =
+                serde_json::from_slice(&out.stdout).expect("proc stuck prints JSON");
+            let listed = json["processes"].as_array().is_some_and(|items| {
+                items
+                    .iter()
+                    .any(|p| p["pid"].as_u64() == Some(u64::from(self.child.id())))
+            });
+            if listed {
+                return;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "the busy shell was never seen as stuck: {json}"
+            );
         }
     }
 
@@ -290,6 +316,9 @@ impl Drop for Owned {
 /// background and ends, so the init process (PID 1) adopts the sleeper
 struct Orphan {
     pid: i32,
+    /// Set once the sleeper has been seen gone, so `drop` never signals the PID
+    /// again: the kernel may have given it to some other process by then
+    gone: std::cell::Cell<bool>,
     _tmp: tempfile::TempDir,
     dir: PathBuf,
 }
@@ -309,6 +338,7 @@ impl Orphan {
             .expect("the shell prints the sleeper's pid");
         let orphan = Orphan {
             pid,
+            gone: std::cell::Cell::new(false),
             _tmp: tmp,
             dir,
         };
@@ -335,7 +365,11 @@ impl Orphan {
 
     fn alive(&self) -> bool {
         // SAFETY: signal 0 only checks that the process exists
-        unsafe { libc::kill(self.pid, 0) == 0 }
+        let alive = unsafe { libc::kill(self.pid, 0) == 0 };
+        if !alive {
+            self.gone.set(true);
+        }
+        alive
     }
 
     /// The sleeper is not our child, so nobody reaps it but init: gone means
@@ -349,6 +383,7 @@ impl Orphan {
                 .expect("run ps");
             let state = String::from_utf8_lossy(&out.stdout).trim().to_string();
             if state.is_empty() || state.starts_with('Z') {
+                self.gone.set(true);
                 return true;
             }
             std::thread::sleep(Duration::from_millis(50));
@@ -359,8 +394,11 @@ impl Orphan {
 
 impl Drop for Orphan {
     fn drop(&mut self) {
-        // SAFETY: the pid is the sleeper this test started; SIGKILL on a gone
-        // process just fails
+        if self.gone.get() {
+            return;
+        }
+        // SAFETY: the pid is the sleeper this test started, and it has not been
+        // seen gone, so the PID is still its own
         unsafe {
             libc::kill(self.pid, libc::SIGKILL);
         }

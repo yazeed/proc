@@ -69,11 +69,13 @@ impl FreeCommand {
         let mut not_found: Vec<u16> = Vec::new();
 
         for port in &ports {
-            match PortInfo::find_by_port(*port)? {
-                Some(port_info) => match Process::find_by_pid(port_info.pid)? {
-                    Some(proc) => port_processes.push((*port, proc)),
-                    None => not_found.push(*port),
-                },
+            // A port nobody listens on, or whose holder has already gone, is not found
+            let holder = match PortInfo::find_by_port(*port)? {
+                Some(port_info) => Process::find_by_pid(port_info.pid)?,
+                None => None,
+            };
+            match holder {
+                Some(proc) => port_processes.push((*port, proc)),
                 None => not_found.push(*port),
             }
         }
@@ -145,40 +147,15 @@ impl FreeCommand {
             }
         }
 
-        // Terminate processes (SIGTERM first)
-        let mut kill_failed = Vec::new();
-        for proc in &processes {
-            if let Err(e) = proc.terminate() {
-                printer.warning(&format!(
-                    "Failed to send SIGTERM to {} [PID {}]: {}",
-                    proc.name, proc.pid, e
-                ));
-                kill_failed.push(proc.pid);
-            }
-        }
-
-        // Wait for graceful exit
+        // SIGTERM first, then SIGKILL for what is left
         let start = std::time::Instant::now();
-        let timeout = std::time::Duration::from_secs(self.wait.min(5));
-        while start.elapsed() < timeout {
-            if processes.iter().all(|p| !p.is_running()) {
-                break;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(100));
-        }
-
-        // Force kill any remaining
-        for proc in &processes {
-            if proc.is_running() {
-                if let Err(e) = proc.kill() {
-                    printer.warning(&format!(
-                        "Failed to kill {} [PID {}]: {}",
-                        proc.name, proc.pid, e
-                    ));
-                    kill_failed.push(proc.pid);
-                }
-            }
-        }
+        stop_all(
+            &processes,
+            std::time::Duration::from_secs(self.wait.min(5)),
+            &printer,
+            Process::terminate,
+            Process::kill,
+        );
 
         // Poll until ports are free
         let mut freed: Vec<u16> = Vec::new();
@@ -277,4 +254,99 @@ struct FreeOutput {
 struct FreeResult {
     port: u16,
     freed: bool,
+}
+
+/// Ask each process to end (SIGTERM), give them up to `grace` to do it, then
+/// force kill whatever is still running. A signal that fails is a warning, not
+/// an error: the port check afterwards says whether it mattered. Returns the
+/// PIDs a signal failed for. The signals are parameters so a test can make them
+/// fail; the command passes `Process::terminate` and `Process::kill`.
+fn stop_all(
+    processes: &[Process],
+    grace: std::time::Duration,
+    printer: &Printer,
+    terminate: impl Fn(&Process) -> Result<()>,
+    kill: impl Fn(&Process) -> Result<()>,
+) -> Vec<u32> {
+    let mut failed = Vec::new();
+    for proc in processes {
+        if let Err(e) = terminate(proc) {
+            printer.warning(&format!(
+                "Failed to send SIGTERM to {} [PID {}]: {}",
+                proc.name, proc.pid, e
+            ));
+            failed.push(proc.pid);
+        }
+    }
+
+    // Wait for graceful exit
+    let start = std::time::Instant::now();
+    while start.elapsed() < grace {
+        if processes.iter().all(|p| !p.is_running()) {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+
+    // Force kill any remaining
+    for proc in processes {
+        if proc.is_running() {
+            if let Err(e) = kill(proc) {
+                printer.warning(&format!(
+                    "Failed to kill {} [PID {}]: {}",
+                    proc.name, proc.pid, e
+                ));
+                failed.push(proc.pid);
+            }
+        }
+    }
+    failed
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::error::ProcError;
+
+    /// This test's own process: it exists and is the process it says it is, so
+    /// `stop_all` sees it as running. The signals below are stand-ins that
+    /// send nothing.
+    fn this_process() -> Process {
+        Process::find_by_pid(std::process::id())
+            .unwrap()
+            .expect("this process exists")
+    }
+
+    fn refuse(_: &Process) -> Result<()> {
+        Err(ProcError::SignalError("not allowed".to_string()))
+    }
+
+    #[test]
+    fn signals_that_fail_are_reported_not_fatal() {
+        let me = this_process();
+        let printer = Printer::from_flags(true, false);
+        let failed = stop_all(
+            std::slice::from_ref(&me),
+            std::time::Duration::ZERO,
+            &printer,
+            refuse,
+            refuse,
+        );
+        // It still counts as running, so the SIGKILL is tried after the SIGTERM
+        assert_eq!(failed, vec![me.pid, me.pid]);
+    }
+
+    #[test]
+    fn signals_that_work_report_nothing() {
+        let me = this_process();
+        let printer = Printer::from_flags(true, false);
+        let failed = stop_all(
+            std::slice::from_ref(&me),
+            std::time::Duration::ZERO,
+            &printer,
+            |_| Ok(()),
+            |_| Ok(()),
+        );
+        assert!(failed.is_empty());
+    }
 }

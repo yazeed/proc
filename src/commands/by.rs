@@ -78,64 +78,7 @@ impl ByCommand {
         let in_dir_filter = resolve_in_dir(&self.in_dir);
 
         // Apply filters
-        processes.retain(|p| {
-            // Directory filter (--in)
-            if let Some(ref dir_path) = in_dir_filter {
-                if let Some(ref proc_cwd) = p.cwd {
-                    let proc_path = PathBuf::from(proc_cwd);
-                    if !proc_path.starts_with(dir_path) {
-                        return false;
-                    }
-                } else {
-                    return false;
-                }
-            }
-
-            // CPU filter
-            if let Some(min_cpu) = self.min_cpu {
-                if p.cpu_percent < min_cpu {
-                    return false;
-                }
-            }
-
-            // Memory filter
-            if let Some(min_mem) = self.min_mem {
-                if p.memory_mb < min_mem {
-                    return false;
-                }
-            }
-
-            // Status filter
-            if let Some(status) = self.status {
-                if !status.matches(p.status) {
-                    return false;
-                }
-            }
-
-            // Uptime filter
-            if let Some(min_uptime) = self.min_uptime {
-                if let Some(start_time) = p.start_time {
-                    let now = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map(|d| d.as_secs())
-                        .unwrap_or(0);
-                    if now.saturating_sub(start_time) < min_uptime {
-                        return false;
-                    }
-                } else {
-                    return false;
-                }
-            }
-
-            // Parent PID filter
-            if let Some(ppid) = self.parent {
-                if p.parent_pid != Some(ppid) {
-                    return false;
-                }
-            }
-
-            true
-        });
+        processes.retain(|p| self.keeps(p, &in_dir_filter));
 
         // Sort processes
         sort_processes(&mut processes, self.sort);
@@ -154,5 +97,124 @@ impl ByCommand {
 
         printer.print_processes_as("by", &processes, context.as_deref());
         Ok(())
+    }
+
+    /// Whether a process passes every filter: `--in`, `--min-cpu`, `--min-mem`,
+    /// `--status`, `--min-uptime` and `--parent`.
+    fn keeps(&self, p: &Process, in_dir_filter: &Option<PathBuf>) -> bool {
+        // Directory filter (--in)
+        if let Some(ref dir_path) = in_dir_filter {
+            if let Some(ref proc_cwd) = p.cwd {
+                let proc_path = PathBuf::from(proc_cwd);
+                if !proc_path.starts_with(dir_path) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+
+        // CPU filter
+        if let Some(min_cpu) = self.min_cpu {
+            if p.cpu_percent < min_cpu {
+                return false;
+            }
+        }
+
+        // Memory filter
+        if let Some(min_mem) = self.min_mem {
+            if p.memory_mb < min_mem {
+                return false;
+            }
+        }
+
+        // Status filter
+        if let Some(status) = self.status {
+            if !status.matches(p.status) {
+                return false;
+            }
+        }
+
+        // Uptime filter
+        if let Some(min_uptime) = self.min_uptime {
+            if let Some(start_time) = p.start_time {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                if now.saturating_sub(start_time) < min_uptime {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+
+        // Parent PID filter
+        if let Some(ppid) = self.parent {
+            if p.parent_pid != Some(ppid) {
+                return false;
+            }
+        }
+
+        true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::ProcessStatus;
+
+    fn command() -> ByCommand {
+        ByCommand {
+            name: "x".to_string(),
+            in_dir: None,
+            min_cpu: None,
+            min_mem: None,
+            status: None,
+            min_uptime: None,
+            parent: None,
+            json: false,
+            verbose: false,
+            wide: false,
+            limit: None,
+            sort: SortKey::Cpu,
+        }
+    }
+
+    /// A process record with no working directory and no start time, which
+    /// some processes really are (a zombie has neither on Linux)
+    fn bare_process() -> Process {
+        Process {
+            pid: 1,
+            name: "x".to_string(),
+            exe_path: None,
+            cwd: None,
+            command: None,
+            cpu_percent: 0.0,
+            memory_mb: 0.0,
+            status: ProcessStatus::Sleeping,
+            user: None,
+            parent_pid: None,
+            start_time: None,
+            uptime_secs: None,
+        }
+    }
+
+    #[test]
+    fn a_process_with_no_working_directory_fails_in() {
+        let dir = Some(PathBuf::from("/"));
+        assert!(!command().keeps(&bare_process(), &dir));
+        assert!(command().keeps(&bare_process(), &None));
+    }
+
+    #[test]
+    fn a_process_with_no_start_time_fails_min_uptime() {
+        let cmd = ByCommand {
+            min_uptime: Some(0),
+            ..command()
+        };
+        assert!(!cmd.keeps(&bare_process(), &None));
     }
 }

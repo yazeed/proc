@@ -123,17 +123,66 @@ impl StuckCommand {
             }
         }
 
-        let mut killed = Vec::new();
-        let mut failed = Vec::new();
-
-        for proc in processes {
-            // Use kill_and_wait to ensure stuck processes are actually terminated
-            match proc.kill_and_wait() {
-                Ok(_) => killed.push(proc),
-                Err(e) => failed.push((proc, e.to_string())),
-            }
-        }
+        // Use kill_and_wait to ensure stuck processes are actually terminated
+        let (killed, failed) = kill_each(processes, Process::kill_and_wait);
 
         printer.print_action_result_as("stuck", "kill", &killed, &failed)
+    }
+}
+
+/// Kill each process with `kill`, sorting them into those that ended and those
+/// that did not, with the reason
+fn kill_each(
+    processes: Vec<Process>,
+    kill: impl Fn(&Process) -> Result<()>,
+) -> (Vec<Process>, Vec<(Process, String)>) {
+    let mut killed = Vec::new();
+    let mut failed = Vec::new();
+    for proc in processes {
+        match kill(&proc) {
+            Ok(_) => killed.push(proc),
+            Err(e) => failed.push((proc, e.to_string())),
+        }
+    }
+    (killed, failed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::ProcessStatus;
+    use crate::error::ProcError;
+
+    fn process(pid: u32) -> Process {
+        Process {
+            pid,
+            name: "x".to_string(),
+            exe_path: None,
+            cwd: None,
+            command: None,
+            cpu_percent: 0.0,
+            memory_mb: 0.0,
+            status: ProcessStatus::Running,
+            user: None,
+            parent_pid: None,
+            start_time: None,
+            uptime_secs: None,
+        }
+    }
+
+    #[test]
+    fn a_process_that_cannot_be_killed_is_reported_with_its_reason() {
+        let (killed, failed) = kill_each(vec![process(1), process(2)], |p| {
+            if p.pid == 2 {
+                Err(ProcError::SignalError("still running".to_string()))
+            } else {
+                Ok(())
+            }
+        });
+        assert_eq!(killed.len(), 1);
+        assert_eq!(killed[0].pid, 1);
+        assert_eq!(failed.len(), 1);
+        assert_eq!(failed[0].0.pid, 2);
+        assert!(failed[0].1.contains("still running"), "{}", failed[0].1);
     }
 }
