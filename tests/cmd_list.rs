@@ -6,6 +6,7 @@
 //! Each process is killed and reaped on drop.
 
 use assert_cmd::Command;
+use proc_cli::core::filters::strip_verbatim_prefix;
 use serde_json::Value;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -27,6 +28,16 @@ fn run_json(args: &[&str]) -> (Value, i32) {
     (json, output.status.code().unwrap())
 }
 
+/// Run proc and return its stdout, stderr and exit code.
+fn run_text(args: &[&str]) -> (String, String, i32) {
+    let output = proc_cmd().args(args).output().unwrap();
+    (
+        String::from_utf8(output.stdout).unwrap(),
+        String::from_utf8(output.stderr).unwrap(),
+        output.status.code().unwrap(),
+    )
+}
+
 /// `target/debug/examples/listener`, found relative to this test binary
 /// (`target/debug/deps/cmd_list-<hash>`)
 fn listener_path() -> PathBuf {
@@ -40,6 +51,15 @@ fn listener_path() -> PathBuf {
 }
 
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+/// A process name no process has, for this call alone. Name targets match
+/// command lines too, and the other tests run proc at the same time, so a name
+/// two tests share would match the other test's proc.
+fn nobody() -> String {
+    let n = COUNTER.fetch_add(1, Ordering::SeqCst);
+    // Ends in `x`, so no name is the start of another (`-1x` in `-10x`)
+    format!("nobody-{}-{n}x", std::process::id())
+}
 
 /// Run the copy, with its cwd in `dir`. On Linux a file another thread has
 /// just written can be "busy" (ETXTBSY) for an instant: a fork in a parallel
@@ -80,8 +100,12 @@ struct Owned {
     child: Child,
     /// A name no other process has, short enough for any OS to report whole
     name: String,
+    port: u16,
     /// Keeps the directory alive
     _tmp: tempfile::TempDir,
+    /// The directory as processes report it: symlinks resolved, no Windows
+    /// `\\?\` prefix
+    dir: PathBuf,
     /// The directory exactly as `tempfile` named it: on macOS `/var/folders/..`
     /// (reported by processes as `/private/var/..`), on Windows possibly an
     /// 8.3 short name. This is what a user would type.
@@ -92,29 +116,50 @@ impl Owned {
     fn listener() -> Self {
         let tmp = tempfile::tempdir().unwrap();
         let raw_dir = tmp.path().to_path_buf();
+        let dir = raw_dir.canonicalize().unwrap();
+        let dir = PathBuf::from(strip_verbatim_prefix(&dir.to_string_lossy()));
         let n = COUNTER.fetch_add(1, Ordering::SeqCst);
         let name = format!("pcl{}n{n}x", std::process::id());
-        let copy = raw_dir.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
-        std::fs::copy(listener_path(), &copy).expect("copy the listener example");
-        let mut child = spawn_copy(&copy, &raw_dir);
+        let file = format!("{name}{}", std::env::consts::EXE_SUFFIX);
+        std::fs::copy(listener_path(), raw_dir.join(&file)).expect("copy the listener example");
+        // Started by its canonical path, so the executable path processes
+        // report is that path on every OS; the cwd is the path as the user
+        // would type it
+        let mut child = spawn_copy(&dir.join(&file), &raw_dir);
         let mut line = String::new();
         let mut stdout = BufReader::new(child.stdout.take().unwrap());
         let read = stdout.read_line(&mut line);
-        if read.is_err() || !line.trim().starts_with("PORT ") {
+        let port = read
+            .ok()
+            .and_then(|_| line.trim().strip_prefix("PORT "))
+            .and_then(|p| p.parse().ok());
+        let Some(port) = port else {
             let _ = child.kill();
             let _ = child.wait();
             panic!("the listener printed {line:?} instead of `PORT <n>`");
-        }
+        };
         Owned {
             child,
             name,
+            port,
             _tmp: tmp,
+            dir,
             raw_dir,
         }
     }
 
     fn pid(&self) -> u32 {
         self.child.id()
+    }
+
+    fn dir(&self) -> String {
+        self.dir.to_string_lossy().into_owned()
+    }
+
+    /// The path of the executable copy
+    fn exe(&self) -> PathBuf {
+        self.dir
+            .join(format!("{}{}", self.name, std::env::consts::EXE_SUFFIX))
     }
 
     fn raw_dir(&self) -> String {
@@ -228,4 +273,517 @@ fn tree_by_name_skips_the_shell_whose_command_line_holds_the_name() {
         .map(|n| n["pid"].as_u64().unwrap())
         .collect();
     assert_eq!(pids, vec![u64::from(owned.pid())], "{json}");
+}
+
+// --- list --------------------------------------------------------------------
+
+/// The PIDs in the `processes` array of an answer
+fn pids(json: &Value) -> Vec<u64> {
+    json["processes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["pid"].as_u64().unwrap())
+        .collect()
+}
+
+#[test]
+fn list_in_prints_a_table_and_says_which_directory_it_looked_in() {
+    let owned = Owned::listener();
+    let (out, _, code) = run_text(&["list", "--in", &owned.raw_dir(), "--wide"]);
+    assert_eq!(code, 0);
+    assert!(
+        out.contains(&format!("Found 1 process in {}", owned.dir())),
+        "{out}"
+    );
+    assert!(out.contains(&owned.name), "{out}");
+    assert!(out.contains(&owned.pid().to_string()), "{out}");
+}
+
+#[test]
+fn list_a_comma_separated_name_list_finds_each_name_once() {
+    let first = Owned::listener();
+    let second = Owned::listener();
+    // The same name twice, and a name nothing has: each process shows once
+    let names = format!("{0},{1},{0},{2}", first.name, second.name, nobody());
+    let (json, code) = run_json(&["list", &names, "--json", "--sort", "pid"]);
+    assert_eq!(code, 0);
+    let mut expected = vec![u64::from(first.pid()), u64::from(second.pid())];
+    expected.sort_unstable();
+    assert_eq!(pids(&json), expected, "{json}");
+}
+
+#[test]
+fn list_path_keeps_the_processes_running_that_executable() {
+    let owned = Owned::listener();
+    let (json, code) = run_json(&["list", "--path", &owned.exe().to_string_lossy(), "--json"]);
+    assert_eq!(code, 0);
+    assert_eq!(pids(&json), vec![u64::from(owned.pid())], "{json}");
+}
+
+#[test]
+fn list_path_is_taken_from_the_current_directory_when_relative() {
+    let owned = Owned::listener();
+    let output = proc_cmd()
+        .current_dir(&owned.dir)
+        .args(["list", "--path", &owned.name, "--json"])
+        .output()
+        .unwrap();
+    let json: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(pids(&json), vec![u64::from(owned.pid())], "{json}");
+}
+
+#[test]
+fn list_in_dot_is_the_current_directory() {
+    let owned = Owned::listener();
+    let output = proc_cmd()
+        .current_dir(&owned.dir)
+        .args(["list", "--in", "--json"])
+        .output()
+        .unwrap();
+    let json: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(lists(&json, owned.pid()), "{json}");
+}
+
+#[test]
+fn list_a_filter_nothing_passes_says_so() {
+    let owned = Owned::listener();
+    let (out, _, code) = run_text(&["list", "--in", &owned.dir(), "--min-cpu", "1000"]);
+    assert_eq!(code, 0);
+    assert!(
+        out.contains(&format!("No processes found in {}", owned.dir())),
+        "{out}"
+    );
+}
+
+// --- in ----------------------------------------------------------------------
+
+#[test]
+fn in_prints_a_table_and_says_which_directory_it_looked_in() {
+    let owned = Owned::listener();
+    let (out, _, code) = run_text(&["in", &owned.raw_dir(), "--wide"]);
+    assert_eq!(code, 0);
+    assert!(
+        out.contains(&format!("Found 1 process in {}", owned.dir())),
+        "{out}"
+    );
+    assert!(out.contains(&owned.name), "{out}");
+}
+
+#[test]
+fn in_dot_is_the_current_directory() {
+    let owned = Owned::listener();
+    let output = proc_cmd()
+        .current_dir(&owned.dir)
+        .args(["in", ".", "--json"])
+        .output()
+        .unwrap();
+    let json: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(pids(&json), vec![u64::from(owned.pid())], "{json}");
+}
+
+#[test]
+fn in_by_keeps_only_that_name() {
+    let owned = Owned::listener();
+    let (json, _) = run_json(&["in", &owned.dir(), "--by", &owned.name, "--json"]);
+    assert_eq!(pids(&json), vec![u64::from(owned.pid())], "{json}");
+    // A name nothing has is not found, like `by`
+    let (json, code) = run_json(&["in", &owned.dir(), "--by", &nobody(), "--json"]);
+    assert_eq!(code, 2);
+    assert_eq!(json["success"], false, "{json}");
+}
+
+#[test]
+fn in_filters_drop_what_does_not_match() {
+    let owned = Owned::listener();
+    let dir = owned.dir();
+    for args in [
+        vec!["--min-cpu", "1000"],
+        vec!["--min-mem", "100000000"],
+        vec!["--status", "zombie"],
+        vec!["--min-uptime", "100000"],
+        vec!["--parent", "1"],
+    ] {
+        let mut all = vec!["in", dir.as_str(), "--json"];
+        all.extend(args.iter());
+        let (json, code) = run_json(&all);
+        assert_eq!(code, 0);
+        assert!(pids(&json).is_empty(), "{args:?} kept it: {json}");
+    }
+    // And the same filters keep it when it does match
+    let (json, _) = run_json(&[
+        "in",
+        &dir,
+        "--min-uptime",
+        "0",
+        "--min-mem",
+        "0",
+        "--parent",
+        &std::process::id().to_string(),
+        "--limit",
+        "5",
+        "--json",
+    ]);
+    assert_eq!(pids(&json), vec![u64::from(owned.pid())], "{json}");
+}
+
+#[test]
+fn in_a_missing_directory_is_invalid_input() {
+    let (_, stderr, code) = run_text(&["in", "/no/such/dir/for/proc-tests"]);
+    assert_eq!(code, 4);
+    assert!(stderr.contains("Directory not found"), "{stderr}");
+}
+
+#[test]
+fn in_tilde_is_the_home_directory() {
+    let owned = Owned::listener();
+    let output = proc_cmd()
+        .env("HOME", &owned.dir)
+        .args(["in", "~", "--json"])
+        .output()
+        .unwrap();
+    let json: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(lists(&json, owned.pid()), "{json}");
+}
+
+#[test]
+fn in_tilde_slash_is_taken_from_the_home_directory() {
+    let owned = Owned::listener();
+    let home = owned.dir.parent().unwrap();
+    let rest = owned.dir.file_name().unwrap().to_string_lossy();
+    let output = proc_cmd()
+        .env("HOME", home)
+        .args(["in", &format!("~/{rest}"), "--json"])
+        .output()
+        .unwrap();
+    let json: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(lists(&json, owned.pid()), "{json}");
+}
+
+#[test]
+fn in_tilde_with_no_home_is_a_path_called_tilde() {
+    for path in ["~", "~/projects"] {
+        let output = proc_cmd()
+            .env_remove("HOME")
+            .args(["in", path])
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(4), "{path}");
+        let stderr = String::from_utf8(output.stderr).unwrap();
+        assert!(stderr.contains("Directory not found"), "{stderr}");
+    }
+}
+
+// --- tree --------------------------------------------------------------------
+//
+// The listener is a child of this test process, so `tree <this pid>` has a
+// branch to show whatever else the machine is doing.
+
+fn me() -> String {
+    std::process::id().to_string()
+}
+
+/// The node with this PID anywhere under `nodes`
+fn find_node(nodes: &[Value], pid: u32) -> Option<&Value> {
+    for node in nodes {
+        if node["pid"].as_u64() == Some(u64::from(pid)) {
+            return Some(node);
+        }
+        if let Some(found) = find_node(node["children"].as_array().unwrap(), pid) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+#[test]
+fn tree_pid_json_shows_the_process_with_its_children() {
+    let owned = Owned::listener();
+    let (json, code) = run_json(&["tree", &me(), "--json"]);
+    assert_eq!(code, 0);
+    assert_eq!(json["action"], "tree");
+    assert_eq!(json["success"], true);
+    let roots = json["tree"].as_array().unwrap();
+    assert_eq!(roots.len(), 1, "{json}");
+    assert_eq!(
+        roots[0]["pid"].as_u64(),
+        Some(u64::from(std::process::id()))
+    );
+    let child = find_node(roots[0]["children"].as_array().unwrap(), owned.pid())
+        .unwrap_or_else(|| panic!("the listener is not under this process: {json}"));
+    assert_eq!(child["name"], owned.name.as_str());
+    assert!(child["children"].as_array().unwrap().is_empty());
+    assert!(child["memory_mb"].as_f64().unwrap() > 0.0);
+    assert!(child["status"].is_string());
+}
+
+#[test]
+fn tree_pid_human_draws_the_branch() {
+    let owned = Owned::listener();
+    let (out, _, code) = run_text(&["tree", &me()]);
+    assert_eq!(code, 0);
+    assert!(
+        out.starts_with(&format!("✓ Process tree for '{}':", me())),
+        "{out}"
+    );
+    let line = out
+        .lines()
+        .find(|l| l.contains(&format!("[{}]", owned.pid())))
+        .unwrap_or_else(|| panic!("no line for the listener:\n{out}"));
+    assert!(line.contains(&owned.name), "{line}");
+    assert!(line.contains("└── ") || line.contains("├── "), "{line}");
+}
+
+#[test]
+fn tree_compact_prints_only_pids() {
+    let owned = Owned::listener();
+    let (out, _, code) = run_text(&["tree", &me(), "--compact"]);
+    assert_eq!(code, 0);
+    let pid = owned.pid().to_string();
+    let line = out
+        .lines()
+        .find(|l| l.trim_start_matches(['│', ' ']).ends_with(&pid))
+        .unwrap_or_else(|| panic!("no pid-only line for the listener:\n{out}"));
+    assert!(!line.contains(&owned.name), "{line}");
+    assert!(!out.contains('['), "{out}");
+}
+
+#[test]
+fn tree_depth_zero_leaves_out_the_children() {
+    let owned = Owned::listener();
+    let (out, _, _) = run_text(&["tree", &me(), "--depth", "0"]);
+    assert!(out.contains(&format!("[{}]", std::process::id())), "{out}");
+    assert!(!out.contains(&owned.name), "{out}");
+
+    let (json, _) = run_json(&["tree", &me(), "--depth", "0", "--json"]);
+    let root = &json["tree"][0];
+    assert!(root["children"].as_array().unwrap().is_empty(), "{json}");
+}
+
+#[test]
+fn tree_depth_one_shows_children_but_not_grandchildren() {
+    let _owned = Owned::listener();
+    let (json, _) = run_json(&["tree", &me(), "--depth", "1", "--json"]);
+    let children = json["tree"][0]["children"].as_array().unwrap();
+    assert!(!children.is_empty(), "{json}");
+    for child in children {
+        assert!(child["children"].as_array().unwrap().is_empty(), "{json}");
+    }
+}
+
+#[test]
+fn tree_a_missing_pid_is_not_found() {
+    let (out, stderr, code) = run_text(&["tree", "4294967290"]);
+    assert_eq!(code, 2);
+    assert!(
+        format!("{out}{stderr}").contains("No process found matching '4294967290'"),
+        "{out}{stderr}"
+    );
+}
+
+#[test]
+fn tree_a_port_shows_the_process_listening_on_it() {
+    let owned = Owned::listener();
+    let (json, code) = run_json(&["tree", &format!(":{}", owned.port), "--json"]);
+    assert_eq!(code, 0);
+    let roots = json["tree"].as_array().unwrap();
+    assert_eq!(roots.len(), 1, "{json}");
+    assert_eq!(roots[0]["pid"].as_u64(), Some(u64::from(owned.pid())));
+}
+
+#[test]
+fn tree_a_name_shows_every_process_with_that_name() {
+    let owned = Owned::listener();
+    let (json, code) = run_json(&["tree", &owned.name, "--json"]);
+    assert_eq!(code, 0);
+    let roots = json["tree"].as_array().unwrap();
+    assert_eq!(roots.len(), 1, "{json}");
+    assert_eq!(roots[0]["pid"].as_u64(), Some(u64::from(owned.pid())));
+
+    let (out, _, _) = run_text(&["tree", &owned.name]);
+    assert!(
+        out.contains(&format!("Process tree for '{}':", owned.name)),
+        "{out}"
+    );
+    assert!(out.contains(&format!("[{}]", owned.pid())), "{out}");
+}
+
+#[test]
+fn tree_by_and_in_narrow_a_target() {
+    let owned = Owned::listener();
+    let pid = owned.pid().to_string();
+    let (json, _) = run_json(&[
+        "tree",
+        &pid,
+        "--by",
+        &owned.name,
+        "--in",
+        &owned.dir(),
+        "--json",
+    ]);
+    assert_eq!(json["tree"].as_array().unwrap().len(), 1, "{json}");
+
+    // Wrong name, or a directory it is not in: nothing left
+    let (json, _) = run_json(&["tree", &pid, "--by", &nobody(), "--json"]);
+    assert!(json["tree"].as_array().unwrap().is_empty(), "{json}");
+    let elsewhere = tempfile::tempdir().unwrap();
+    let (json, _) = run_json(&[
+        "tree",
+        &pid,
+        "--in",
+        elsewhere.path().to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(json["tree"].as_array().unwrap().is_empty(), "{json}");
+}
+
+#[test]
+fn tree_a_target_every_filter_drops_says_so() {
+    let owned = Owned::listener();
+    let pid = owned.pid().to_string();
+    for args in [
+        vec!["--min-cpu", "1000"],
+        vec!["--min-mem", "100000000"],
+        vec!["--status", "zombie"],
+        vec!["--min-uptime", "100000"],
+    ] {
+        let mut all = vec!["tree", pid.as_str()];
+        all.extend(args.iter());
+        let (out, _, code) = run_text(&all);
+        assert_eq!(code, 0);
+        assert_eq!(
+            out.trim(),
+            format!("⚠ No processes found for '{pid}'"),
+            "{args:?}"
+        );
+    }
+    let (json, _) = run_json(&["tree", &pid, "--min-cpu", "1000", "--json"]);
+    assert!(json["tree"].as_array().unwrap().is_empty(), "{json}");
+}
+
+#[test]
+fn tree_a_target_the_filters_keep_is_shown() {
+    let owned = Owned::listener();
+    let pid = owned.pid().to_string();
+    let (out, _, _) = run_text(&["tree", &pid, "--min-uptime", "0", "--min-mem", "0"]);
+    assert!(out.contains(&format!("[{pid}]")), "{out}");
+}
+
+#[test]
+fn tree_with_no_target_draws_the_whole_machine() {
+    let _owned = Owned::listener();
+    let (out, _, code) = run_text(&["tree", "--depth", "2"]);
+    assert_eq!(code, 0);
+    assert!(out.starts_with("✓ Process tree:"), "{out}");
+    assert!(out.contains("└── ") && out.contains("├── "), "{out}");
+
+    let (json, code) = run_json(&["tree", "--depth", "2", "--json"]);
+    assert_eq!(code, 0);
+    let roots = json["tree"].as_array().unwrap();
+    assert!(!roots.is_empty(), "{json}");
+    assert!(roots
+        .iter()
+        .all(|n| n["pid"].is_u64() && n["children"].is_array()));
+}
+
+#[test]
+fn tree_filters_without_a_target_list_the_processes_that_pass() {
+    let owned = Owned::listener();
+    let (out, _, code) = run_text(&[
+        "tree",
+        "--min-uptime",
+        "0",
+        "--min-mem",
+        "0",
+        "--depth",
+        "0",
+    ]);
+    assert_eq!(code, 0);
+    assert!(out.contains("matching filters:"), "{out}");
+    assert!(out.contains(&format!("[{}]", owned.pid())), "{out}");
+
+    let (json, _) = run_json(&["tree", "--min-uptime", "0", "--depth", "0", "--json"]);
+    assert!(
+        json["tree"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|n| n["pid"].as_u64() == Some(u64::from(owned.pid()))),
+        "{json}"
+    );
+}
+
+#[test]
+fn tree_filters_without_a_target_that_nothing_passes_say_so() {
+    let (out, _, code) = run_text(&["tree", "--min-cpu", "1000"]);
+    assert_eq!(code, 0);
+    assert_eq!(out.trim(), "⚠ No processes match the specified filters");
+}
+
+#[test]
+fn tree_ancestors_shows_the_path_up_to_the_root() {
+    let owned = Owned::listener();
+    let (out, _, code) = run_text(&["tree", &owned.pid().to_string(), "--ancestors"]);
+    assert_eq!(code, 0);
+    assert!(
+        out.starts_with(&format!("✓ Ancestry for '{}':", owned.pid())),
+        "{out}"
+    );
+    let lines: Vec<&str> = out.lines().filter(|l| l.contains('[')).collect();
+    let last = lines.last().unwrap();
+    assert!(
+        last.contains(&owned.name) && last.contains("← target"),
+        "{last}"
+    );
+    // The line before is this test process, one level up
+    let parent = lines[lines.len() - 2];
+    assert!(
+        parent.contains(&format!("[{}]", std::process::id())),
+        "{parent}"
+    );
+    assert!(!parent.contains("← target"), "{parent}");
+}
+
+#[test]
+fn tree_ancestors_json_lists_the_chain_root_first() {
+    let owned = Owned::listener();
+    let (json, code) = run_json(&["tree", &owned.pid().to_string(), "--ancestors", "--json"]);
+    assert_eq!(code, 0);
+    let node = &json["ancestry"][0];
+    assert_eq!(node["target_pid"].as_u64(), Some(u64::from(owned.pid())));
+    assert_eq!(node["target_name"], owned.name.as_str());
+    let chain = node["chain"].as_array().unwrap();
+    assert_eq!(node["depth"].as_u64(), Some(chain.len() as u64));
+    assert!(chain.len() >= 2, "{json}");
+    let last = chain.last().unwrap();
+    assert_eq!(last["pid"].as_u64(), Some(u64::from(owned.pid())));
+    let parent = &chain[chain.len() - 2];
+    assert_eq!(parent["pid"].as_u64(), Some(u64::from(std::process::id())));
+}
+
+#[test]
+fn tree_ancestors_takes_a_name() {
+    let owned = Owned::listener();
+    let (out, _, code) = run_text(&["tree", &owned.name, "--ancestors"]);
+    assert_eq!(code, 0);
+    assert!(out.contains("← target"), "{out}");
+    let (json, _) = run_json(&["tree", &owned.name, "--ancestors", "--json"]);
+    assert_eq!(json["ancestry"].as_array().unwrap().len(), 1, "{json}");
+}
+
+#[test]
+fn tree_ancestors_of_a_name_nothing_has_is_a_warning() {
+    let (out, _, code) = run_text(&["tree", &nobody(), "--ancestors"]);
+    assert_eq!(code, 0);
+    assert!(out.contains("No process found for"), "{out}");
+}
+
+#[test]
+fn tree_ancestors_without_a_target_asks_for_one() {
+    let (out, _, code) = run_text(&["tree", "--ancestors"]);
+    assert_eq!(code, 0);
+    assert_eq!(
+        out.trim(),
+        "⚠ --ancestors requires a target (PID, :port, or name)"
+    );
 }

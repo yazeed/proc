@@ -9,8 +9,8 @@
 //!   proc tree 1234 -a      # Show ancestry (path UP to root)
 
 use crate::core::{
-    matches_by_filter, parse_target, resolve_in_dir, resolve_target, Process, ProcessStatus,
-    StatusFilter, TargetType,
+    matches_by_filter, matches_in_filter, parse_target, resolve_in_dir, resolve_target, Process,
+    ProcessStatus, StatusFilter, TargetType,
 };
 use crate::error::Result;
 use crate::ui::{format_memory, plural, uptime_label, Printer};
@@ -18,7 +18,6 @@ use clap::Args;
 use colored::*;
 use serde::Serialize;
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 /// Show process tree
 #[derive(Args, Debug)]
@@ -163,11 +162,7 @@ impl TreeCommand {
                 .into_iter()
                 .filter(|p| {
                     if let Some(ref dir_path) = in_dir_filter {
-                        if let Some(ref cwd) = p.cwd {
-                            if !PathBuf::from(cwd).starts_with(dir_path) {
-                                return false;
-                            }
-                        } else {
+                        if !matches_in_filter(p, dir_path) {
                             return false;
                         }
                     }
@@ -184,37 +179,7 @@ impl TreeCommand {
         };
 
         // Apply resource filters if specified
-        let matches_filters = |p: &Process| -> bool {
-            if let Some(min_cpu) = self.min_cpu {
-                if p.cpu_percent < min_cpu {
-                    return false;
-                }
-            }
-            if let Some(min_mem) = self.min_mem {
-                if p.memory_mb < min_mem {
-                    return false;
-                }
-            }
-            if let Some(status) = self.status {
-                if !status.matches(p.status) {
-                    return false;
-                }
-            }
-            if let Some(min_uptime) = self.min_uptime {
-                if let Some(start_time) = p.start_time {
-                    let now = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map(|d| d.as_secs())
-                        .unwrap_or(0);
-                    if now.saturating_sub(start_time) < min_uptime {
-                        return false;
-                    }
-                } else {
-                    return false;
-                }
-            }
-            true
-        };
+        let matches_filters = |p: &Process| self.matches_filters(p);
 
         // Apply filters to target processes or find filtered roots
         let has_filters = self.min_cpu.is_some()
@@ -312,6 +277,39 @@ impl TreeCommand {
         Ok(())
     }
 
+    /// Whether a process passes `--min-cpu`, `--min-mem`, `--status` and `--min-uptime`
+    fn matches_filters(&self, p: &Process) -> bool {
+        if let Some(min_cpu) = self.min_cpu {
+            if p.cpu_percent < min_cpu {
+                return false;
+            }
+        }
+        if let Some(min_mem) = self.min_mem {
+            if p.memory_mb < min_mem {
+                return false;
+            }
+        }
+        if let Some(status) = self.status {
+            if !status.matches(p.status) {
+                return false;
+            }
+        }
+        if let Some(min_uptime) = self.min_uptime {
+            if let Some(start_time) = p.start_time {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                if now.saturating_sub(start_time) < min_uptime {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+        true
+    }
+
     fn print_tree(
         &self,
         proc: &Process,
@@ -334,13 +332,7 @@ impl TreeCommand {
                 proc.pid.to_string().cyan()
             );
         } else {
-            let status_indicator = match proc.status {
-                crate::core::ProcessStatus::Running => "●".green(),
-                crate::core::ProcessStatus::Sleeping => "○".blue(),
-                crate::core::ProcessStatus::Stopped => "◐".yellow(),
-                crate::core::ProcessStatus::Zombie => "✗".red(),
-                _ => "?".white(),
-            };
+            let status_indicator = status_indicator(proc.status);
 
             println!(
                 "{}{}{} {} [{}] {:.1}% {}{}",
@@ -457,25 +449,8 @@ impl TreeCommand {
 
     /// Trace and print ancestry from root down to target
     fn print_ancestry(&self, target: &Process, pid_map: &HashMap<u32, &Process>) {
-        // Build the ancestor chain (from target up to root)
-        let mut chain: Vec<&Process> = Vec::new();
-        let mut current_pid = Some(target.pid);
-
-        while let Some(pid) = current_pid {
-            if let Some(proc) = pid_map.get(&pid) {
-                chain.push(proc);
-                current_pid = proc.parent_pid;
-                // Prevent infinite loops
-                if chain.len() > 100 {
-                    break;
-                }
-            } else {
-                break;
-            }
-        }
-
-        // Reverse to print from root to target
-        chain.reverse();
+        // Root first, target last
+        let chain = ancestor_chain(target, pid_map);
 
         // Print the chain
         for (i, proc) in chain.iter().enumerate() {
@@ -483,13 +458,7 @@ impl TreeCommand {
             let indent = "    ".repeat(i);
             let connector = if i == 0 { "" } else { "└── " };
 
-            let status_indicator = match proc.status {
-                ProcessStatus::Running => "●".green(),
-                ProcessStatus::Sleeping => "○".blue(),
-                ProcessStatus::Stopped => "◐".yellow(),
-                ProcessStatus::Zombie => "✗".red(),
-                _ => "?".white(),
-            };
+            let status_indicator = status_indicator(proc.status);
 
             if is_target {
                 // Highlight the target
@@ -527,29 +496,17 @@ impl TreeCommand {
         target: &Process,
         pid_map: &HashMap<u32, &Process>,
     ) -> AncestryNode {
-        let mut chain: Vec<ProcessInfo> = Vec::new();
-        let mut current_pid = Some(target.pid);
-
-        while let Some(pid) = current_pid {
-            if let Some(proc) = pid_map.get(&pid) {
-                chain.push(ProcessInfo {
-                    pid: proc.pid,
-                    name: proc.name.clone(),
-                    cpu_percent: proc.cpu_percent,
-                    memory_mb: proc.memory_mb,
-                    status: proc.status,
-                    uptime_secs: proc.uptime_secs,
-                });
-                current_pid = proc.parent_pid;
-                if chain.len() > 100 {
-                    break;
-                }
-            } else {
-                break;
-            }
-        }
-
-        chain.reverse();
+        let chain: Vec<ProcessInfo> = ancestor_chain(target, pid_map)
+            .into_iter()
+            .map(|proc| ProcessInfo {
+                pid: proc.pid,
+                name: proc.name.clone(),
+                cpu_percent: proc.cpu_percent,
+                memory_mb: proc.memory_mb,
+                status: proc.status,
+                uptime_secs: proc.uptime_secs,
+            })
+            .collect();
 
         AncestryNode {
             target_pid: target.pid,
@@ -558,6 +515,41 @@ impl TreeCommand {
             chain,
         }
     }
+}
+
+/// The marker for a process status in the tree
+fn status_indicator(status: ProcessStatus) -> ColoredString {
+    match status {
+        ProcessStatus::Running => "●".green(),
+        ProcessStatus::Sleeping => "○".blue(),
+        ProcessStatus::Stopped => "◐".yellow(),
+        ProcessStatus::Zombie => "✗".red(),
+        _ => "?".white(),
+    }
+}
+
+/// The processes from the root down to `target`, found by following parent
+/// PIDs. The chain ends at a parent the process list doesn't hold (the root's
+/// parent is 0, or the parent is gone) and is cut at 100 so a loop in the
+/// parent links cannot run forever.
+fn ancestor_chain<'a>(
+    target: &'a Process,
+    pid_map: &HashMap<u32, &'a Process>,
+) -> Vec<&'a Process> {
+    let mut chain: Vec<&Process> = Vec::new();
+    let mut current_pid = Some(target.pid);
+
+    while let Some(pid) = current_pid {
+        let Some(proc) = pid_map.get(&pid) else { break };
+        chain.push(proc);
+        current_pid = proc.parent_pid;
+        if chain.len() > 100 {
+            break;
+        }
+    }
+
+    chain.reverse();
+    chain
 }
 
 #[derive(Serialize)]
@@ -603,4 +595,112 @@ struct TreeNode {
     #[serde(skip_serializing_if = "Option::is_none")]
     uptime_secs: Option<u64>,
     children: Vec<TreeNode>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn command() -> TreeCommand {
+        TreeCommand {
+            target: None,
+            ancestors: false,
+            verbose: false,
+            json: false,
+            depth: 10,
+            compact: false,
+            min_cpu: None,
+            min_mem: None,
+            status: None,
+            min_uptime: None,
+            in_dir: None,
+            by_name: None,
+        }
+    }
+
+    /// A process record with no start time, which some processes really are
+    fn process(pid: u32, parent_pid: Option<u32>) -> Process {
+        Process {
+            pid,
+            name: format!("p{pid}"),
+            exe_path: None,
+            cwd: None,
+            command: None,
+            cpu_percent: 0.0,
+            memory_mb: 0.0,
+            status: ProcessStatus::Sleeping,
+            user: None,
+            parent_pid,
+            start_time: None,
+            uptime_secs: None,
+        }
+    }
+
+    #[test]
+    fn a_process_with_no_start_time_fails_min_uptime() {
+        let cmd = TreeCommand {
+            min_uptime: Some(0),
+            ..command()
+        };
+        assert!(!cmd.matches_filters(&process(1, None)));
+        assert!(command().matches_filters(&process(1, None)));
+    }
+
+    #[test]
+    fn every_status_has_its_own_marker() {
+        let color = |status| status_indicator(status).fgcolor;
+        let text = |status| status_indicator(status).trim().to_string();
+        assert_eq!(text(ProcessStatus::Running), "●");
+        assert_eq!(text(ProcessStatus::Sleeping), "○");
+        assert_eq!(text(ProcessStatus::Stopped), "◐");
+        assert_eq!(text(ProcessStatus::Zombie), "✗");
+        assert_eq!(text(ProcessStatus::Dead), "?");
+        assert_eq!(text(ProcessStatus::Unknown), "?");
+        assert_eq!(color(ProcessStatus::Running), Some(Color::Green));
+        assert_eq!(color(ProcessStatus::Sleeping), Some(Color::Blue));
+        assert_eq!(color(ProcessStatus::Stopped), Some(Color::Yellow));
+        assert_eq!(color(ProcessStatus::Zombie), Some(Color::Red));
+        assert_eq!(color(ProcessStatus::Unknown), Some(Color::White));
+    }
+
+    #[test]
+    fn the_chain_runs_from_the_root_down_to_the_target() {
+        let (root, middle, leaf) = (
+            process(1, Some(0)),
+            process(2, Some(1)),
+            process(3, Some(2)),
+        );
+        let map: HashMap<u32, &Process> = [&root, &middle, &leaf]
+            .iter()
+            .map(|p| (p.pid, *p))
+            .collect();
+        let chain: Vec<u32> = ancestor_chain(&leaf, &map).iter().map(|p| p.pid).collect();
+        assert_eq!(chain, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn a_loop_in_the_parent_links_is_cut() {
+        let (a, b) = (process(1, Some(2)), process(2, Some(1)));
+        let map: HashMap<u32, &Process> = [&a, &b].iter().map(|p| (p.pid, *p)).collect();
+        assert_eq!(ancestor_chain(&a, &map).len(), 101);
+    }
+
+    #[test]
+    fn a_process_that_passes_every_filter_is_kept() {
+        let mut p = process(1, None);
+        p.start_time = Some(0);
+        let cmd = TreeCommand {
+            min_cpu: Some(0.0),
+            min_mem: Some(0.0),
+            status: Some(StatusFilter::Sleeping),
+            min_uptime: Some(1),
+            ..command()
+        };
+        assert!(cmd.matches_filters(&p));
+        let other_status = TreeCommand {
+            status: Some(StatusFilter::Running),
+            ..command()
+        };
+        assert!(!other_status.matches_filters(&p));
+    }
 }

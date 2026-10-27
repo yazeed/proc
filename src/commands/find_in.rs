@@ -123,52 +123,7 @@ impl InCommand {
         }
 
         // Apply filters
-        processes.retain(|p| {
-            // CPU filter
-            if let Some(min_cpu) = self.min_cpu {
-                if p.cpu_percent < min_cpu {
-                    return false;
-                }
-            }
-
-            // Memory filter
-            if let Some(min_mem) = self.min_mem {
-                if p.memory_mb < min_mem {
-                    return false;
-                }
-            }
-
-            // Status filter
-            if let Some(status) = self.status {
-                if !status.matches(p.status) {
-                    return false;
-                }
-            }
-
-            // Uptime filter
-            if let Some(min_uptime) = self.min_uptime {
-                if let Some(start_time) = p.start_time {
-                    let now = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map(|d| d.as_secs())
-                        .unwrap_or(0);
-                    if now.saturating_sub(start_time) < min_uptime {
-                        return false;
-                    }
-                } else {
-                    return false;
-                }
-            }
-
-            // Parent PID filter
-            if let Some(ppid) = self.parent {
-                if p.parent_pid != Some(ppid) {
-                    return false;
-                }
-            }
-
-            true
-        });
+        processes.retain(|p| self.keeps(p));
 
         // Sort processes
         sort_processes(&mut processes, self.sort);
@@ -187,5 +142,126 @@ impl InCommand {
 
         printer.print_processes_as("in", &processes, context.as_deref());
         Ok(())
+    }
+
+    /// Whether a process passes every filter but the directory: `--min-cpu`,
+    /// `--min-mem`, `--status`, `--min-uptime` and `--parent`.
+    fn keeps(&self, p: &Process) -> bool {
+        // CPU filter
+        if let Some(min_cpu) = self.min_cpu {
+            if p.cpu_percent < min_cpu {
+                return false;
+            }
+        }
+
+        // Memory filter
+        if let Some(min_mem) = self.min_mem {
+            if p.memory_mb < min_mem {
+                return false;
+            }
+        }
+
+        // Status filter
+        if let Some(status) = self.status {
+            if !status.matches(p.status) {
+                return false;
+            }
+        }
+
+        // Uptime filter
+        if let Some(min_uptime) = self.min_uptime {
+            if let Some(start_time) = p.start_time {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                if now.saturating_sub(start_time) < min_uptime {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+
+        // Parent PID filter
+        if let Some(ppid) = self.parent {
+            if p.parent_pid != Some(ppid) {
+                return false;
+            }
+        }
+
+        true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::ProcessStatus;
+
+    fn command() -> InCommand {
+        InCommand {
+            path: ".".to_string(),
+            by_name: None,
+            min_cpu: None,
+            min_mem: None,
+            status: None,
+            min_uptime: None,
+            parent: None,
+            json: false,
+            verbose: false,
+            wide: false,
+            limit: None,
+            sort: SortKey::Cpu,
+        }
+    }
+
+    /// A process record with no start time, which some processes really are
+    fn bare_process() -> Process {
+        Process {
+            pid: 1,
+            name: "x".to_string(),
+            exe_path: None,
+            cwd: None,
+            command: None,
+            cpu_percent: 0.0,
+            memory_mb: 0.0,
+            status: ProcessStatus::Sleeping,
+            user: None,
+            parent_pid: None,
+            start_time: None,
+            uptime_secs: None,
+        }
+    }
+
+    #[test]
+    fn a_process_with_no_start_time_fails_min_uptime() {
+        let cmd = InCommand {
+            min_uptime: Some(0),
+            ..command()
+        };
+        assert!(!cmd.keeps(&bare_process()));
+        assert!(command().keeps(&bare_process()));
+    }
+
+    #[test]
+    fn a_process_that_passes_every_filter_is_kept() {
+        let mut process = bare_process();
+        process.start_time = Some(0);
+        process.parent_pid = Some(7);
+        let cmd = InCommand {
+            min_cpu: Some(0.0),
+            min_mem: Some(0.0),
+            status: Some(StatusFilter::Sleeping),
+            min_uptime: Some(1),
+            parent: Some(7),
+            ..command()
+        };
+        assert!(cmd.keeps(&process));
+        let other_parent = InCommand {
+            parent: Some(8),
+            ..command()
+        };
+        assert!(!other_parent.keeps(&process));
     }
 }

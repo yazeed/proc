@@ -292,3 +292,54 @@ mod resolve_tests {
         assert_eq!(resolve_dir(link), target.canonicalize().unwrap());
     }
 }
+
+#[cfg(test)]
+mod match_tests {
+    use super::{matches_by_filter, matches_in_filter};
+    use crate::core::{Process, ProcessStatus};
+    use std::path::Path;
+
+    /// A process record with no working directory and no command line, which
+    /// some processes really are (a zombie has neither on Linux)
+    fn bare_process() -> Process {
+        Process {
+            pid: 1,
+            name: "Worker".to_string(),
+            exe_path: None,
+            cwd: None,
+            command: None,
+            cpu_percent: 0.0,
+            memory_mb: 0.0,
+            status: ProcessStatus::Sleeping,
+            user: None,
+            parent_pid: None,
+            start_time: None,
+            uptime_secs: None,
+        }
+    }
+
+    #[test]
+    fn a_process_with_no_working_directory_is_not_in_any_directory() {
+        assert!(!matches_in_filter(&bare_process(), Path::new("/")));
+    }
+
+    #[test]
+    fn a_working_directory_matches_itself_and_what_is_under_it() {
+        let mut process = bare_process();
+        process.cwd = Some("/srv/app/api".to_string());
+        assert!(matches_in_filter(&process, Path::new("/srv/app")));
+        assert!(matches_in_filter(&process, Path::new("/srv/app/api")));
+        assert!(!matches_in_filter(&process, Path::new("/srv/ap")));
+        assert!(!matches_in_filter(&process, Path::new("/srv/app/web")));
+    }
+
+    #[test]
+    fn a_name_matches_by_name_or_by_command_line_ignoring_case() {
+        let mut process = bare_process();
+        assert!(matches_by_filter(&process, "work"));
+        assert!(!matches_by_filter(&process, "node"));
+        process.command = Some("/usr/bin/Node server.js".to_string());
+        assert!(matches_by_filter(&process, "node"));
+        assert!(!matches_by_filter(&process, "python"));
+    }
+}
