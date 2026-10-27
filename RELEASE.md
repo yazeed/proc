@@ -110,13 +110,17 @@ for img in debian:bullseye-slim alpine; do
 done
 cd -
 
-# Agent skill: skills.sh doesn't watch the repo. An install with telemetry on can make
-# it re-read main, but not reliably: after the 1.14.5 install its page stayed on 1.14.3
-# for days (others report the same: vercel-labs/skills#2501, #2557). Install once anyway;
-# installs get the current skill from GitHub either way, only the listing page lags.
+# Agent skill: skills.sh doesn't watch the repo, and there's no refresh command. It re-reads
+# main when the skill is installed with telemetry on (no DISABLE_TELEMETRY / DO_NOT_TRACK):
+# on 2026-10-27 one install updated its stored copy and page within minutes. An install on
+# 2026-10-25, about an hour after its previous refresh, changed nothing; why is unknown.
 mkdir -p /tmp/proc-skill-check && cd /tmp/proc-skill-check
 bunx skills add yazeed/proc-cli --skill proc-cli -a claude-code -y   # installs into this folder only
 cd - && rm -rf /tmp/proc-skill-check
+
+# Is skills.sh's stored copy current? Prints "current" when its SKILL.md matches main's
+curl -s https://skills.sh/api/download/yazeed/proc-cli/proc-cli \
+  | python3 -c 'import json,sys; f={x["path"]:x["contents"] for x in json.load(sys.stdin)["files"]}; print("current" if f["SKILL.md"]==open("skills/proc-cli/SKILL.md").read() else "stale")'
 ```
 
 Also verify:
@@ -125,7 +129,7 @@ Also verify:
 - [ ] `proc --version` — Shows new version
 - [ ] `proc manpage` — Includes new commands
 - [ ] `proc completions bash` — Includes new commands
-- [ ] https://www.skills.sh/yazeed/proc-cli/proc-cli — check its "This skill describes proc X.Y.Z" line. If it is still an old version a day later, ask for a refresh with an issue on [vercel-labs/skills](https://github.com/vercel-labs/skills/issues) (there's no self-service refresh). Agents installing the skill are unaffected: `skills add` reads the current SKILL.md from GitHub
+- [ ] skills.sh is current: the check above prints `current`, and https://www.skills.sh/yazeed/proc-cli/proc-cli says "This skill describes proc X.Y.Z" (the page is cached for up to 5 minutes). If it's stale, run the install again the next day. If that doesn't help either, ask for a refresh with an issue on [vercel-labs/skills](https://github.com/vercel-labs/skills/issues), which runs skills.sh; many such requests there are unanswered. Agents installing the skill are unaffected either way: `skills add` reads the current SKILL.md from GitHub
 
 ## 8. Cleanup
 
