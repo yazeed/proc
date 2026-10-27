@@ -152,9 +152,17 @@ impl ForCommand {
         };
 
         // Canonicalize (resolve symlinks, normalize)
-        absolute
+        let canonical = absolute
             .canonicalize()
-            .map_err(|_| ProcError::InvalidInput(format!("File not found: {}", path)))
+            .map_err(|_| ProcError::InvalidInput(format!("File not found: {}", path)))?;
+
+        // Windows returns `\\?\D:\...`, but process exe paths are `D:\...`
+        #[cfg(windows)]
+        let canonical = PathBuf::from(crate::core::filters::strip_verbatim_prefix(
+            &canonical.to_string_lossy(),
+        ));
+
+        Ok(canonical)
     }
 
     fn apply_filters(&self, processes: &mut Vec<Process>) {

@@ -30,7 +30,7 @@ use std::time::Duration;
 enum Expect {
     /// Exit with this code and print one JSON document
     Code(i32),
-    /// Exit codes that differ by OS (freeze, thaw and unstick are unsupported
+    /// Exit codes that differ by OS (freeze and thaw are unsupported
     /// on Windows, as is `stop --signal`)
     PerOs { unix: i32, windows: i32 },
     /// A streaming command: the first stdout line is a JSON document whose
@@ -283,15 +283,15 @@ const CASES: &[Case] = &[
     per_os("thaw", &["{pid}", "-y", "-i", "{dir}", "-b", "{name}"], 0, 4),
     per_os("thaw", &["{pid}", "--yes", "--by", "{name}"], 0, 4),
     code("thaw", &["{pid}", "--json"], 4),
-    // ---- unstick (unsupported on Windows) ----
-    per_os("unstick", &["{pid}", "--yes"], 0, 4),
-    per_os("unstick", &["{pid}", "-y", "-f", "-j"], 0, 4),
-    per_os("unstick", &["{pid}", "--yes", "--force", "--verbose"], 0, 4),
-    per_os("unstick", &["{pid}", "--yes", "--timeout", "1"], 0, 4),
-    per_os("unstick", &["{pid}", "--dry-run", "-v"], 0, 4),
-    per_os("unstick", &["--dry-run", "--in", "{dir}", "--by", "{name}"], 0, 4),
-    per_os("unstick", &["--yes", "--in", "{dir}", "-t", "1"], 0, 4),
-    per_os("unstick", &["--yes", "-i", "{dir}", "-b", "{name}"], 0, 4),
+    // ---- unstick (has a Windows path: it can only terminate, and only with --force) ----
+    code("unstick", &["{pid}", "--yes"], 0),
+    code("unstick", &["{pid}", "-y", "-f", "-j"], 0),
+    code("unstick", &["{pid}", "--yes", "--force", "--verbose"], 0),
+    code("unstick", &["{pid}", "--yes", "--timeout", "1"], 0),
+    code("unstick", &["{pid}", "--dry-run", "-v"], 0),
+    code("unstick", &["--dry-run", "--in", "{dir}", "--by", "{name}"], 0),
+    code("unstick", &["--yes", "--in", "{dir}", "-t", "1"], 0),
+    code("unstick", &["--yes", "-i", "{dir}", "-b", "{name}"], 0),
     code("unstick", &["{pid}", "--json"], 4),
     // ---- orphans ----
     code("orphans", &["--in", "{dir}"], 0),

@@ -132,11 +132,24 @@ impl From<&ProcError> for ExitCode {
         match err {
             ProcError::ProcessNotFound(_) | ProcError::PortNotFound(_) => ExitCode::NotFound,
             ProcError::PermissionDenied(_) => ExitCode::PermissionDenied,
-            ProcError::InvalidInput(_) | ProcError::ConfirmationRequired { .. } => {
-                ExitCode::InvalidInput
-            }
+            ProcError::InvalidInput(_)
+            | ProcError::NotSupported(_)
+            | ProcError::ConfirmationRequired { .. } => ExitCode::InvalidInput,
             ProcError::Reported { exit_code, .. } => *exit_code,
             _ => ExitCode::GeneralError,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn not_supported_on_this_os_is_invalid_input() {
+        // "Can't do this here" has one exit code, the same as an unusable
+        // flag value such as `stop --signal` on Windows
+        let err = ProcError::NotSupported("freeze".to_string());
+        assert_eq!(ExitCode::from(&err) as i32, 4);
     }
 }

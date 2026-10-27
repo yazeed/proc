@@ -8,7 +8,7 @@
 | 1 | General error, or the command ran but did not fully succeed (a process failed, a port stayed busy, `wait` timed out) |
 | 2 | Not found (process or port doesn't exist) |
 | 3 | Permission denied (need sudo) |
-| 4 | Invalid input (unknown flag, missing argument, invalid signal name), or a command that changes processes run without `--yes` where nobody can confirm: with `--json`, or without a terminal. Nothing was changed; add `--yes` (or `--dry-run` to preview) and run it again. With `--json` the error also carries `needs_confirmation` and the `processes` it would have changed (see below) |
+| 4 | Invalid input (unknown flag, missing argument, invalid signal name), an action the OS doesn't support (`freeze`, `thaw` and `stop --signal` on Windows), or a command that changes processes run without `--yes` where nobody can confirm: with `--json`, or without a terminal. Nothing was changed; add `--yes` (or `--dry-run` to preview) and run it again. With `--json` the error also carries `needs_confirmation` and the `processes` it would have changed (see below) |
 
 `"success": false` always comes with a non-zero exit code. Every command prints exactly one JSON document, except `proc watch --json`, which streams one per refresh.
 

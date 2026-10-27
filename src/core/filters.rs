@@ -146,3 +146,60 @@ pub fn resolve_in_dir(in_dir: &Option<String>) -> Option<PathBuf> {
         }
     })
 }
+
+/// Turn a Windows verbatim path into the plain form processes report.
+///
+/// `canonicalize` on Windows returns `\\?\D:\app\x.exe` (or
+/// `\\?\UNC\server\share\x.exe`), while a process's executable path is
+/// `D:\app\x.exe` (`\\server\share\x.exe`), so the two never compare equal.
+/// Any other form comes back unchanged. Pure string work, so it is tested on
+/// every OS; only Windows calls it.
+pub fn strip_verbatim_prefix(path: &str) -> String {
+    if let Some(unc) = path.strip_prefix(r"\\?\UNC\") {
+        return format!(r"\\{unc}");
+    }
+    if let Some(disk) = path.strip_prefix(r"\\?\") {
+        let mut chars = disk.chars();
+        let is_disk = chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+            && chars.next() == Some(':')
+            && matches!(chars.next(), Some('\\') | None);
+        if is_disk {
+            return disk.to_string();
+        }
+    }
+    path.to_string()
+}
+
+#[cfg(test)]
+mod verbatim_tests {
+    use super::strip_verbatim_prefix;
+
+    #[test]
+    fn a_verbatim_disk_path_loses_its_prefix() {
+        assert_eq!(
+            strip_verbatim_prefix(r"\\?\D:\a\proc-cli\listener.exe"),
+            r"D:\a\proc-cli\listener.exe"
+        );
+    }
+
+    #[test]
+    fn a_verbatim_unc_path_becomes_a_plain_unc_path() {
+        assert_eq!(
+            strip_verbatim_prefix(r"\\?\UNC\server\share\listener.exe"),
+            r"\\server\share\listener.exe"
+        );
+    }
+
+    #[test]
+    fn other_forms_are_unchanged() {
+        for path in [
+            r"D:\a\proc-cli\listener.exe",
+            r"\\server\share\listener.exe",
+            r"\\?\Volume{0123}\listener.exe",
+            "/usr/bin/node",
+            "",
+        ] {
+            assert_eq!(strip_verbatim_prefix(path), path);
+        }
+    }
+}
