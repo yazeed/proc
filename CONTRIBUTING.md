@@ -180,6 +180,25 @@ fn test_find_process_by_name() {
 }
 ```
 
+### Coverage
+
+CI fails a change that lowers line coverage or leaves a flag without a test. The `Coverage gate` job checks:
+
+- 100% of the lines in `src/`, merged across Linux, macOS and Windows. A line counts as covered if it ran on any of the three, so code that only exists on one OS is measured on that OS
+- Every flag of every command is exercised: `every_flag_is_exercised` in `tests/flags.rs` walks the CLI definition and fails for a flag no test uses
+- All three lcov files are present. If one OS's coverage job fails, the gate fails instead of judging a partial merge
+- No file in `src/` that contains code has no coverage data, which would mean it was never compiled or linked
+
+To measure locally:
+
+```bash
+scripts/coverage-local.sh
+```
+
+It runs the suite in a Linux container at your machine's architecture and prints the same per-file report, listing every uncovered line. It covers Linux only: lines that exist only on macOS or Windows show as uncovered locally and are measured in CI.
+
+Lines that cannot be exercised go in `coverage-exclusions.txt`, one `src/path.rs:START-END  reason` per line. An entry needs a reason that says why the line cannot run, and the maintainer's approval before it is added. An entry that hides no uncovered line is stale and fails the gate, so delete it when the code it covered gets a test.
+
 ## Commit Messages
 
 Follow conventional commit format:

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Line-coverage gate for proc.
 
-Usage: coverage_gate.py <lcov>... [--exclusions FILE] [--enforce] [--repo-root DIR]
+Usage: coverage_gate.py <lcov>... [--exclusions FILE] [--enforce]
+       [--require NAME]... [--repo-root DIR]
 
 Each lcov `SF:` path is mapped to a repo file by comparing it with the repo's
 real src/**/*.rs files (backslashes normalised to '/'; the longest repo path
@@ -13,7 +14,13 @@ the exclusions file (`src/path.rs:START-END  reason`, reason required, `#` comme
 an exclusion that hides no uncovered line is reported as stale (a failure under
 --enforce).
 Prints per-file covered/total and every uncovered `src/path.rs:LINE`; with
---enforce, exits 1 if any line is uncovered.
+--enforce, exits 1 if any line is uncovered or a stale exclusion remains.
+Also under --enforce: each --require NAME must match (as a substring of the
+file name) exactly one lcov file and every lcov file must match one, so a
+failed OS job cannot slip through as a partial merge; and a src file with no
+DA record at all fails unless it declares no `fn` outside // comments (module
+files of re-exports have nothing to instrument; a file that was never
+compiled does).
 """
 
 import argparse
@@ -88,11 +95,43 @@ def parse_exclusions(path, sources):
     return excluded, entries
 
 
+def declares_fn(path):
+    code = "".join(
+        line
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines(True)
+        if not line.lstrip().startswith("//")
+    )
+    return re.search(r"\bfn\b", code) is not None
+
+
+def check_required(lcov, required):
+    """Problems with the set of lcov files given against the --require names."""
+    names = [Path(p).name for p in lcov]
+    problems = []
+    for want in required:
+        n = sum(want in name for name in names)
+        if n == 0:
+            problems.append(f"missing lcov: no file name contains '{want}'")
+        elif n > 1:
+            problems.append(f"'{want}' matches {n} lcov files, expected 1")
+    for name in names:
+        if not any(want in name for want in required):
+            problems.append(f"unexpected lcov: {name} matches no --require name")
+    return problems
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("lcov", nargs="+")
     ap.add_argument("--exclusions")
     ap.add_argument("--enforce", action="store_true")
+    ap.add_argument(
+        "--require",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help="under --enforce, NAME must match exactly one lcov file name (repeatable)",
+    )
     ap.add_argument("--repo-root", default=str(Path(__file__).resolve().parent.parent))
     args = ap.parse_args()
 
@@ -147,8 +186,21 @@ def main():
         print(f"\nUncovered lines ({len(uncovered)}):")
         for u in uncovered:
             print(u)
-    if args.enforce and (uncovered or stale):
-        print(f"\nFAIL: {len(uncovered)} uncovered line(s), {len(stale)} stale exclusion(s)")
+    root = Path(args.repo_root)
+    nodata = [rel for rel in sources if rel not in hits and declares_fn(root / rel)]
+    if nodata:
+        print(f"\nSource files with code and no coverage data ({len(nodata)}):")
+        for rel in sorted(nodata):
+            print(f"no coverage data: {rel}")
+    problems = check_required(args.lcov, args.require) if args.require else []
+    for item in problems:
+        print(item)
+    if args.enforce and (uncovered or stale or nodata or problems):
+        print(
+            f"\nFAIL: {len(uncovered)} uncovered line(s), {len(stale)} stale "
+            f"exclusion(s), {len(nodata)} file(s) without data, "
+            f"{len(problems)} lcov set problem(s)"
+        )
         return 1
     return 0
 

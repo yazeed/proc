@@ -171,6 +171,66 @@ class GateTest(unittest.TestCase):
         r = self.run_gate(self.mac, self.win, "--exclusions", ex)
         self.assertIn("excluded: src/a.rs 2", r.stdout)
 
+    def test_enforce_fails_when_a_required_os_file_is_missing(self):
+        ex = self.write("ex.txt", "src/a.rs:5-7  fixture\n")
+        r = self.run_gate(
+            self.mac, "--exclusions", ex, "--enforce", "--require", "mac", "--require", "win"
+        )
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("win", r.stdout)
+        self.assertIn("missing lcov", r.stdout)
+
+    def test_enforce_fails_on_an_unexpected_extra_lcov_file(self):
+        ex = self.write("ex.txt", "src/a.rs:5-7  fixture\n")
+        extra = self.write("other.info", MAC)
+        r = self.run_gate(
+            self.mac, self.win, extra, "--exclusions", ex, "--enforce",
+            "--require", "mac", "--require", "win",
+        )
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("unexpected lcov", r.stdout)
+
+    def test_enforce_fails_when_one_name_matches_two_files(self):
+        ex = self.write("ex.txt", "src/a.rs:5-7  fixture\n")
+        twin = self.write("mac2.info", MAC)
+        r = self.run_gate(
+            self.mac, twin, self.win, "--exclusions", ex, "--enforce",
+            "--require", "mac", "--require", "win",
+        )
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("matches 2 lcov files", r.stdout)
+
+    def test_enforce_passes_with_exactly_the_required_files(self):
+        ex = self.write("ex.txt", "src/a.rs:5-7  fixture\n")
+        r = self.run_gate(
+            self.mac, self.win, "--exclusions", ex, "--enforce",
+            "--require", "mac", "--require", "win",
+        )
+        self.assertEqual(r.returncode, 0, r.stdout)
+
+    def test_require_is_only_checked_under_enforce(self):
+        r = self.run_gate(self.mac, "--require", "mac", "--require", "win")
+        self.assertEqual(r.returncode, 0, r.stdout)
+
+    def test_enforce_fails_for_a_source_file_with_code_and_no_data(self):
+        (self.root / "src" / "b.rs").write_text("// lib\npub fn f() {}\n")
+        ex = self.write("ex.txt", "src/a.rs:5-7  fixture\n")
+        r = self.run_gate(self.mac, self.win, "--exclusions", ex, "--enforce")
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("no coverage data: src/b.rs", r.stdout)
+
+    def test_file_without_data_is_not_failed_in_report_mode(self):
+        (self.root / "src" / "b.rs").write_text("pub fn f() {}\n")
+        r = self.run_gate(self.mac, self.win)
+        self.assertEqual(r.returncode, 0, r.stdout)
+
+    def test_file_with_no_functions_needs_no_data(self):
+        # mod.rs-style re-exports and a commented-out fn have nothing to instrument
+        (self.root / "src" / "m.rs").write_text("// fn old() {}\npub mod a;\n")
+        ex = self.write("ex.txt", "src/a.rs:5-7  fixture\n")
+        r = self.run_gate(self.mac, self.win, "--exclusions", ex, "--enforce")
+        self.assertEqual(r.returncode, 0, r.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

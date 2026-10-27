@@ -200,6 +200,10 @@ jobs:
       - name: Self-test the gate
         run: python3 -m unittest scripts/test_coverage_gate.py
 
-      # Report only for now: no --enforce until every line is covered or excluded
-      - name: Report coverage
-        run: python3 scripts/coverage_gate.py lcov/*.info --exclusions coverage-exclusions.txt
+      # --require: all three OS files must be present, so a failed OS job fails
+      # the gate instead of passing as a partial merge
+      - name: Enforce coverage
+        run: >
+          python3 scripts/coverage_gate.py lcov/*.info
+          --exclusions coverage-exclusions.txt --enforce
+          --require ubuntu-latest --require macos-latest --require windows-latest
