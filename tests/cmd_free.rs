@@ -58,8 +58,12 @@ fn unused_port() -> u16 {
 struct Owned {
     child: Child,
     port: u16,
-    /// With `--fork`, the forked copy that keeps the port after the parent is gone
-    forked: Option<u32>,
+    /// With `--fork`: the process group (the parent's PID) that holds both the parent
+    /// and the forked copy that keeps the port after the parent is gone. Killing
+    /// the group needs no PID read from the child's output, and signals no PID
+    /// individually, so it can't hit a PID that has been reused.
+    #[cfg_attr(not(unix), allow(dead_code))]
+    group: Option<i32>,
 }
 
 impl Owned {
@@ -68,12 +72,17 @@ impl Owned {
     }
 
     fn start(args: &[&str]) -> Self {
-        let mut child = std::process::Command::new(listener_path())
+        let mut command = std::process::Command::new(listener_path());
+        command
             .args(args)
             .stdout(Stdio::piped())
-            .stdin(Stdio::null())
-            .spawn()
-            .expect("spawn the listener example");
+            .stdin(Stdio::null());
+        #[cfg(unix)]
+        if args.contains(&"--fork") {
+            use std::os::unix::process::CommandExt;
+            command.process_group(0);
+        }
+        let mut child = command.spawn().expect("spawn the listener example");
         let mut stdout = BufReader::new(child.stdout.take().unwrap());
         let mut line = String::new();
         let read = stdout.read_line(&mut line);
@@ -86,22 +95,24 @@ impl Owned {
             let _ = child.wait();
             panic!("the listener printed {line:?} instead of `PORT <n>`");
         };
-        let mut owned = Owned {
+        let child_id = child.id();
+        let owned = Owned {
             child,
             port,
-            forked: None,
+            group: args
+                .contains(&"--fork")
+                .then(|| i32::try_from(child_id).expect("pid fits")),
         };
+        // Checked only now, with `owned` already holding the group: a panic here
+        // drops it, which kills the parent and the forked copy
         if args.contains(&"--fork") {
             let mut line = String::new();
             let _ = stdout.read_line(&mut line);
-            owned.forked = line
+            let child_pid = line
                 .trim()
                 .strip_prefix("CHILD ")
-                .and_then(|p| p.parse().ok());
-            assert!(
-                owned.forked.is_some(),
-                "expected `CHILD <pid>`, got {line:?}"
-            );
+                .and_then(|p| p.parse::<u32>().ok());
+            assert!(child_pid.is_some(), "expected `CHILD <pid>`, got {line:?}");
         }
         owned
     }
@@ -134,16 +145,16 @@ impl Owned {
 
 impl Drop for Owned {
     fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
         #[cfg(unix)]
-        if let Some(pid) = self.forked {
-            // SAFETY: the pid is the forked copy this test started (its parent
-            // is gone, so init reaps it); SIGKILL on a gone process just fails
+        if let Some(group) = self.group {
+            // SAFETY: the group is the one this test made for its listener and
+            // the forked copy; once both are gone the call just fails
             unsafe {
-                libc::kill(pid as i32, libc::SIGKILL);
+                libc::kill(-group, libc::SIGKILL);
             }
         }
+        let _ = self.child.kill();
+        let _ = self.child.wait();
     }
 }
 

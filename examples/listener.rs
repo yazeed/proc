@@ -1,7 +1,7 @@
 //! A process that owns a listening port, for tests to aim proc at.
 //!
 //! Binds `127.0.0.1:0`, prints `PORT <n>` on stdout and flushes, then sleeps
-//! until it is killed. Flags, for tests that need a process that behaves
+//! until it is killed, or for two minutes at most. Flags, for tests that need a process that behaves
 //! differently:
 //! - `--ignore-term` ignores SIGTERM on Unix (a no-op on Windows), so a
 //!   graceful stop cannot move it.
@@ -9,10 +9,19 @@
 //! - `--fork` (Unix only) forks after binding and prints `CHILD <pid>`: the
 //!   child keeps the listening socket after the parent is killed, so the port
 //!   stays in use.
+//!
+//! Whatever the flags, the process (and a forked copy) exits by itself after
+//! two minutes: long enough for any test, short enough that a test binary
+//! killed with SIGKILL, which runs no cleanup, cannot leave a spinner behind.
 
 use std::io::Write;
 use std::net::TcpListener;
-use std::time::Duration;
+use std::time::{Duration, Instant};
+
+/// How long the process lives if nothing kills it: far longer than any test
+/// needs, short enough that a test binary killed with SIGKILL (which runs no
+/// Drop) cannot leave a spinning or forked copy behind for long.
+const LIFETIME: Duration = Duration::from_secs(120);
 
 fn main() {
     let flag = |name: &str| std::env::args().any(|a| a == name);
@@ -31,14 +40,15 @@ fn main() {
 
     // Keep the socket open for as long as we live
     let busy = flag("--busy");
-    loop {
+    let deadline = Instant::now() + LIFETIME;
+    while Instant::now() < deadline {
         if busy {
             std::hint::black_box(0u64);
         } else {
-            std::thread::sleep(Duration::from_secs(60));
+            std::thread::sleep(Duration::from_millis(500));
         }
-        let _ = &listener;
     }
+    drop(listener);
 }
 
 #[cfg(unix)]

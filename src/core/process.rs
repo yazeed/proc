@@ -71,6 +71,13 @@ fn ran_long_enough(run_time: u64, timeout_secs: u64) -> bool {
     run_time >= timeout_secs
 }
 
+/// Whether one reading of a process counts toward "stuck": a process, not a
+/// thread, that has run for `timeout_secs` and looks stuck. `find_stuck` filters
+/// through this, so a test of it guards the comparison where it is used.
+fn counts_as_stuck(is_thread: bool, run_time: u64, timeout_secs: u64, looks_stuck: bool) -> bool {
+    !is_thread && ran_long_enough(run_time, timeout_secs) && looks_stuck
+}
+
 /// macOS: sysinfo drops zombies, because they have no executable path or arguments
 /// left to read, so `proc list --status zombie` could never find one. Read every
 /// process from the kernel, as `ps` does, and keep the zombies sysinfo didn't return.
@@ -415,7 +422,7 @@ impl Process {
                 .processes()
                 .iter()
                 .filter(|(_, p)| {
-                    !is_thread(p) && ran_long_enough(p.run_time(), timeout_secs) && looks_stuck(p)
+                    counts_as_stuck(is_thread(p), p.run_time(), timeout_secs, looks_stuck(p))
                 })
                 .map(|(pid, _)| *pid)
                 .collect();
@@ -769,6 +776,17 @@ pub fn parse_signal_name(name: &str) -> Result<nix::sys::signal::Signal> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_reading_counts_as_stuck_from_the_timeout_on() {
+        assert!(counts_as_stuck(false, 0, 0, true));
+        assert!(!counts_as_stuck(false, 59, 60, true));
+        assert!(counts_as_stuck(false, 60, 60, true));
+        assert!(counts_as_stuck(false, 61, 60, true));
+        // and only a busy process, never a thread
+        assert!(!counts_as_stuck(false, 60, 60, false));
+        assert!(!counts_as_stuck(true, 60, 60, true));
+    }
 
     #[test]
     fn a_process_that_ran_the_timeout_has_run_long_enough() {
