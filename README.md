@@ -22,8 +22,8 @@ Semantic CLI tool for process management. Target by port, process id (PID), name
 proc on :3000                   # what's on port 3000?
 proc for ./script.py            # what's running this file?
 proc by node --in . --min-cpu 5 # node in cwd using >5% CPU
-proc kill :3000,:8080,node      # kill mixed targets at once
-proc info :3000,1234            # info for port + PID
+proc kill :3000 :8080 node      # kill mixed targets at once
+proc info :3000 1234            # info for port + PID
 ```
 
 ### Why proc?
@@ -39,7 +39,7 @@ proc info :3000,1234            # info for port + PID
 | Wait for process | `proc wait node` | `while ps aux \| grep node \| grep -v grep; do sleep 5; done` |
 | Ports used by node | `proc on node` | `lsof -i -P -n \| grep node` |
 | Node processes in cwd | `proc by node --in .` | `ps aux \| grep node` + manual check |
-| Kill mixed targets | `proc kill :3000,:8080,node` | Three separate commands |
+| Kill mixed targets | `proc kill :3000 :8080 node` | Three separate commands |
 | Watch in real-time | `proc watch node` | `watch -n2 'ps aux \| grep node'` |
 | What runs this file? | `proc for ./app.js` | `lsof ./app.js` or `fuser ./app.js` |
 
@@ -133,7 +133,7 @@ proc by node --in . --min-cpu 5
 
 **Kill multiple targets at once:**
 ```bash
-proc kill :3000,:8080,node
+proc kill :3000 :8080 node
 ```
 
 **Watch processes in real-time:**
@@ -150,7 +150,11 @@ All commands accept the same target syntax:
 | Port | `:3000` | Process listening on port 3000 |
 | PID | `1234` | Process with ID 1234 |
 | Name | `node` | All processes named "node" |
-| Multi | `:3000,:8080,node` | Comma-separated targets |
+| Multi | `:3000 :8080 node` | Separate arguments |
+
+Give several targets as separate arguments, and mix the three kinds freely: `proc kill 1234 :3000 node`. A process named twice is handled once. Comma-separated targets (`:3000,:8080,node`) still work but are deprecated, and will be removed in a future major release.
+
+`--in` takes the next word as its directory unless that word starts with `-`, so put it after the targets (`proc kill 1234 5678 --in .`) or write `--in=DIR`.
 
 ## Commands
 
@@ -261,7 +265,7 @@ proc by node --in .
 proc list --min-cpu 10
 
 # Kill everything on ports 3000 and 8080
-proc kill :3000,:8080
+proc kill :3000 :8080
 
 # Kill only node processes in current directory
 proc kill node --in . --dry-run
@@ -287,7 +291,7 @@ proc thaw node                 # Resume them
 
 # Free a port (kill + verify available)
 proc free :3000                # Kill and confirm port 3000 is free
-proc free :3000,:8080 --yes    # Free multiple ports
+proc free :3000 :8080 --yes    # Free multiple ports
 
 # Why is port 3000 busy?
 proc why :3000                 # Show ancestry chain with port context

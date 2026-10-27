@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Several targets can be separate arguments.** `proc kill 1234 5678 :8080` is the form `kill`, `docker kill` and `killport` use, and it now works everywhere proc took a comma-separated list: `kill`, `stop`, `freeze`, `thaw`, `free`, `on`, `why`, `wait`, `unstick`, `watch` and the names of `list` (`info` already did). Separate arguments and comma lists mix (`proc kill 123 :3000,:8080 node`), and a process named twice is still handled once. A message that repeated the target now shows the targets as typed, joined by spaces (`No process found matching '1234 5678'`; `wait --json` has them in `target` the same way), and the JSON `not_found` lists still have one entry per target. `by`, `tree`, `in` and `for` take a single value, as before. Because `--in` may take a value, it takes the next word as its directory unless that word starts with `-`: `proc kill --in 123 456` reads `123` as the directory, so put `--in` after the targets or write `--in=DIR`. Every `--in` says so in `--help`
+
 ### Changed
 
 - **On macOS the JSON `address` of an IPv6 listener loses its brackets**: `[::1]` is now `::1`, matching Linux and Windows. A script that matched the bracketed form must drop the brackets
@@ -25,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`proc ports` and `proc on :port` show full process names on macOS** (`python3.12`, `ControlCenter`, `OpenCode Helper`). lsof cut them to 9 characters, so a helper process could look like the app itself
 - **`proc stuck` needs a process to stay stuck.** A process counts as stuck when it has been running longer than `--timeout` and, in two readings a second apart, is using over 50% CPU or is blocked in uninterruptible sleep (waiting in the kernel, usually for I/O). A single half-second reading used to be enough, so any long-running process that was busy for a moment counted, and `stuck --kill` could catch it; a hang that uses no CPU wasn't found at all. `stuck` now takes about 2 seconds. A long build at full CPU still looks the same as a loop that never ends, so the docs say to check the list before `--kill`
 - **Port lookups on Linux need nothing installed.** proc reads the kernel's socket tables in `/proc` itself instead of running `ss`, so `on :port`, `ports`, `free` and `wait :port` work on minimal systems without iproute2 (Alpine, debian-slim, distroless). The Docker image no longer installs iproute2. The same port listening on IPv4 and IPv6 is listed once, as on macOS
+
+### Deprecated
+
+- **Comma-separated targets** (`proc kill :3000,:8080`). They still work throughout 2.x and print no warning, since a warning would break `--json` output, but separate arguments (`proc kill :3000 :8080`) are the recommended form and commas will be removed in a future major release
 
 ### Removed
 

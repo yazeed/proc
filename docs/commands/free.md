@@ -9,9 +9,11 @@ Kill the process on a port and verify the port becomes available. Port-only targ
 
 ```bash
 proc free :3000            # free port 3000
-proc free :3000,:8080      # free multiple ports
+proc free :3000 :8080      # free multiple ports
 proc free :3000 --wait 30  # wait up to 30s for port to free
 ```
+
+Several ports are separate arguments. Comma-separated lists (`:3000,:8080`) still work but are deprecated.
 
 ## Options
 
@@ -30,7 +32,7 @@ proc free :3000 --wait 30  # wait up to 30s for port to free
 proc free :3000
 
 # free multiple ports without confirmation
-proc free :3000,:8080 --yes
+proc free :3000 :8080 --yes
 
 # wait longer for port to become available
 proc free :3000 --wait 30

@@ -12,7 +12,10 @@ proc watch                 # watch all processes
 proc top                   # same thing
 proc watch node            # watch node processes
 proc watch :3000           # watch process on port
+proc watch :3000 :8080 node  # watch several targets together
 ```
+
+Several targets are separate arguments. Comma-separated lists (`:3000,:8080`) still work but are deprecated.
 
 Press `q`, `Esc`, or `Ctrl+C` to exit. Terminal is always restored cleanly.
 
@@ -25,7 +28,7 @@ The table has the same columns as `proc list`, including uptime on terminals at 
 | `--interval <secs>` | `-n` | Refresh interval (default: 2) |
 | `--sort <key>` | `-s` | Sort by: cpu, mem, pid, name (default: cpu) |
 | `--limit <n>` | `-l` | Limit results shown |
-| `--in [<dir>]` | `-i` | Filter by directory |
+| `--in [<dir>]` | `-i` | Filter by directory. Takes the next word as its directory unless it starts with `-` (bare `--in` is the current directory, `--in=DIR` is explicit) |
 | `--by <name>` | `-b` | Filter by process name |
 | `--min-cpu <n>` | | Minimum CPU % |
 | `--min-mem <n>` | | Minimum memory (MB) |

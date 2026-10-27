@@ -23,7 +23,7 @@ A process counts as stuck when it has been running longer than `--timeout` and, 
 | `--kill` | `-k` | Kill found stuck processes |
 | `--dry-run` | | Show what would be killed |
 | `--yes` | `-y` | Skip confirmation when killing |
-| `--in [<dir>]` | `-i` | Filter by directory |
+| `--in [<dir>]` | `-i` | Filter by directory. Takes the next word as its directory unless it starts with `-` (bare `--in` is the current directory, `--in=DIR` is explicit) |
 | `--by <name>` | `-b` | Filter by process name |
 | `--json` | `-j` | Output as JSON |
 | `--verbose` | `-v` | Show extra details |

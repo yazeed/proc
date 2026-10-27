@@ -10,8 +10,10 @@ Send SIGCONT to resume processes paused by `proc freeze`. Asks for confirmation 
 ```bash
 proc thaw node             # resume all frozen node processes
 proc thaw :3000            # resume frozen process on port 3000
-proc thaw :3000,:8080,node # resume multiple targets
+proc thaw :3000 :8080 node # resume multiple targets
 ```
+
+Several targets are separate arguments. Comma-separated lists (`:3000,:8080`) still work but are deprecated.
 
 ## Options
 
@@ -19,7 +21,7 @@ proc thaw :3000,:8080,node # resume multiple targets
 |------|-------|-------------|
 | `--yes` | `-y` | Skip confirmation |
 | `--dry-run` | | Show what would be resumed |
-| `--in [<dir>]` | `-i` | Filter by directory |
+| `--in [<dir>]` | `-i` | Filter by directory. Takes the next word as its directory unless it starts with `-` (bare `--in` is the current directory, `--in=DIR` is explicit) |
 | `--by <name>` | `-b` | Filter by process name |
 | `--json` | `-j` | Output as JSON |
 | `--verbose` | `-v` | Show extra details |

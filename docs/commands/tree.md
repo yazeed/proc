@@ -27,7 +27,7 @@ Each line shows the process's status, name, PID, CPU, memory and uptime (`up 3m 
 | `--min-mem <n>` | | Minimum memory (MB) |
 | `--status <s>` | | Filter by status |
 | `--min-uptime <s>` | | Minimum uptime in seconds |
-| `--in [<dir>]` | `-i` | Filter by directory |
+| `--in [<dir>]` | `-i` | Filter by directory. Takes the next word as its directory unless it starts with `-` (bare `--in` is the current directory, `--in=DIR` is explicit) |
 | `--by <name>` | `-b` | Filter by process name |
 | `--json` | `-j` | Output as JSON |
 | `--verbose` | `-v` | Show extra details |

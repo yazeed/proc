@@ -42,7 +42,7 @@ Most commands support these flags (check individual command pages for details):
 |------|-------|-------------|
 | `--json` | `-j` | Output as JSON |
 | `--verbose` | `-v` | Show extra details |
-| `--in <dir>` | `-i` | Filter by directory |
+| `--in [<dir>]` | `-i` | Filter by directory (bare `--in` is the current directory) |
 | `--by <name>` | `-b` | Filter by process name |
 | `--help` | `-h` | Show help |
 
@@ -54,8 +54,10 @@ Targets work the same way everywhere:
 proc on :3000          # port
 proc on 1234           # PID
 proc on node           # name
-proc kill :3000,:8080  # multiple (comma-separated)
+proc kill :3000 :8080  # multiple (separate arguments)
 ```
+
+Commands that take targets accept several, as separate arguments, and the kinds mix freely (`proc kill 1234 :3000 node`). A process named twice is handled once. Comma-separated targets (`:3000,:8080`) still work but are deprecated, and will be removed in a future major release. `--in` takes the next word as its directory unless that word starts with `-`, so put it after the targets or write `--in=DIR`.
 
 ## Scripting
 

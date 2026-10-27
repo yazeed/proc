@@ -19,7 +19,7 @@ One process gets the same detail view as `proc on :port` (directory, path, liste
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--in [<dir>]` | `-i` | Filter by working directory |
+| `--in [<dir>]` | `-i` | Filter by working directory. Takes the next word as its directory unless it starts with `-` (bare `--in` is the current directory, `--in=DIR` is explicit) |
 | `--by <name>` | `-b` | Filter by process name |
 | `--min-cpu <n>` | | Minimum CPU % |
 | `--min-mem <n>` | | Minimum memory (MB) |

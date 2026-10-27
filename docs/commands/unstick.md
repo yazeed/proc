@@ -12,8 +12,11 @@ Sends SIGCONT then SIGINT recovery sequence. Use `--force` to terminate if recov
 ```bash
 proc unstick               # recover all stuck processes
 proc unstick node          # recover stuck node processes
+proc unstick 1234 :3000    # recover several targets
 proc unstick --force       # terminate if recovery fails
 ```
+
+Several targets are separate arguments. Comma-separated lists (`1234,:3000`) still work but are deprecated.
 
 ## Options
 
@@ -23,7 +26,7 @@ proc unstick --force       # terminate if recovery fails
 | `--force` | `-f` | Terminate if recovery fails |
 | `--yes` | `-y` | Skip confirmation |
 | `--dry-run` | | Show what would be done |
-| `--in [<dir>]` | `-i` | Filter by directory |
+| `--in [<dir>]` | `-i` | Filter by directory. Takes the next word as its directory unless it starts with `-` (bare `--in` is the current directory, `--in=DIR` is explicit) |
 | `--by <name>` | `-b` | Filter by process name |
 | `--json` | `-j` | Output as JSON |
 | `--verbose` | `-v` | Show extra details |

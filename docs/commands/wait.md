@@ -11,8 +11,10 @@ Block until target process(es) exit. Non-interactive — works in scripts and pi
 proc wait node                 # wait until all node processes exit
 proc wait :3000                # wait until port 3000's process exits
 proc wait 1234                 # wait for specific PID to exit
-proc wait node,python          # wait for all to exit
+proc wait node python          # wait for all to exit
 ```
+
+Several targets are separate arguments. Comma-separated lists (`node,python`) still work but are deprecated.
 
 ## Options
 
@@ -21,7 +23,7 @@ proc wait node,python          # wait for all to exit
 | `--interval <secs>` | `-n` | Seconds between status lines (default: 5); exits are noticed within a quarter second |
 | `--timeout <secs>` | `-t` | Max wait time, 0 = no timeout (default: 0). Exits 1 if processes are still running |
 | `--quiet` | `-q` | Suppress periodic status, only print exits and final result |
-| `--in [<dir>]` | `-i` | Filter by directory |
+| `--in [<dir>]` | `-i` | Filter by directory. Takes the next word as its directory unless it starts with `-` (bare `--in` is the current directory, `--in=DIR` is explicit) |
 | `--by <name>` | `-b` | Filter by process name |
 | `--json` | `-j` | Output as JSON |
 | `--verbose` | `-v` | Show extra details |
@@ -42,7 +44,7 @@ proc wait node -n 10 -q
 proc wait :3000
 
 # wait for multiple targets
-proc wait node,python --timeout 3600
+proc wait node python --timeout 3600
 
 # wait for processes in current project
 proc wait node --in .

@@ -13,13 +13,13 @@ proc by python --in .      # python in current directory
 proc by node --min-cpu 5   # node using >5% CPU
 ```
 
-`by` takes one pattern, matched as a case-insensitive substring of the name or the full command line. For several patterns, use `proc list node,python`. The table includes uptime on terminals at least 100 columns wide; `--verbose` and `--json` always include it.
+`by` takes one pattern, matched as a case-insensitive substring of the name or the full command line. For several patterns, use `proc list node python`. The table includes uptime on terminals at least 100 columns wide; `--verbose` and `--json` always include it.
 
 ## Options
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--in [<dir>]` | `-i` | Filter by directory |
+| `--in [<dir>]` | `-i` | Filter by directory. Takes the next word as its directory unless it starts with `-` (bare `--in` is the current directory, `--in=DIR` is explicit) |
 | `--min-cpu <n>` | | Minimum CPU % |
 | `--min-mem <n>` | | Minimum memory (MB) |
 | `--status <s>` | | Filter by status: running, sleeping, stopped, zombie |

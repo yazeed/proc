@@ -10,8 +10,10 @@ Send SIGSTOP to pause processes. They remain in memory but stop executing. Asks 
 ```bash
 proc freeze node             # freeze all node processes
 proc freeze :3000            # freeze process on port 3000
-proc freeze :3000,:8080,node # freeze multiple targets
+proc freeze :3000 :8080 node # freeze multiple targets
 ```
+
+Several targets are separate arguments. Comma-separated lists (`:3000,:8080`) still work but are deprecated.
 
 ## Options
 
@@ -19,7 +21,7 @@ proc freeze :3000,:8080,node # freeze multiple targets
 |------|-------|-------------|
 | `--yes` | `-y` | Skip confirmation |
 | `--dry-run` | | Show what would be frozen |
-| `--in [<dir>]` | `-i` | Filter by directory |
+| `--in [<dir>]` | `-i` | Filter by directory. Takes the next word as its directory unless it starts with `-` (bare `--in` is the current directory, `--in=DIR` is explicit) |
 | `--by <name>` | `-b` | Filter by process name |
 | `--json` | `-j` | Output as JSON |
 | `--verbose` | `-v` | Show extra details |

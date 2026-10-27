@@ -11,8 +11,10 @@ Port/process lookup — works both ways. Alias: `:`.
 proc on :3000          # what's on port 3000?
 proc on node           # what ports is node using?
 proc on 1234           # what ports is PID 1234 using?
-proc on :3000,:8080    # multiple targets
+proc on :3000 :8080    # multiple targets
 ```
+
+Several targets are separate arguments. Comma-separated lists (`:3000,:8080`) still work but are deprecated.
 
 Every view shows the process's directory and uptime.
 
@@ -20,7 +22,7 @@ Every view shows the process's directory and uptime.
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--in [<dir>]` | `-i` | Filter by directory |
+| `--in [<dir>]` | `-i` | Filter by directory. Takes the next word as its directory unless it starts with `-` (bare `--in` is the current directory, `--in=DIR` is explicit) |
 | `--by <name>` | `-b` | Filter by process name |
 | `--json` | `-j` | Output as JSON |
 | `--verbose` | `-v` | Show full command line |

@@ -20,7 +20,7 @@ proc orphans --by node       # find orphaned node processes
 | `--kill` | `-k` | Kill orphaned processes |
 | `--yes` | `-y` | Skip confirmation (with --kill) |
 | `--dry-run` | | Show what would be killed (with --kill) |
-| `--in [<dir>]` | `-i` | Filter by directory |
+| `--in [<dir>]` | `-i` | Filter by directory. Takes the next word as its directory unless it starts with `-` (bare `--in` is the current directory, `--in=DIR` is explicit) |
 | `--by <name>` | `-b` | Filter by process name |
 | `--json` | `-j` | Output as JSON |
 | `--verbose` | `-v` | Show extra details |

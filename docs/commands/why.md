@@ -11,7 +11,10 @@ Explain why a port is in use or trace the ancestry of a process. Read-only — n
 proc why :3000     # trace why port 3000 is busy
 proc why node      # show ancestry of node processes
 proc why 1234      # show ancestry of PID 1234
+proc why :3000 1234  # several targets, one answer each
 ```
+
+Several targets are separate arguments. Comma-separated lists (`:3000,1234`) still work but are deprecated.
 
 Each step of the chain shows how long that process has been running (`up 2d 4h`), so a long-lived parent such as a forgotten `tmux` session stands out; `--json` includes `uptime_secs`.
 

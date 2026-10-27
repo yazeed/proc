@@ -10,8 +10,11 @@ List all processes, with optional filters. Aliases: `l`, `ps`.
 ```bash
 proc list                      # all processes
 proc list node                 # filter by name
+proc list node python          # several names
 proc list --sort cpu --limit 10  # top 10 by CPU
 ```
+
+Several names are separate arguments. Comma-separated lists (`node,python`) still work but are deprecated.
 
 The table shows PID, directory, name, arguments, CPU, memory and status, plus uptime on terminals at least 100 columns wide. `--verbose` and `--json` always include uptime.
 
@@ -21,7 +24,7 @@ One process is always one line. Directories and arguments are shortened to fit t
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--in [<dir>]` | `-i` | Filter by directory |
+| `--in [<dir>]` | `-i` | Filter by directory. Takes the next word as its directory unless it starts with `-` (bare `--in` is the current directory, `--in=DIR` is explicit) |
 | `--path <path>` | `-p` | Filter by executable path |
 | `--min-cpu <n>` | | Minimum CPU % |
 | `--min-mem <n>` | | Minimum memory (MB) |
@@ -41,7 +44,7 @@ One process is always one line. Directories and arguments are shortened to fit t
 proc list --sort cpu --limit 10
 
 # node and python processes
-proc list node,python
+proc list node python
 
 # high-memory processes in current project
 proc list --in . --min-mem 100
