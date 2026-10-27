@@ -15,7 +15,7 @@ an exclusion that hides no uncovered line is reported as stale (a failure under
 --enforce).
 Prints per-file covered/total and every uncovered `src/path.rs:LINE`; with
 --enforce, exits 1 if any line is uncovered or a stale exclusion remains.
-Also under --enforce: each --require NAME must match (as a substring of the
+--enforce without any --require is an error. Also under --enforce: each --require NAME must match (as a substring of the
 file name) exactly one lcov file and every lcov file must match one, so a
 failed OS job cannot slip through as a partial merge; and a src file with no
 DA record at all fails unless it declares no `fn` outside // comments (module
@@ -134,6 +134,8 @@ def main():
     )
     ap.add_argument("--repo-root", default=str(Path(__file__).resolve().parent.parent))
     args = ap.parse_args()
+    if args.enforce and not args.require:
+        ap.error("--enforce needs at least one --require, or a missing OS's coverage goes unnoticed")
 
     sources = repo_sources(Path(args.repo_root))
     hits = {}

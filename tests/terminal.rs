@@ -14,7 +14,7 @@ use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 const LEAVE_ALT_SCREEN: &str = "\x1b[?1049l";
@@ -166,12 +166,23 @@ fn harness_runs_a_script() {
 
 // ---- fixtures ----
 
+/// Held for as long as a busy process runs, so no more than one spins at a time
+static BUSY: Mutex<()> = Mutex::new(());
+
+/// A shell loop that uses a whole core and ends itself after two minutes, so a
+/// test binary killed without running `Drop` cannot leave it spinning for long
+const SPIN: &str = "end=$(( $(date +%s) + 120 )); n=0; \
+    while :; do n=$((n+1)); \
+    if [ $((n % 50000)) -eq 0 ] && [ \"$(date +%s)\" -ge \"$end\" ]; then exit 0; fi; done";
+
 /// A process the test owns, killed and reaped on drop whatever a case did to it
 struct Owned {
     child: Child,
     port: Option<u16>,
     _tmp: tempfile::TempDir,
     dir: PathBuf,
+    /// Set for a busy shell; released after `Drop` has killed it
+    _busy: Option<MutexGuard<'static, ()>>,
 }
 
 fn fresh_dir() -> (tempfile::TempDir, PathBuf) {
@@ -209,15 +220,18 @@ impl Owned {
             port,
             _tmp: tmp,
             dir,
+            _busy: None,
         }
     }
 
     /// A shell spinning in a busy loop in a fresh directory: stuck by proc's
-    /// measure (over half a core in two readings a second apart)
+    /// measure (over half a core in two readings a second apart). Only one
+    /// spins at a time, and it ends itself after two minutes.
     fn busy() -> Self {
+        let guard = BUSY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let (tmp, dir) = fresh_dir();
         let child = Command::new("sh")
-            .args(["-c", "while :; do :; done"])
+            .args(["-c", SPIN])
             .current_dir(&dir)
             .stdin(Stdio::null())
             .spawn()
@@ -227,6 +241,7 @@ impl Owned {
             port: None,
             _tmp: tmp,
             dir,
+            _busy: Some(guard),
         };
         busy.wait_until_stuck();
         busy

@@ -582,12 +582,17 @@ fn why_with_every_target_missing_warns_for_each_in_the_order_given() {
 #[test]
 fn why_json_a_port_carries_the_port_and_the_listener() {
     let owned = Owned::listener();
-    // Wait for the listener to show up in every snapshot the answer is built from
+    // Wait for the listener, its port and its working directory to show up in every
+    // snapshot the answer is built from
     let (mut json, mut code) = (Value::Null, -1);
     for _ in 0..50 {
         (json, code) = run_json(&["why", &owned.port_arg(), "--json"]);
         let result = &json["results"][0];
-        if code == 0 && result["port"] == owned.port && result["ports"][0]["port"] == owned.port {
+        if code == 0
+            && result["port"] == owned.port
+            && result["ports"][0]["port"] == owned.port
+            && result["process"]["cwd"].is_string()
+        {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
@@ -604,7 +609,8 @@ fn why_json_a_port_carries_the_port_and_the_listener() {
     assert_eq!(result["process"]["name"], owned.file_name());
     assert!(
         same_place(result["process"]["cwd"].as_str().unwrap(), &owned.dir()),
-        "{json}"
+        "{json}\n{}",
+        owned.what_proc_saw()
     );
     let ports: Vec<u64> = result["ports"]
         .as_array()

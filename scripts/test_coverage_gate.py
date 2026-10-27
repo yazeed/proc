@@ -14,6 +14,9 @@ sys.path.insert(0, str(SCRIPTS))
 
 GATE = SCRIPTS / "coverage_gate.py"
 
+# --enforce needs the OS lcov files named, as CI does
+REQUIRE_BOTH = ("--require", "mac", "--require", "win")
+
 # Linux/macOS style: absolute path, line 3 not hit, line 7 never hit.
 MAC = """TN:
 SF:/Users/someone/proc/src/a.rs
@@ -98,7 +101,7 @@ class GateTest(unittest.TestCase):
 
     def test_unknown_file_is_ignored(self):
         other = self.write("o.info", "SF:/x/proc/src/nope.rs\nDA:1,0\nend_of_record\n")
-        r = self.run_gate(other, "--enforce")
+        r = self.run_gate(other, "--enforce", "--require", "o.info")
         self.assertEqual(r.returncode, 0, r.stdout)
 
     def test_exclusions_remove_lines(self):
@@ -109,13 +112,13 @@ class GateTest(unittest.TestCase):
         self.assertIn("src/a.rs:7", r.stdout)
 
     def test_enforce_fails_while_line_seven_uncovered(self):
-        r = self.run_gate(self.mac, self.win, "--enforce")
+        r = self.run_gate(self.mac, self.win, "--enforce", *REQUIRE_BOTH)
         self.assertEqual(r.returncode, 1)
         self.assertIn("src/a.rs:7", r.stdout)
 
     def test_enforce_passes_when_everything_covered_or_excluded(self):
         ex = self.write("ex.txt", "src/a.rs:5-7  fixture\n")
-        r = self.run_gate(self.mac, self.win, "--exclusions", ex, "--enforce")
+        r = self.run_gate(self.mac, self.win, "--exclusions", ex, "--enforce", *REQUIRE_BOTH)
         self.assertEqual(r.returncode, 0, r.stdout)
 
     def test_report_only_exits_zero(self):
@@ -133,7 +136,7 @@ class GateTest(unittest.TestCase):
             "SF:/rustc/abc123/library/core/src/a.rs\nDA:4,0\nend_of_record\n"
             "SF:/work/src/a.rs\nDA:1,1\nend_of_record\n",
         )
-        r = self.run_gate(dep, "--enforce")
+        r = self.run_gate(dep, "--enforce", "--require", "dep.info")
         self.assertEqual(r.returncode, 0, r.stdout)
         self.assertIn("1/1", r.stdout)
 
@@ -158,7 +161,7 @@ class GateTest(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout)
         self.assertIn("stale exclusion", r.stdout)
         self.assertIn("src/a.rs:1", r.stdout)
-        r = self.run_gate(self.mac, self.win, "--exclusions", ex, "--enforce")
+        r = self.run_gate(self.mac, self.win, "--exclusions", ex, "--enforce", *REQUIRE_BOTH)
         self.assertEqual(r.returncode, 1)
 
     def test_stale_exclusion_for_file_without_data(self):
@@ -208,6 +211,13 @@ class GateTest(unittest.TestCase):
         )
         self.assertEqual(r.returncode, 0, r.stdout)
 
+    def test_enforce_without_any_require_is_an_error(self):
+        # Everything is covered or excluded, so only the missing --require can fail it
+        ex = self.write("ex.txt", "src/a.rs:5-7  fixture\n")
+        r = self.run_gate(self.mac, self.win, "--exclusions", ex, "--enforce")
+        self.assertNotEqual(r.returncode, 0, r.stdout)
+        self.assertIn("--enforce needs at least one --require", r.stdout + r.stderr)
+
     def test_require_is_only_checked_under_enforce(self):
         r = self.run_gate(self.mac, "--require", "mac", "--require", "win")
         self.assertEqual(r.returncode, 0, r.stdout)
@@ -215,7 +225,7 @@ class GateTest(unittest.TestCase):
     def test_enforce_fails_for_a_source_file_with_code_and_no_data(self):
         (self.root / "src" / "b.rs").write_text("// lib\npub fn f() {}\n")
         ex = self.write("ex.txt", "src/a.rs:5-7  fixture\n")
-        r = self.run_gate(self.mac, self.win, "--exclusions", ex, "--enforce")
+        r = self.run_gate(self.mac, self.win, "--exclusions", ex, "--enforce", *REQUIRE_BOTH)
         self.assertEqual(r.returncode, 1, r.stdout)
         self.assertIn("no coverage data: src/b.rs", r.stdout)
 
@@ -228,7 +238,7 @@ class GateTest(unittest.TestCase):
         # mod.rs-style re-exports and a commented-out fn have nothing to instrument
         (self.root / "src" / "m.rs").write_text("// fn old() {}\npub mod a;\n")
         ex = self.write("ex.txt", "src/a.rs:5-7  fixture\n")
-        r = self.run_gate(self.mac, self.win, "--exclusions", ex, "--enforce")
+        r = self.run_gate(self.mac, self.win, "--exclusions", ex, "--enforce", *REQUIRE_BOTH)
         self.assertEqual(r.returncode, 0, r.stdout)
 
 

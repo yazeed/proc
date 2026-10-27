@@ -5,7 +5,8 @@
 # lcov file go to OUT_DIR, which is outside the repo. Then the coverage gate
 # prints the per-file report.
 #
-# Usage: scripts/coverage-local.sh [--enforce]
+# Usage: scripts/coverage-local.sh [--enforce --require NAME]
+#   (--enforce needs a --require; this run produces one lcov file, lcov.info)
 #   OUT_DIR   where to write target/, profiles/ and lcov.info
 #             (default: ${TMPDIR:-/tmp}/proc-coverage)
 #   PLATFORM  docker --platform value (default: the host's, so arm64 on Apple silicon)
