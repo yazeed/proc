@@ -314,6 +314,22 @@ fn line_with<'a>(text: &'a str, needle: &str) -> &'a str {
         .unwrap_or_else(|| panic!("no line holds {needle:?}:\n{text}"))
 }
 
+/// The line `why` marks as the target. Matched on how the line ends, because
+/// the tree also prints the command lines of the test's ancestors (a shell
+/// whose command line holds any text at all).
+fn target_line(text: &str) -> &str {
+    text.lines()
+        .find(|l| l.ends_with("← target"))
+        .unwrap_or_else(|| panic!("no target line in:\n{text}"))
+}
+
+/// The line right after `line`, which must be one of the lines of `text`
+fn line_after<'a>(text: &'a str, line: &str) -> &'a str {
+    let mut lines = text.lines();
+    lines.find(|l| *l == line);
+    lines.next().expect("a line after the target")
+}
+
 /// How many spaces a line starts with
 fn indent(line: &str) -> usize {
     line.len() - line.trim_start_matches(' ').len()
@@ -324,14 +340,26 @@ fn indent(line: &str) -> usize {
 #[test]
 fn why_a_port_names_the_port_and_marks_the_process_holding_it() {
     let owned = Owned::listener();
-    let (out, stderr, code) = run_text(&["why", &owned.port_arg()]);
-    assert_eq!(code, 0, "{stderr}");
+    // The answer comes from several snapshots of the machine (listening ports,
+    // process list, the cwd read), so give a just-started process a moment to
+    // show up in all of them
+    let header = format!("✓ Port {} (TCP):\n\n", owned.port);
+    let (mut out, mut stderr, mut code) = (String::new(), String::new(), -1);
+    for _ in 0..50 {
+        (out, stderr, code) = run_text(&["why", &owned.port_arg()]);
+        let has_dir = out
+            .lines()
+            .zip(out.lines().skip(1))
+            .any(|(t, d)| t.ends_with("← target") && d.trim_start().starts_with("dir: "));
+        if out.starts_with(&header) && has_dir {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    assert_eq!(code, 0, "{out}{stderr}\n{}", owned.what_proc_saw());
     assert_eq!(stderr, "");
-    assert!(
-        out.starts_with(&format!("✓ Port {} (TCP):\n\n", owned.port)),
-        "{out}"
-    );
-    let target = line_with(&out, "← target");
+    assert!(out.starts_with(&header), "{out}\n{}", owned.what_proc_saw());
+    let target = target_line(&out);
     assert!(
         target.contains(&format!("{} [{}]", owned.file_name(), owned.pid())),
         "{target}\n{}",
@@ -347,7 +375,7 @@ fn why_a_port_names_the_port_and_marks_the_process_holding_it() {
         "{target}"
     );
     // The directory it runs in sits one level below the target
-    let dir_line = line_with(&out, "dir: ");
+    let dir_line = line_after(&out, target);
     assert_eq!(indent(dir_line), indent(target) + 4, "{out}");
     let dir = dir_line.trim().strip_prefix("dir: ").unwrap();
     assert!(
@@ -367,7 +395,7 @@ fn why_a_pid_names_the_process_and_not_a_port() {
         "{out}"
     );
     assert!(!out.contains("Port "), "{out}");
-    assert!(line_with(&out, "← target").contains(&owned.file_name()));
+    assert!(target_line(&out).contains(&owned.file_name()));
 }
 
 #[test]
@@ -379,7 +407,7 @@ fn why_a_name_traces_every_process_with_that_name() {
         out.starts_with(&format!("✓ Ancestry for '{}':\n\n", owned.name)),
         "{out}"
     );
-    assert!(line_with(&out, "← target").contains(&format!("[{}]", owned.pid())));
+    assert!(target_line(&out).contains(&format!("[{}]", owned.pid())));
 }
 
 #[test]
@@ -388,7 +416,7 @@ fn why_draws_the_test_process_above_the_listener_it_started() {
     let (out, _, _) = run_text(&["why", &owned.pid_arg()]);
     let me = format!("[{}]", std::process::id());
     let parent = line_with(&out, &me);
-    let target = line_with(&out, "← target");
+    let target = target_line(&out);
     // Parent first, then its child one level in with a connector
     assert!(
         out.find(parent).unwrap() < out.find(target).unwrap(),
@@ -407,7 +435,7 @@ fn why_draws_the_shell_between_the_test_and_the_listener() {
     let (out, _, code) = run_text(&["why", &parented.listener_pid.to_string()]);
     assert_eq!(code, 0, "{out}");
     let sh = line_with(&out, &format!("[{}]", parented.sh_pid()));
-    let target = line_with(&out, "← target");
+    let target = target_line(&out);
     let me = line_with(&out, &format!("[{}]", std::process::id()));
     assert!(
         target.contains(&format!("[{}]", parented.listener_pid)),
@@ -465,12 +493,12 @@ fn why_marks_a_stopped_process_with_its_own_symbol() {
     let mut out = String::new();
     for _ in 0..50 {
         out = run_text(&["why", &owned.pid_arg()]).0;
-        if line_with(&out, "← target").contains('◐') {
+        if target_line(&out).contains('◐') {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
-    assert!(line_with(&out, "← target").contains('◐'), "{out}");
+    assert!(target_line(&out).contains('◐'), "{out}");
 }
 
 #[test]
@@ -489,7 +517,11 @@ fn why_several_targets_prints_each_under_its_own_header() {
     // A blank line separates the two answers
     let between = &out[ancestry..port];
     assert!(between.ends_with("\n\n"), "{between:?}");
-    assert_eq!(out.matches("← target").count(), 2, "{out}");
+    assert_eq!(
+        out.lines().filter(|l| l.ends_with("← target")).count(),
+        2,
+        "{out}"
+    );
 }
 
 #[test]
@@ -503,7 +535,7 @@ fn why_warns_about_a_target_that_is_gone_and_still_answers_for_the_rest() {
         out.contains(&format!("⚠ No process found matching '{MISSING_PID}'")),
         "{out}"
     );
-    assert!(line_with(&out, "← target").contains(&format!("[{}]", owned.pid())));
+    assert!(target_line(&out).contains(&format!("[{}]", owned.pid())));
 }
 
 #[test]
@@ -533,7 +565,7 @@ fn why_a_port_nobody_listens_on_warns_and_exits_not_found() {
 }
 
 #[test]
-fn why_with_every_target_missing_exits_with_the_first_failure() {
+fn why_with_every_target_missing_warns_for_each_in_the_order_given() {
     let port = free_port();
     let (out, _, code) = run_text(&["why", &format!(":{port},{MISSING_PID}")]);
     assert_eq!(code, 2);
@@ -550,8 +582,17 @@ fn why_with_every_target_missing_exits_with_the_first_failure() {
 #[test]
 fn why_json_a_port_carries_the_port_and_the_listener() {
     let owned = Owned::listener();
-    let (json, code) = run_json(&["why", &owned.port_arg(), "--json"]);
-    assert_eq!(code, 0);
+    // Wait for the listener to show up in every snapshot the answer is built from
+    let (mut json, mut code) = (Value::Null, -1);
+    for _ in 0..50 {
+        (json, code) = run_json(&["why", &owned.port_arg(), "--json"]);
+        let result = &json["results"][0];
+        if code == 0 && result["port"] == owned.port && result["ports"][0]["port"] == owned.port {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    assert_eq!(code, 0, "{json}\n{}", owned.what_proc_saw());
     assert_eq!(json["action"], "why");
     assert_eq!(json["success"], true);
     assert_eq!(json["count"], 1);
@@ -880,7 +921,9 @@ fn an_unknown_command_is_a_usage_error() {
     );
     // clap's own "tip:" lines are dropped
     assert!(!stderr.contains("tip:"), "{stderr}");
-    assert!(stderr.contains("Usage: proc [COMMAND]"), "{stderr}");
+    // clap names the program after argv[0]'s file name: `proc.exe` on Windows
+    let usage = format!("Usage: proc{} [COMMAND]", std::env::consts::EXE_SUFFIX);
+    assert!(stderr.contains(&usage), "{stderr}");
 }
 
 #[test]
@@ -1014,6 +1057,18 @@ fn json_is_not_asked_for_by_a_flag_that_only_looks_like_it() {
         assert_eq!(code, 4, "{args:?}");
         assert_eq!(out, "", "{args:?}");
         assert!(stderr.starts_with("error: "), "{args:?}: {stderr}");
+    }
+}
+
+#[test]
+fn a_cluster_ending_in_a_value_flag_does_not_ask_for_json() {
+    // `-Xj` where X takes a value: the j is that value, not `--json`
+    for letter in ["b", "d", "i", "l", "n", "p", "r", "s", "S", "t"] {
+        let cluster = format!("-{letter}j");
+        let (out, stderr, code) = run_text(&["info", &cluster, "--bogus"]);
+        assert_eq!(code, 4, "{cluster}");
+        assert_eq!(out, "", "{cluster}: asked for JSON");
+        assert!(stderr.starts_with("error: "), "{cluster}: {stderr}");
     }
 }
 

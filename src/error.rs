@@ -221,6 +221,7 @@ mod tests {
                 2,
             ),
         ];
+        assert_eq!(ExitCode::Success as i32, 0);
         for (err, message, code) in cases {
             assert_eq!(err.to_string(), message);
             assert_eq!(exit_code(err), code, "{message}");
