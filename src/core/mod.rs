@@ -3,11 +3,13 @@
 //! This module provides cross-platform abstractions for working with
 //! system processes and network ports.
 
+pub mod apply;
 pub mod filters;
 pub mod port;
 pub mod process;
 pub mod target;
 
+pub use apply::apply_to_each;
 pub use filters::{
     apply_filters, matches_by_filter, matches_in_filter, resolve_in_dir, sort_processes,
     PortSortKey, SortKey, StatusFilter,

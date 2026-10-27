@@ -8,7 +8,9 @@
 //!   proc kill :3000,1234,node   # Mixed targets (port + PID + name)
 //!   proc kill node --yes        # Skip confirmation
 
-use crate::core::{apply_filters, parse_targets, resolve_targets_excluding_self, Process};
+use crate::core::{
+    apply_filters, apply_to_each, parse_targets, resolve_targets_excluding_self, Process,
+};
 use crate::error::{ProcError, Result};
 use crate::ui::Printer;
 use clap::Args;
@@ -90,21 +92,13 @@ impl KillCommand {
         }
 
         // Kill the processes
-        let mut killed = Vec::new();
-        let mut failed = Vec::new();
-
-        for proc in processes {
-            let result = if self.graceful {
+        let (killed, failed) = apply_to_each(&processes, |proc| {
+            if self.graceful {
                 proc.terminate()
             } else {
                 proc.kill()
-            };
-
-            match result {
-                Ok(()) => killed.push(proc),
-                Err(e) => failed.push((proc, e.to_string())),
             }
-        }
+        });
 
         printer.print_action_result("kill", &killed, &failed)
     }

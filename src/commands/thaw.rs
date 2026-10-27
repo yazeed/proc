@@ -7,7 +7,9 @@
 //!   proc thaw node --yes        # Skip confirmation
 
 #[cfg(unix)]
-use crate::core::{apply_filters, parse_targets, resolve_targets_excluding_self, Process};
+use crate::core::{
+    apply_filters, apply_to_each, parse_targets, resolve_targets_excluding_self, Process,
+};
 use crate::error::{ProcError, Result};
 #[cfg(unix)]
 use crate::ui::Printer;
@@ -83,15 +85,8 @@ impl ThawCommand {
             return Ok(());
         }
 
-        let mut succeeded = Vec::new();
-        let mut failed = Vec::new();
-
-        for proc in &processes {
-            match proc.send_signal(Signal::SIGCONT) {
-                Ok(()) => succeeded.push(proc.clone()),
-                Err(e) => failed.push((proc.clone(), e.to_string())),
-            }
-        }
+        let (succeeded, failed) =
+            apply_to_each(&processes, |proc| proc.send_signal(Signal::SIGCONT));
 
         printer.print_action_result("thaw", &succeeded, &failed)
     }

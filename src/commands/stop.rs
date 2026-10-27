@@ -9,7 +9,9 @@
 
 #[cfg(unix)]
 use crate::core::parse_signal_name;
-use crate::core::{apply_filters, parse_targets, resolve_targets_excluding_self, Process};
+use crate::core::{
+    apply_filters, apply_to_each, parse_targets, resolve_targets_excluding_self, Process,
+};
 use crate::error::{ProcError, Result};
 use crate::ui::Printer;
 use clap::Args;
@@ -113,39 +115,25 @@ impl StopCommand {
 
         // Ask every process first, then wait for them together, so several
         // processes share one --timeout instead of taking one each
-        let mut signalled = Vec::new();
-        let mut failed = Vec::new();
-
-        for proc in &processes {
+        let (signalled, mut failed) = apply_to_each(&processes, |proc| {
             #[cfg(unix)]
-            let send_result = if let Some(signal) = custom_signal {
-                proc.send_signal(signal)
-            } else {
-                proc.terminate()
-            };
-            #[cfg(not(unix))]
-            let send_result = proc.terminate();
-
-            match send_result {
-                Ok(()) => signalled.push(proc.clone()),
-                Err(e) => failed.push((proc.clone(), e.to_string())),
+            if let Some(signal) = custom_signal {
+                return proc.send_signal(signal);
             }
-        }
+            proc.terminate()
+        });
 
         let outlived = self.wait_for_exit(&signalled);
 
         // Force kill whatever outlived the timeout
-        let mut stopped = Vec::new();
-        for proc in signalled {
-            if !outlived.contains(&proc.pid) {
-                stopped.push(proc);
-                continue;
+        let (stopped, failed_to_kill) = apply_to_each(&signalled, |proc| {
+            if outlived.contains(&proc.pid) {
+                proc.kill_and_wait()
+            } else {
+                Ok(())
             }
-            match proc.kill_and_wait() {
-                Ok(()) => stopped.push(proc),
-                Err(e) => failed.push((proc, e.to_string())),
-            }
-        }
+        });
+        failed.extend(failed_to_kill);
 
         // Output results
         printer.print_action_result("stop", &stopped, &failed)

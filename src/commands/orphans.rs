@@ -6,7 +6,7 @@
 //!   proc orphans --kill       # Find and kill orphans
 //!   proc orphans --kill --yes # Kill orphans without confirmation
 
-use crate::core::{apply_filters, Process};
+use crate::core::{apply_filters, apply_to_each, Process};
 use crate::error::Result;
 use crate::ui::{must_confirm, plural, Printer};
 use clap::Args;
@@ -116,15 +116,7 @@ impl OrphansCommand {
             }
         }
 
-        let mut killed = Vec::new();
-        let mut failed = Vec::new();
-
-        for proc in processes {
-            match proc.kill_and_wait() {
-                Ok(_) => killed.push(proc),
-                Err(e) => failed.push((proc, e.to_string())),
-            }
-        }
+        let (killed, failed) = apply_to_each(&processes, |proc| proc.kill_and_wait());
 
         printer.print_action_result_as("orphans", "kill", &killed, &failed)
     }

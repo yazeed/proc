@@ -214,13 +214,7 @@ impl UnstickCommand {
             let outcome = self.attempt_unstick(proc);
 
             if !self.json {
-                match &outcome {
-                    Outcome::Recovered => println!("{}", "recovered".green()),
-                    Outcome::Terminated => println!("{}", "terminated".yellow()),
-                    Outcome::StillStuck => println!("{}", "still stuck".red()),
-                    Outcome::NotStuck => println!("{}", "not stuck".blue()),
-                    Outcome::Failed(e) => println!("{}: {}", "failed".red(), e),
-                }
+                println!("{}", outcome_text(&outcome));
             }
 
             outcomes.push((proc.clone(), outcome));
@@ -267,57 +261,14 @@ impl UnstickCommand {
                         pid: p.pid,
                         name: p.name.clone(),
                         uptime_secs: p.uptime_secs,
-                        outcome: match o {
-                            Outcome::Recovered => "recovered".to_string(),
-                            Outcome::Terminated => "terminated".to_string(),
-                            Outcome::StillStuck => "still_stuck".to_string(),
-                            Outcome::NotStuck => "not_stuck".to_string(),
-                            Outcome::Failed(e) => format!("failed: {}", e),
-                        },
+                        outcome: outcome_label(o),
                     })
                     .collect(),
             });
         } else {
             println!();
-            if recovered > 0 {
-                println!(
-                    "{} {} process{} recovered",
-                    "✓".green().bold(),
-                    recovered.to_string().cyan().bold(),
-                    plural(recovered)
-                );
-            }
-            if not_stuck > 0 {
-                println!(
-                    "{} {} process{} not stuck",
-                    "ℹ".blue().bold(),
-                    not_stuck.to_string().cyan().bold(),
-                    if not_stuck == 1 { " was" } else { "es were" }
-                );
-            }
-            if terminated > 0 {
-                println!(
-                    "{} {} process{} terminated",
-                    "!".yellow().bold(),
-                    terminated.to_string().cyan().bold(),
-                    plural(terminated)
-                );
-            }
-            if still_stuck > 0 {
-                println!(
-                    "{} {} process{} still stuck (use --force to terminate)",
-                    "✗".red().bold(),
-                    still_stuck.to_string().cyan().bold(),
-                    plural(still_stuck)
-                );
-            }
-            if failed > 0 {
-                println!(
-                    "{} {} process{} failed",
-                    "✗".red().bold(),
-                    failed.to_string().cyan().bold(),
-                    plural(failed)
-                );
+            for line in summary_lines(recovered, not_stuck, terminated, still_stuck, failed) {
+                println!("{line}");
             }
         }
 
@@ -354,95 +305,18 @@ impl UnstickCommand {
         proc.looks_stuck_now()
     }
 
-    /// Attempt to unstick a process using recovery signals
-    #[cfg(unix)]
+    /// Attempt to unstick a process: gentle recovery first, termination only with --force
     fn attempt_unstick(&self, proc: &Process) -> Outcome {
         // For targeted processes, check if actually stuck
         if self.target.is_some() && !self.is_stuck(proc) {
             return Outcome::NotStuck;
         }
 
-        // Signals go through Process, which checks the PID wasn't reused meanwhile
-        // Step 1: SIGCONT (wake if stopped); check_recovered measures over a second
-        let _ = proc.send_signal(Signal::SIGCONT);
-
-        if self.check_recovered(proc) {
-            return Outcome::Recovered;
-        }
-
-        // Step 2: SIGINT (interrupt)
-        if proc.send_signal(Signal::SIGINT).is_err() && !proc.is_running() {
-            return Outcome::Terminated;
-        }
-        std::thread::sleep(Duration::from_secs(3));
-
-        if !proc.is_running() {
-            return Outcome::Terminated;
-        }
-        if self.check_recovered(proc) {
-            return Outcome::Recovered;
-        }
-
-        // Without --force, stop here
-        if !self.force {
-            return Outcome::StillStuck;
-        }
-
-        // Step 3: SIGTERM (polite termination) - only with --force
-        if proc.terminate().is_err() && !proc.is_running() {
-            return Outcome::Terminated;
-        }
-        std::thread::sleep(Duration::from_secs(5));
-
-        if !proc.is_running() {
-            return Outcome::Terminated;
-        }
-
-        // Step 4: SIGKILL (force, last resort) - only with --force
-        match proc.kill() {
-            Ok(()) => Outcome::Terminated,
-            Err(e) => {
-                if !proc.is_running() {
-                    Outcome::Terminated
-                } else {
-                    Outcome::Failed(e.to_string())
-                }
-            }
-        }
-    }
-
-    #[cfg(not(unix))]
-    fn attempt_unstick(&self, proc: &Process) -> Outcome {
-        // For targeted processes, check if actually stuck
-        if self.target.is_some() && !self.is_stuck(proc) {
-            return Outcome::NotStuck;
-        }
-
+        #[cfg(unix)]
+        return recover(proc, self.force);
         // On non-Unix, we can only terminate
-        if !self.force {
-            return Outcome::StillStuck;
-        }
-
-        if proc.terminate().is_ok() {
-            std::thread::sleep(Duration::from_secs(3));
-            if !proc.is_running() {
-                return Outcome::Terminated;
-            }
-        }
-
-        match proc.kill() {
-            Ok(()) => Outcome::Terminated,
-            Err(e) => Outcome::Failed(e.to_string()),
-        }
-    }
-
-    /// Check if process has recovered (no longer stuck)
-    #[cfg(unix)]
-    fn check_recovered(&self, proc: &Process) -> bool {
-        // CPU over a full second; a fresh lookup's reading is ~0 for anything,
-        // so this used to report every process as recovered
-        proc.cpu_over(Duration::from_secs(1))
-            .is_some_and(|cpu| cpu < 10.0)
+        #[cfg(not(unix))]
+        return recover_by_termination(proc, self.force);
     }
 
     fn show_processes(&self, processes: &[Process]) {
@@ -484,6 +358,203 @@ impl UnstickCommand {
     }
 }
 
+/// What the recovery sequences do to one process. A trait so a test can script
+/// every answer: the failures and the races can't be produced on demand.
+trait Steps {
+    fn is_running(&self) -> bool;
+    fn pause(&self, secs: u64);
+    fn terminate(&self) -> Result<()>;
+    fn kill(&self) -> Result<()>;
+    /// SIGCONT, wake it if stopped (the result doesn't matter)
+    #[cfg(unix)]
+    fn wake(&self);
+    /// SIGINT, like Ctrl+C
+    #[cfg(unix)]
+    fn interrupt(&self) -> Result<()>;
+    /// Whether it uses under a tenth of a core over a second. A fresh lookup's
+    /// reading is ~0 for anything, so this measures over a real window.
+    #[cfg(unix)]
+    fn calmed_down(&self) -> bool;
+}
+
+impl Steps for Process {
+    fn is_running(&self) -> bool {
+        Process::is_running(self)
+    }
+
+    fn pause(&self, secs: u64) {
+        std::thread::sleep(Duration::from_secs(secs));
+    }
+
+    fn terminate(&self) -> Result<()> {
+        Process::terminate(self)
+    }
+
+    fn kill(&self) -> Result<()> {
+        Process::kill(self)
+    }
+
+    // Signals go through Process, which checks the PID wasn't reused meanwhile
+    #[cfg(unix)]
+    fn wake(&self) {
+        let _ = self.send_signal(Signal::SIGCONT);
+    }
+
+    #[cfg(unix)]
+    fn interrupt(&self) -> Result<()> {
+        self.send_signal(Signal::SIGINT)
+    }
+
+    #[cfg(unix)]
+    fn calmed_down(&self) -> bool {
+        self.cpu_over(Duration::from_secs(1))
+            .is_some_and(|cpu| cpu < 10.0)
+    }
+}
+
+/// The outcome of a SIGKILL (or `taskkill /F`): a failed kill of a process
+/// that is gone anyway still counts as terminated
+fn after_kill(killed: Result<()>, still_running: bool) -> Outcome {
+    match killed {
+        Ok(()) => Outcome::Terminated,
+        Err(_) if !still_running => Outcome::Terminated,
+        Err(e) => Outcome::Failed(e.to_string()),
+    }
+}
+
+/// Unix recovery: SIGCONT, then SIGINT; with `force`, SIGTERM, then SIGKILL
+#[cfg(unix)]
+fn recover(steps: &impl Steps, force: bool) -> Outcome {
+    // Step 1: SIGCONT (wake if stopped); calmed_down measures over a second
+    steps.wake();
+    if steps.calmed_down() {
+        return Outcome::Recovered;
+    }
+
+    // Step 2: SIGINT (interrupt)
+    if steps.interrupt().is_err() && !steps.is_running() {
+        return Outcome::Terminated;
+    }
+    steps.pause(3);
+
+    if !steps.is_running() {
+        return Outcome::Terminated;
+    }
+    if steps.calmed_down() {
+        return Outcome::Recovered;
+    }
+
+    // Without --force, stop here
+    if !force {
+        return Outcome::StillStuck;
+    }
+
+    // Step 3: SIGTERM (polite termination) - only with --force
+    if steps.terminate().is_err() && !steps.is_running() {
+        return Outcome::Terminated;
+    }
+    steps.pause(5);
+
+    if !steps.is_running() {
+        return Outcome::Terminated;
+    }
+
+    // Step 4: SIGKILL (force, last resort) - only with --force
+    after_kill(steps.kill(), steps.is_running())
+}
+
+/// Windows recovery: there is nothing gentle to try, so only `force` acts
+/// (compiled on Unix for the tests only)
+#[cfg(any(not(unix), test))]
+fn recover_by_termination(steps: &impl Steps, force: bool) -> Outcome {
+    if !force {
+        return Outcome::StillStuck;
+    }
+
+    if steps.terminate().is_ok() {
+        steps.pause(3);
+        if !steps.is_running() {
+            return Outcome::Terminated;
+        }
+    }
+
+    after_kill(steps.kill(), steps.is_running())
+}
+
+/// What one process's outcome looks like in the human output
+fn outcome_text(outcome: &Outcome) -> String {
+    match outcome {
+        Outcome::Recovered => "recovered".green().to_string(),
+        Outcome::Terminated => "terminated".yellow().to_string(),
+        Outcome::StillStuck => "still stuck".red().to_string(),
+        Outcome::NotStuck => "not stuck".blue().to_string(),
+        Outcome::Failed(e) => format!("{}: {}", "failed".red(), e),
+    }
+}
+
+/// What one process's outcome is called in the JSON output
+fn outcome_label(outcome: &Outcome) -> String {
+    match outcome {
+        Outcome::Recovered => "recovered".to_string(),
+        Outcome::Terminated => "terminated".to_string(),
+        Outcome::StillStuck => "still_stuck".to_string(),
+        Outcome::NotStuck => "not_stuck".to_string(),
+        Outcome::Failed(e) => format!("failed: {}", e),
+    }
+}
+
+/// The summary after the outcomes: one line for each kind that occurred
+fn summary_lines(
+    recovered: usize,
+    not_stuck: usize,
+    terminated: usize,
+    still_stuck: usize,
+    failed: usize,
+) -> Vec<String> {
+    let mut lines = Vec::new();
+    if recovered > 0 {
+        lines.push(format!(
+            "{} {} process{} recovered",
+            "✓".green().bold(),
+            recovered.to_string().cyan().bold(),
+            plural(recovered)
+        ));
+    }
+    if not_stuck > 0 {
+        lines.push(format!(
+            "{} {} process{} not stuck",
+            "ℹ".blue().bold(),
+            not_stuck.to_string().cyan().bold(),
+            if not_stuck == 1 { " was" } else { "es were" }
+        ));
+    }
+    if terminated > 0 {
+        lines.push(format!(
+            "{} {} process{} terminated",
+            "!".yellow().bold(),
+            terminated.to_string().cyan().bold(),
+            plural(terminated)
+        ));
+    }
+    if still_stuck > 0 {
+        lines.push(format!(
+            "{} {} process{} still stuck (use --force to terminate)",
+            "✗".red().bold(),
+            still_stuck.to_string().cyan().bold(),
+            plural(still_stuck)
+        ));
+    }
+    if failed > 0 {
+        lines.push(format!(
+            "{} {} process{} failed",
+            "✗".red().bold(),
+            failed.to_string().cyan().bold(),
+            plural(failed)
+        ));
+    }
+    lines
+}
+
 #[derive(Serialize)]
 struct UnstickOutput {
     action: &'static str,
@@ -506,4 +577,297 @@ struct ProcessOutcome {
     #[serde(skip_serializing_if = "Option::is_none")]
     uptime_secs: Option<u64>,
     outcome: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::RefCell;
+    use std::collections::VecDeque;
+
+    /// A process that answers from a script, and remembers what was done to it
+    #[derive(Default)]
+    struct Fake {
+        /// Answers to `is_running`, in order; the last one repeats
+        running: RefCell<VecDeque<bool>>,
+        /// Answers to `calmed_down`, in order; `false` once they run out
+        #[cfg(unix)]
+        calm: RefCell<VecDeque<bool>>,
+        #[cfg(unix)]
+        interrupt_fails: bool,
+        terminate_fails: bool,
+        kill_fails: bool,
+        calls: RefCell<Vec<String>>,
+    }
+
+    impl Fake {
+        fn running(answers: &[bool]) -> Self {
+            Fake {
+                running: RefCell::new(answers.iter().copied().collect()),
+                ..Fake::default()
+            }
+        }
+
+        fn calls(&self) -> Vec<String> {
+            self.calls.borrow().clone()
+        }
+
+        fn note(&self, what: &str) {
+            self.calls.borrow_mut().push(what.to_string());
+        }
+
+        fn result(&self, fails: bool) -> Result<()> {
+            if fails {
+                Err(ProcError::SignalError("denied".to_string()))
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    impl Steps for Fake {
+        fn is_running(&self) -> bool {
+            let mut answers = self.running.borrow_mut();
+            if answers.len() > 1 {
+                answers.pop_front().unwrap()
+            } else {
+                answers.front().copied().unwrap_or(true)
+            }
+        }
+
+        fn pause(&self, secs: u64) {
+            self.note(&format!("pause {secs}"));
+        }
+
+        fn terminate(&self) -> Result<()> {
+            self.note("terminate");
+            self.result(self.terminate_fails)
+        }
+
+        fn kill(&self) -> Result<()> {
+            self.note("kill");
+            self.result(self.kill_fails)
+        }
+
+        #[cfg(unix)]
+        fn wake(&self) {
+            self.note("wake");
+        }
+
+        #[cfg(unix)]
+        fn interrupt(&self) -> Result<()> {
+            self.note("interrupt");
+            self.result(self.interrupt_fails)
+        }
+
+        #[cfg(unix)]
+        fn calmed_down(&self) -> bool {
+            self.note("calmed_down");
+            self.calm.borrow_mut().pop_front().unwrap_or(false)
+        }
+    }
+
+    /// Text without colour codes, whether or not colour is on
+    fn plain(text: &str) -> String {
+        let mut out = String::new();
+        let mut chars = text.chars();
+        while let Some(c) = chars.next() {
+            if c == '\x1b' {
+                for c in chars.by_ref() {
+                    if c == 'm' {
+                        break;
+                    }
+                }
+            } else {
+                out.push(c);
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn colour_codes_are_stripped_from_text() {
+        assert_eq!(plain("\x1b[1;31mred\x1b[0m and plain"), "red and plain");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_process_that_calms_after_sigcont_is_recovered_without_a_signal() {
+        let fake = Fake {
+            calm: RefCell::new([true].into()),
+            ..Fake::running(&[true])
+        };
+        assert_eq!(recover(&fake, true), Outcome::Recovered);
+        assert_eq!(fake.calls(), ["wake", "calmed_down"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_process_gone_after_a_failed_sigint_is_terminated() {
+        let fake = Fake {
+            interrupt_fails: true,
+            ..Fake::running(&[false])
+        };
+        assert_eq!(recover(&fake, false), Outcome::Terminated);
+        assert_eq!(fake.calls(), ["wake", "calmed_down", "interrupt"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_process_that_exits_after_sigint_is_terminated() {
+        let fake = Fake::running(&[false]);
+        assert_eq!(recover(&fake, false), Outcome::Terminated);
+        assert_eq!(
+            fake.calls(),
+            ["wake", "calmed_down", "interrupt", "pause 3"]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_process_that_calms_after_sigint_is_recovered() {
+        let fake = Fake {
+            calm: RefCell::new([false, true].into()),
+            ..Fake::running(&[true])
+        };
+        assert_eq!(recover(&fake, false), Outcome::Recovered);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn without_force_a_process_that_stays_busy_is_still_stuck() {
+        let fake = Fake::running(&[true]);
+        assert_eq!(recover(&fake, false), Outcome::StillStuck);
+        assert!(!fake.calls().contains(&"terminate".to_string()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn force_escalates_from_sigterm_to_sigkill() {
+        let fake = Fake::running(&[true]);
+        assert_eq!(recover(&fake, true), Outcome::Terminated);
+        assert_eq!(&fake.calls()[5..], ["terminate", "pause 5", "kill"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn force_stops_at_sigterm_when_that_ends_the_process() {
+        // running after SIGINT's wait, gone after SIGTERM's
+        let fake = Fake::running(&[true, false]);
+        assert_eq!(recover(&fake, true), Outcome::Terminated);
+        assert!(!fake.calls().contains(&"kill".to_string()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn force_with_a_failed_sigterm_on_a_gone_process_is_terminated() {
+        let fake = Fake {
+            terminate_fails: true,
+            ..Fake::running(&[true, false])
+        };
+        assert_eq!(recover(&fake, true), Outcome::Terminated);
+        assert!(!fake.calls().contains(&"pause 5".to_string()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_kill_that_fails_on_a_process_still_running_is_failed() {
+        let fake = Fake {
+            kill_fails: true,
+            ..Fake::running(&[true])
+        };
+        assert_eq!(
+            recover(&fake, true),
+            Outcome::Failed("Signal failed: denied".to_string())
+        );
+    }
+
+    #[test]
+    fn a_kill_that_fails_on_a_process_already_gone_is_terminated() {
+        assert_eq!(
+            after_kill(Err(ProcError::ProcessNotFound("1".into())), false),
+            Outcome::Terminated
+        );
+        assert_eq!(after_kill(Ok(()), true), Outcome::Terminated);
+    }
+
+    #[test]
+    fn termination_only_recovery_does_nothing_without_force() {
+        let fake = Fake::running(&[true]);
+        assert_eq!(recover_by_termination(&fake, false), Outcome::StillStuck);
+        assert!(fake.calls().is_empty());
+    }
+
+    #[test]
+    fn termination_only_recovery_with_force_stops_when_the_request_works() {
+        let fake = Fake::running(&[false]);
+        assert_eq!(recover_by_termination(&fake, true), Outcome::Terminated);
+        assert_eq!(fake.calls(), ["terminate", "pause 3"]);
+    }
+
+    #[test]
+    fn termination_only_recovery_kills_what_ignores_the_request() {
+        let fake = Fake::running(&[true]);
+        assert_eq!(recover_by_termination(&fake, true), Outcome::Terminated);
+        assert_eq!(fake.calls(), ["terminate", "pause 3", "kill"]);
+
+        let fake = Fake {
+            terminate_fails: true,
+            ..Fake::running(&[true])
+        };
+        assert_eq!(recover_by_termination(&fake, true), Outcome::Terminated);
+        assert_eq!(fake.calls(), ["terminate", "kill"]);
+
+        let fake = Fake {
+            kill_fails: true,
+            ..Fake::running(&[true])
+        };
+        assert_eq!(
+            recover_by_termination(&fake, true),
+            Outcome::Failed("Signal failed: denied".to_string())
+        );
+    }
+
+    #[test]
+    fn each_outcome_has_its_words_in_text_and_json() {
+        let cases = [
+            (Outcome::Recovered, "recovered", "recovered"),
+            (Outcome::Terminated, "terminated", "terminated"),
+            (Outcome::StillStuck, "still stuck", "still_stuck"),
+            (Outcome::NotStuck, "not stuck", "not_stuck"),
+            (
+                Outcome::Failed("denied".to_string()),
+                "failed: denied",
+                "failed: denied",
+            ),
+        ];
+        for (outcome, text, label) in cases {
+            assert_eq!(plain(&outcome_text(&outcome)), text);
+            assert_eq!(outcome_label(&outcome), label);
+        }
+    }
+
+    #[test]
+    fn the_summary_has_a_line_for_each_kind_that_occurred() {
+        let all: Vec<String> = summary_lines(2, 1, 3, 1, 2)
+            .iter()
+            .map(|l| plain(l))
+            .collect();
+        assert_eq!(
+            all,
+            [
+                "✓ 2 processes recovered",
+                "ℹ 1 process was not stuck",
+                "! 3 processes terminated",
+                "✗ 1 process still stuck (use --force to terminate)",
+                "✗ 2 processes failed",
+            ]
+        );
+        let some: Vec<String> = summary_lines(0, 2, 0, 0, 1)
+            .iter()
+            .map(|l| plain(l))
+            .collect();
+        assert_eq!(some, ["ℹ 2 processes were not stuck", "✗ 1 process failed"]);
+        assert!(summary_lines(0, 0, 0, 0, 0).is_empty());
+    }
 }

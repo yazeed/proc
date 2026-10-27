@@ -8,7 +8,9 @@
 //!   proc freeze node --dry-run    # Show what would be frozen
 
 #[cfg(unix)]
-use crate::core::{apply_filters, parse_targets, resolve_targets_excluding_self, Process};
+use crate::core::{
+    apply_filters, apply_to_each, parse_targets, resolve_targets_excluding_self, Process,
+};
 use crate::error::{ProcError, Result};
 #[cfg(unix)]
 use crate::ui::Printer;
@@ -84,15 +86,8 @@ impl FreezeCommand {
             return Ok(());
         }
 
-        let mut succeeded = Vec::new();
-        let mut failed = Vec::new();
-
-        for proc in &processes {
-            match proc.send_signal(Signal::SIGSTOP) {
-                Ok(()) => succeeded.push(proc.clone()),
-                Err(e) => failed.push((proc.clone(), e.to_string())),
-            }
-        }
+        let (succeeded, failed) =
+            apply_to_each(&processes, |proc| proc.send_signal(Signal::SIGSTOP));
 
         printer.print_action_result("freeze", &succeeded, &failed)
     }
