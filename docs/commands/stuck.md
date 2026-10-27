@@ -13,11 +13,13 @@ proc stuck --kill          # find and kill them
 proc stuck --by node       # only stuck node processes
 ```
 
+A process counts as stuck when it has been running longer than `--timeout` and, in two readings a second apart, is either using more than half a CPU core or blocked in uninterruptible sleep (waiting on the kernel, usually for I/O, where it can't even be interrupted). One busy moment isn't enough. A long build at full CPU looks the same as a loop that never ends, so check the list before using `--kill`.
+
 ## Options
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--timeout <secs>` | `-t` | Only processes running longer than this, and over 50% CPU (default: 300) |
+| `--timeout <secs>` | `-t` | Only processes running longer than this (default: 300) |
 | `--kill` | `-k` | Kill found stuck processes |
 | `--dry-run` | | Show what would be killed |
 | `--yes` | `-y` | Skip confirmation when killing |

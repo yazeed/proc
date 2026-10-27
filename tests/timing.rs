@@ -108,3 +108,21 @@ fn stop_waits_for_all_processes_together_and_never_hangs() {
         "took {took:.1}s for two processes with --timeout 3"
     );
 }
+
+#[test]
+fn unstick_sees_a_spinning_process_as_stuck() {
+    // CPU used to be read over a few milliseconds, which reads about 0% for
+    // anything, so a targeted unstick called every process "not stuck". A
+    // shell busy loop is stuck by any measure, and SIGINT (step 2) ends it.
+    let spinning = TestChild(
+        StdCommand::new("sh")
+            .args(["-c", "while :; do :; done"])
+            .spawn()
+            .unwrap(),
+    );
+    std::thread::sleep(Duration::from_millis(300));
+    let (json, code, took) = run_json_timed(&["unstick", &spinning.pid(), "--yes", "--json"], 30);
+    assert_eq!(code, Some(0), "after {took:.1}s: {json}");
+    assert_eq!(json["not_stuck"], 0, "{json}");
+    assert_eq!(json["terminated"], 1, "{json}");
+}

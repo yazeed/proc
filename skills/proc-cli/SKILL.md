@@ -78,7 +78,7 @@ proc why :3000 --json             # trace ancestry — why is this port busy?
 proc tree node --json             # descendants of node processes
 proc tree 1234 --ancestors --json # path from the top ancestor down to PID 1234
 proc orphans --in . --json        # processes whose parent died (reparented to PID 1)
-proc stuck --json                 # processes >50% CPU running longer than --timeout (default 300s)
+proc stuck --json                 # running > --timeout (300s) and >50% CPU or blocked, in 2 readings 1s apart
 ```
 
 To inspect a process, use `proc info` (aliases: `inspect`, `i`; JSON `action` is always `"info"`). For each target it reports the name, PID, command line, executable path, working directory, user, parent PID, status, CPU, memory, start time and uptime. `list`, `by` and `in` return the same process fields for many processes at once.
@@ -141,7 +141,7 @@ proc list 'headless,ms-playwright,puppeteer' --json   # headless browsers
 ```bash
 proc list --sort cpu --limit 10 --json
 proc list --min-mem 1000 --sort mem --json   # over 1 GB
-proc stuck --json                             # >50% CPU now, running > 5 min
+proc stuck --json                             # busy or blocked for 2 s, running > 5 min
 ```
 
 Report what you find with each process's `cwd`, `uptime_secs` and `parent_pid`, and let the user decide what to stop.

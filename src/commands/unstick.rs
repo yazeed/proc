@@ -35,7 +35,7 @@ pub struct UnstickCommand {
     #[arg(value_parser = crate::core::validate_target_arg)]
     target: Option<String>,
 
-    /// Without a target: only processes running longer than this many seconds (and over 50% CPU)
+    /// Without a target: only stuck processes running longer than this many seconds
     #[arg(long, short, default_value = "300")]
     timeout: u64,
 
@@ -341,9 +341,11 @@ impl UnstickCommand {
         }
     }
 
-    /// Check if a process appears stuck (high CPU)
+    /// Check if a process looks stuck, the way `proc stuck` measures it (two
+    /// readings a second apart). The `cpu_percent` of a fresh lookup is read over
+    /// a few milliseconds and is ~0 for any process, so it can't be used here.
     fn is_stuck(&self, proc: &Process) -> bool {
-        proc.cpu_percent > 50.0
+        proc.looks_stuck_now()
     }
 
     /// Attempt to unstick a process using recovery signals
@@ -355,9 +357,8 @@ impl UnstickCommand {
         }
 
         // Signals go through Process, which checks the PID wasn't reused meanwhile
-        // Step 1: SIGCONT (wake if stopped)
+        // Step 1: SIGCONT (wake if stopped); check_recovered measures over a second
         let _ = proc.send_signal(Signal::SIGCONT);
-        std::thread::sleep(Duration::from_secs(1));
 
         if self.check_recovered(proc) {
             return Outcome::Recovered;
@@ -432,11 +433,10 @@ impl UnstickCommand {
     /// Check if process has recovered (no longer stuck)
     #[cfg(unix)]
     fn check_recovered(&self, proc: &Process) -> bool {
-        if let Ok(Some(current)) = Process::find_by_pid(proc.pid) {
-            current.cpu_percent < 10.0
-        } else {
-            false
-        }
+        // CPU over a full second; a fresh lookup's reading is ~0 for anything,
+        // so this used to report every process as recovered
+        proc.cpu_over(Duration::from_secs(1))
+            .is_some_and(|cpu| cpu < 10.0)
     }
 
     fn show_processes(&self, processes: &[Process]) {

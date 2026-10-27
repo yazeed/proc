@@ -19,7 +19,7 @@ proc unstick --force       # terminate if recovery fails
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--timeout <secs>` | `-t` | Without a target: only processes running longer than this, and over 50% CPU (default: 300) |
+| `--timeout <secs>` | `-t` | Without a target: only stuck processes running longer than this (default: 300) |
 | `--force` | `-f` | Terminate if recovery fails |
 | `--yes` | `-y` | Skip confirmation |
 | `--dry-run` | | Show what would be done |

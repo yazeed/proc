@@ -1,10 +1,12 @@
 //! `proc stuck` - Find stuck/hung processes
 //!
-//! A process counts as stuck when it has been running longer than --timeout and
-//! is using more than 50% CPU, measured over half a second.
+//! A process counts as stuck when it has been running longer than --timeout and,
+//! in two readings a second apart, is using more than 50% CPU or is blocked in
+//! uninterruptible sleep. A long build at full CPU looks the same as a loop
+//! that never ends, so check the list before --kill.
 //!
 //! Examples:
-//!   proc stuck              # Running over 5 minutes and using >50% CPU now
+//!   proc stuck              # Running over 5 minutes, and busy or blocked for 2 seconds
 //!   proc stuck --timeout 60 # The same, for processes running over 1 minute
 //!   proc stuck --kill       # Find and kill stuck processes
 
@@ -18,7 +20,7 @@ use std::time::Duration;
 /// Find stuck/hung processes
 #[derive(Args, Debug)]
 pub struct StuckCommand {
-    /// Only processes running longer than this many seconds (and over 50% CPU)
+    /// Only processes running longer than this many seconds (stuck: over 50% CPU or blocked, for 2 seconds)
     #[arg(long, short = 't', default_value = "300")]
     pub timeout: u64,
 

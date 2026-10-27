@@ -205,7 +205,7 @@ Filters can be combined with discovery and lifecycle commands:
 | `--ancestors/-a` | Show ancestry path to root (`tree`) |
 | `--depth/-d <n>` | Maximum tree depth (default: 10) |
 | `--compact/-C` | Show PIDs only in compact view (`tree`) |
-| `--timeout/-t <s>` | `stuck`, `unstick`: only processes running longer than this, and over 50% CPU (default: 300) |
+| `--timeout/-t <s>` | `stuck`, `unstick`: only processes running longer than this (default: 300); stuck means busy or blocked for 2 seconds |
 
 ### Options
 

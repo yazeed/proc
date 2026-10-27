@@ -20,6 +20,17 @@ fn user_name(uid: &Uid) -> String {
         .unwrap_or_else(|| uid.to_string())
 }
 
+/// `stuck` and `unstick` take this many readings, this far apart, and a process
+/// must look stuck in every one
+const STUCK_READINGS: usize = 2;
+const STUCK_READING_GAP: Duration = Duration::from_secs(1);
+
+/// Stuck in one reading: busy (over half a core), or in uninterruptible sleep,
+/// blocked in the kernel (usually on I/O) where it can't even be interrupted
+fn looks_stuck(p: &sysinfo::Process) -> bool {
+    p.cpu_usage() > 50.0 || p.status() == SysProcessStatus::UninterruptibleDiskSleep
+}
+
 /// macOS: sysinfo drops zombies, because they have no executable path or arguments
 /// left to read, so `proc list --status zombie` could never find one. Read every
 /// process from the kernel, as `ps` does, and keep the zombies sysinfo didn't return.
@@ -347,38 +358,66 @@ impl Process {
         Ok(vec![])
     }
 
-    /// Find processes that appear to be stuck (high CPU, no progress)
-    /// This is a heuristic-based detection
+    /// Find processes that look stuck: running longer than `timeout`, and in each
+    /// of two readings a second apart either using over half a core or blocked in
+    /// uninterruptible sleep. One reading
+    /// used to be enough, so a momentary spike counted. A long build at full CPU
+    /// still looks the same as a loop that never ends; only the user can tell.
     pub fn find_stuck(timeout: Duration) -> Result<Vec<Process>> {
-        let mut sys = System::new_all();
-        sys.refresh_all();
-
-        // Wait a bit and refresh to compare
-        std::thread::sleep(Duration::from_millis(500));
-        sys.refresh_all();
-
         let timeout_secs = timeout.as_secs();
-        let processes: Vec<Process> = sys
+        let mut sys = System::new_all();
+        let mut stuck: Option<std::collections::HashSet<Pid>> = None;
+
+        for _ in 0..STUCK_READINGS {
+            std::thread::sleep(STUCK_READING_GAP);
+            sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+            let now: std::collections::HashSet<Pid> = sys
+                .processes()
+                .iter()
+                .filter(|(_, p)| !is_thread(p) && p.run_time() > timeout_secs && looks_stuck(p))
+                .map(|(pid, _)| *pid)
+                .collect();
+            stuck = Some(match stuck {
+                None => now,
+                Some(before) => before.intersection(&now).copied().collect(),
+            });
+        }
+
+        let stuck = stuck.unwrap_or_default();
+        Ok(sys
             .processes()
             .iter()
-            .filter_map(|(pid, proc)| {
-                if is_thread(proc) {
-                    return None;
-                }
-                let cpu = proc.cpu_usage();
-                let run_time = proc.run_time();
+            .filter(|(pid, _)| stuck.contains(pid))
+            .map(|(pid, p)| Process::from_sysinfo(*pid, p))
+            .collect())
+    }
 
-                // Heuristic: Process using significant CPU for longer than timeout
-                // and in a potentially stuck state
-                if run_time > timeout_secs && cpu > 50.0 {
-                    Some(Process::from_sysinfo(*pid, proc))
-                } else {
-                    None
-                }
-            })
-            .collect();
+    /// Whether this process looks stuck now, measured the way `find_stuck` does
+    /// (stuck in two readings a second apart), for a process named as a target.
+    pub fn looks_stuck_now(&self) -> bool {
+        let pid = Pid::from_u32(self.pid);
+        let mut sys = System::new();
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+        (0..STUCK_READINGS).all(|_| {
+            std::thread::sleep(STUCK_READING_GAP);
+            sys.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+            sys.process(pid)
+                .is_some_and(|p| self.is_same(p) && looks_stuck(p))
+        })
+    }
 
-        Ok(processes)
+    /// CPU use over `window` (at least sysinfo's minimum), in percent of one core;
+    /// None if the process is gone. A reading over a few milliseconds is ~0 for
+    /// any process, so a real window is needed.
+    pub fn cpu_over(&self, window: Duration) -> Option<f32> {
+        let pid = Pid::from_u32(self.pid);
+        let mut sys = System::new();
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+        std::thread::sleep(window.max(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL));
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+        sys.process(pid)
+            .filter(|p| self.is_same(p))
+            .map(|p| p.cpu_usage())
     }
 
     /// Force kill the process (SIGKILL on Unix, taskkill /F on Windows)
@@ -661,6 +700,33 @@ mod tests {
             me.start_time = Some(start - 3600);
             assert!(!me.is_running(), "a reused PID counted as the same process");
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_looks_stuck_needs_sustained_cpu() {
+        let spawn = |script: &str| {
+            std::process::Command::new("sh")
+                .args(["-c", script])
+                .spawn()
+                .unwrap()
+        };
+        let mut spinning = spawn("while :; do :; done");
+        let mut idle = spawn("exec sleep 300");
+        std::thread::sleep(Duration::from_millis(300));
+        let record = |pid: u32| Process::find_by_pid(pid).unwrap().unwrap();
+
+        let spinning_stuck = record(spinning.id()).looks_stuck_now();
+        let idle_stuck = record(idle.id()).looks_stuck_now();
+        for child in [&mut spinning, &mut idle] {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        assert!(
+            spinning_stuck,
+            "a process spinning at 100% CPU wasn't stuck"
+        );
+        assert!(!idle_stuck, "an idle process counted as stuck");
     }
 
     #[cfg(unix)]
