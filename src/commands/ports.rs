@@ -2,12 +2,13 @@
 //!
 //! Examples:
 //!   proc ports              # Show all listening ports
-//!   proc ports --by node     # Filter by process name
+//!   proc ports --by node     # Only ports of the processes named node
+//!   proc ports --by node --cmd  # ... or with node anywhere in their command line
 //!   proc ports --exposed    # Only network-accessible ports (0.0.0.0)
 //!   proc ports --local      # Only localhost ports (127.0.0.1)
 //!   proc ports -v           # Show with executable paths
 
-use crate::core::{resolve_in_dir, PortInfo, PortSortKey, Process};
+use crate::core::{matches_name, resolve_in_dir, NameMatch, Names, PortInfo, PortSortKey, Process};
 use crate::error::Result;
 use crate::ui::{truncate_string, Printer};
 use clap::Args;
@@ -21,6 +22,23 @@ use std::path::Path;
 fn cwd_within(proc: Option<&Process>, dir: &Path) -> bool {
     proc.and_then(|p| p.cwd.as_deref())
         .is_some_and(|cwd| crate::core::filters::cwd_within(cwd, dir))
+}
+
+/// Whether the process behind a port matches `--by`, the way it does in every
+/// other command. A process that ended since its port was listed is known only
+/// by the name the port was listed with.
+fn port_named(port: &PortInfo, process: Option<&Process>, pattern: &str, mode: NameMatch) -> bool {
+    match process {
+        Some(process) => matches_name(pattern, &process.names(), mode),
+        None => matches_name(
+            pattern,
+            &Names {
+                name: &port.process_name,
+                ..Names::default()
+            },
+            mode,
+        ),
+    }
 }
 
 /// An inclusive port range, START-END, such as 8000-9000
@@ -46,6 +64,10 @@ pub struct PortsCommand {
     /// Filter by process name
     #[arg(long = "by", short = 'b')]
     pub by_name: Option<String>,
+
+    /// Match --by as a substring of the process name or full command line (like pkill -f)
+    #[arg(long)]
+    pub cmd: bool,
 
     /// Filter by directory; takes the next word as the directory unless it starts with '-'
     /// (bare --in is the current directory, --in=DIR is explicit)
@@ -88,8 +110,12 @@ impl PortsCommand {
 
         // Filter by process name if specified
         if let Some(ref name) = self.by_name {
-            let name_lower = name.to_lowercase();
-            ports.retain(|p| p.process_name.to_lowercase().contains(&name_lower));
+            let mode = NameMatch::from_flag(self.cmd);
+            let running: HashMap<u32, Process> = Process::find_all()?
+                .into_iter()
+                .map(|p| (p.pid, p))
+                .collect();
+            ports.retain(|p| port_named(p, running.get(&p.pid), name, mode));
         }
 
         // Filter by directory if specified
@@ -269,6 +295,7 @@ mod tests {
             exe_path: exe_path.map(String::from),
             cwd: cwd.map(String::from),
             command: None,
+            argv0: None,
             cpu_percent: 0.0,
             memory_mb: 0.0,
             status: ProcessStatus::Sleeping,
@@ -277,6 +304,45 @@ mod tests {
             start_time: None,
             uptime_secs: None,
         }
+    }
+
+    fn listed(name: &str) -> PortInfo {
+        PortInfo {
+            port: 4000,
+            protocol: Protocol::Tcp,
+            pid: 1,
+            process_name: name.to_string(),
+            address: None,
+        }
+    }
+
+    #[test]
+    fn a_port_is_named_by_its_process_else_by_the_name_it_was_listed_with() {
+        let mut node = process(None, Some("/opt/tools/serve"));
+        node.name = "node".to_string();
+        node.command = Some("node app.js --engine deno".to_string());
+        let port = listed("stale-name");
+
+        // the process wins: its name, its executable, not the listing's name
+        assert!(port_named(&port, Some(&node), "NODE", NameMatch::Exact));
+        assert!(port_named(&port, Some(&node), "serve", NameMatch::Exact));
+        assert!(!port_named(
+            &port,
+            Some(&node),
+            "stale-name",
+            NameMatch::Exact
+        ));
+        // part of the name, or the command line, only with --cmd
+        assert!(!port_named(&port, Some(&node), "nod", NameMatch::Exact));
+        assert!(!port_named(&port, Some(&node), "deno", NameMatch::Exact));
+        assert!(port_named(&port, Some(&node), "nod", NameMatch::Command));
+        assert!(port_named(&port, Some(&node), "deno", NameMatch::Command));
+
+        // the process ended since the port was listed: only the listed name is left
+        assert!(port_named(&port, None, "Stale-Name", NameMatch::Exact));
+        assert!(!port_named(&port, None, "stale", NameMatch::Exact));
+        assert!(port_named(&port, None, "stale", NameMatch::Command));
+        assert!(!port_named(&port, None, "node", NameMatch::Command));
     }
 
     #[test]
@@ -295,6 +361,7 @@ mod tests {
         colored::control::set_override(false);
         let cmd = PortsCommand {
             by_name: None,
+            cmd: false,
             in_dir: None,
             exposed: false,
             local: false,
@@ -342,6 +409,7 @@ mod tests {
         colored::control::set_override(false);
         let cmd = PortsCommand {
             by_name: None,
+            cmd: false,
             in_dir: None,
             exposed: false,
             local: false,
@@ -363,6 +431,7 @@ mod tests {
     fn a_failed_write_ends_the_listing() {
         let cmd = PortsCommand {
             by_name: None,
+            cmd: false,
             in_dir: None,
             exposed: false,
             local: false,

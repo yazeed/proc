@@ -1,7 +1,8 @@
 //! `proc thaw` - Resume frozen processes with SIGCONT
 //!
 //! Examples:
-//!   proc thaw node              # Resume all frozen node processes
+//!   proc thaw node              # Resume the frozen processes named node
+//!   proc thaw node --cmd        # ... or with node anywhere in their command line
 //!   proc thaw :3000             # Resume process on port 3000
 //!   proc thaw :3000 :8080       # Resume several targets: separate arguments
 //!   proc thaw node --yes        # Skip confirmation
@@ -10,7 +11,8 @@
 
 #[cfg(unix)]
 use crate::core::{
-    apply_filters, apply_to_each, flatten_targets, resolve_targets_excluding_self, Process,
+    apply_filters, apply_to_each, flatten_targets, resolve_targets_excluding_self, NameMatch,
+    Process,
 };
 use crate::error::{ProcError, Result};
 #[cfg(unix)]
@@ -48,6 +50,10 @@ pub struct ThawCommand {
     /// Filter by process name
     #[arg(long = "by", short = 'b')]
     pub by_name: Option<String>,
+
+    /// Match name targets and --by as a substring of the process name or full command line (like pkill -f)
+    #[arg(long)]
+    pub cmd: bool,
 }
 
 impl ThawCommand {
@@ -59,14 +65,16 @@ impl ThawCommand {
         let printer = Printer::from_flags(self.json, self.verbose);
 
         let targets = flatten_targets(&self.target);
-        let (mut processes, not_found) = resolve_targets_excluding_self(&targets);
+        let mode = NameMatch::from_flag(self.cmd);
+        let resolved = resolve_targets_excluding_self(&targets, mode);
 
-        if !not_found.is_empty() {
-            printer.warning(&format!("Not found: {}", not_found.join(", ")));
+        if let Some(warning) = resolved.warning() {
+            printer.warning(&warning);
         }
+        let mut processes = resolved.processes;
 
         // Apply --in and --by filters
-        apply_filters(&mut processes, &self.in_dir, &self.by_name);
+        apply_filters(&mut processes, &self.in_dir, &self.by_name, mode);
 
         // Real CPU readings whenever the list is shown or returned (dry run, the
         // confirmation prompt, or the error for a missing `--yes`); only `--yes`

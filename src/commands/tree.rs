@@ -2,15 +2,16 @@
 //!
 //! Usage:
 //!   proc tree              # Full process tree
-//!   proc tree node         # Tree for node processes
+//!   proc tree node         # Tree for the processes named node
+//!   proc tree node --cmd   # ... or with node anywhere in their command line
 //!   proc tree :3000        # Tree for process on port 3000
 //!   proc tree 1234         # Tree for PID 1234
 //!   proc tree --min-cpu 10 # Only processes using >10% CPU
 //!   proc tree 1234 -a      # Show ancestry (path UP to root)
 
 use crate::core::{
-    matches_by_filter, matches_in_filter, parse_target, resolve_in_dir, resolve_target, Process,
-    ProcessStatus, StatusFilter, TargetType,
+    classify, matches_by_filter, matches_in_filter, parse_target, resolve_in_dir, resolve_target,
+    Hit, NameMatch, Process, ProcessStatus, StatusFilter, TargetType,
 };
 use crate::error::Result;
 use crate::ui::{format_memory, plural, uptime_label, Printer};
@@ -70,6 +71,10 @@ pub struct TreeCommand {
     /// Filter by process name
     #[arg(long = "by", short = 'b')]
     pub by_name: Option<String>,
+
+    /// Match name targets and --by as a substring of the process name or full command line (like pkill -f)
+    #[arg(long)]
+    pub cmd: bool,
 }
 
 impl TreeCommand {
@@ -97,6 +102,30 @@ impl TreeCommand {
         pids
     }
 
+    /// The processes a name matches, leaving out `ancestors` (proc and the shells
+    /// above it), and how many others have the name only in their command line
+    /// (what `--cmd` would add): both come from the one pass over `all`.
+    fn named<'a>(
+        all: impl Iterator<Item = &'a Process>,
+        ancestors: &std::collections::HashSet<u32>,
+        pattern: &str,
+        mode: NameMatch,
+    ) -> (Vec<&'a Process>, usize) {
+        let mut others = 0;
+        let named = all
+            .filter(|p| !ancestors.contains(&p.pid))
+            .filter(|p| match classify(pattern, &p.names(), mode) {
+                Hit::Match => true,
+                Hit::CommandLineOnly => {
+                    others += 1;
+                    false
+                }
+                Hit::No => false,
+            })
+            .collect();
+        (named, others)
+    }
+
     /// Executes the tree command, displaying the process hierarchy.
     pub fn execute(&self) -> Result<()> {
         let printer = Printer::from_flags(self.json, self.verbose);
@@ -122,14 +151,17 @@ impl TreeCommand {
             return self.show_ancestors(&printer, &pid_map);
         }
 
-        // Determine target processes
+        // Determine target processes; `in_command_line` counts the processes a name
+        // is only in the command line of, which `--cmd` would have matched
+        let mode = NameMatch::from_flag(self.cmd);
+        let mut in_command_line = 0;
         let target_processes: Vec<&Process> = if let Some(ref target) = self.target {
             // Use unified target resolution
             match parse_target(target) {
                 TargetType::Port(_) | TargetType::Pid(_) => {
                     // For port or PID, resolve to specific process(es)
                     // Errors (not found) rather than returning nothing
-                    let resolved = resolve_target(target)?;
+                    let resolved = resolve_target(target, mode)?;
                     // Find matching processes in all_processes
                     let pids: Vec<u32> = resolved.iter().map(|p| p.pid).collect();
                     all_processes
@@ -141,12 +173,10 @@ impl TreeCommand {
                     // For name, do pattern matching (exclude self and parent to avoid
                     // false positives from proc's own args in the shell command line)
                     let ancestor_pids = Self::ancestor_pids(&all_processes);
-                    all_processes
-                        .iter()
-                        .filter(|p| {
-                            !ancestor_pids.contains(&p.pid) && matches_by_filter(p, pattern)
-                        })
-                        .collect()
+                    let (named, others) =
+                        Self::named(all_processes.iter(), &ancestor_pids, pattern, mode);
+                    in_command_line = others;
+                    named
                 }
             }
         } else {
@@ -165,7 +195,7 @@ impl TreeCommand {
                         }
                     }
                     if let Some(ref name) = self.by_name {
-                        if !matches_by_filter(p, name) {
+                        if !matches_by_filter(p, name, mode) {
                             return false;
                         }
                     }
@@ -219,10 +249,13 @@ impl TreeCommand {
                 .filter(|p| matches_filters(p))
                 .collect();
             if filtered.is_empty() {
-                printer.warning(&format!(
-                    "No processes found for '{}'",
-                    self.target.as_ref().unwrap()
-                ));
+                let target = self.target.as_ref().unwrap();
+                let mut warning = format!("No processes found for '{target}'");
+                if in_command_line > 0 {
+                    warning.push_str("\n  ");
+                    warning.push_str(&crate::error::command_line_hint(target, in_command_line));
+                }
+                printer.warning(&warning);
                 return Ok(());
             }
 
@@ -396,6 +429,8 @@ impl TreeCommand {
     fn show_ancestors(&self, printer: &Printer, pid_map: &HashMap<u32, &Process>) -> Result<()> {
         use crate::core::{parse_target, resolve_target, TargetType};
 
+        let mode = NameMatch::from_flag(self.cmd);
+        let mut in_command_line = 0;
         let target = match &self.target {
             Some(t) => t,
             None => {
@@ -406,20 +441,24 @@ impl TreeCommand {
 
         // Resolve target to processes
         let target_processes = match parse_target(target) {
-            TargetType::Port(_) | TargetType::Pid(_) => resolve_target(target)?,
+            TargetType::Port(_) | TargetType::Pid(_) => resolve_target(target, mode)?,
             TargetType::Name(ref pattern) => {
                 let all_procs: Vec<Process> = pid_map.values().map(|p| (*p).clone()).collect();
                 let ancestor_pids = Self::ancestor_pids(&all_procs);
-                pid_map
-                    .values()
-                    .filter(|p| !ancestor_pids.contains(&p.pid) && matches_by_filter(p, pattern))
-                    .map(|p| (*p).clone())
-                    .collect()
+                let (named, others) =
+                    Self::named(pid_map.values().copied(), &ancestor_pids, pattern, mode);
+                in_command_line = others;
+                named.into_iter().cloned().collect()
             }
         };
 
         if target_processes.is_empty() {
-            printer.warning(&format!("No process found for '{}'", target));
+            let mut warning = format!("No process found for '{}'", target);
+            if in_command_line > 0 {
+                warning.push_str("\n  ");
+                warning.push_str(&crate::error::command_line_hint(target, in_command_line));
+            }
+            printer.warning(&warning);
             return Ok(());
         }
 
@@ -613,6 +652,7 @@ mod tests {
             min_uptime: None,
             in_dir: None,
             by_name: None,
+            cmd: false,
         }
     }
 
@@ -624,6 +664,7 @@ mod tests {
             exe_path: None,
             cwd: None,
             command: None,
+            argv0: None,
             cpu_percent: 0.0,
             memory_mb: 0.0,
             status: ProcessStatus::Sleeping,
@@ -632,6 +673,31 @@ mod tests {
             start_time: None,
             uptime_secs: None,
         }
+    }
+
+    #[test]
+    fn a_name_matches_whole_and_counts_the_processes_only_cmd_would_add() {
+        let mut node = process(1, None);
+        node.name = "node".to_string();
+        let mut editor = process(2, None);
+        editor.name = "vim".to_string();
+        editor.command = Some("vim node-notes.md".to_string());
+        let mut shell = process(3, None);
+        shell.name = "node".to_string();
+        let all = [node, editor, shell];
+        let skipped: std::collections::HashSet<u32> = [3].into();
+
+        let (named, others) = TreeCommand::named(all.iter(), &skipped, "node", NameMatch::Exact);
+        assert_eq!(named.iter().map(|p| p.pid).collect::<Vec<_>>(), vec![1]);
+        assert_eq!(others, 1);
+
+        let (named, others) = TreeCommand::named(all.iter(), &skipped, "node", NameMatch::Command);
+        assert_eq!(named.iter().map(|p| p.pid).collect::<Vec<_>>(), vec![1, 2]);
+        assert_eq!(others, 0);
+
+        let (named, others) = TreeCommand::named(all.iter(), &skipped, "python", NameMatch::Exact);
+        assert!(named.is_empty());
+        assert_eq!(others, 0);
     }
 
     #[test]

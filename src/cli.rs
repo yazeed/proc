@@ -31,7 +31,7 @@ Run 'proc --help' for examples or visit https://github.com/yazeed/proc-cli"
   Port/Process Lookup:
     proc on :3000                  What's on port 3000?
     proc on :3000 :8080            What's on several ports?
-    proc on node                   What ports are node processes using?
+    proc on node                   What ports are the processes named node using?
 
   Find by File:
     proc for ./script.py           What's running this file?
@@ -39,7 +39,8 @@ Run 'proc --help' for examples or visit https://github.com/yazeed/proc-cli"
     proc for app.log               What has this file open?
 
   Filter by Name:
-    proc by node                   Processes named 'node'
+    proc by node                   Processes named 'node' (the whole name)
+    proc by node --cmd             Anything with 'node' in its name or command line
     proc by node --in .            Node processes in current directory
     proc by node --min-cpu 5       Node processes using >5% CPU
 
@@ -53,20 +54,21 @@ Run 'proc --help' for examples or visit https://github.com/yazeed/proc-cli"
 
   Info/Kill/Stop (multi-target):
     proc info :3000 :8080          Info for several targets
-    proc kill :3000 node           Kill port 3000 and node processes
+    proc kill :3000 node           Kill port 3000 and the processes named node
+    proc kill serve --cmd          Kill processes with 'serve' in their command line
     proc kill 1234 5678 :8080      Kill two PIDs and whatever is on 8080
     proc stop :3000 :8080          Stop several targets gracefully
 
   Watch (Real-Time):
     proc watch                     Watch all processes (alias: proc top)
-    proc watch node                Watch node processes
+    proc watch node                Watch the processes named node
     proc watch :3000               Watch process on port 3000
     proc watch :3000 :8080 node    Watch several targets
     proc watch -n 1 --sort mem     1s refresh, sorted by memory
     proc watch --in . --by node    Node processes in current directory
 
   Freeze/Thaw:
-    proc freeze node               Pause node processes (SIGSTOP)
+    proc freeze node               Pause the processes named node (SIGSTOP)
     proc freeze :3000 --yes        Freeze by port, skip confirm
     proc thaw node                 Resume frozen processes (SIGCONT)
 
@@ -93,6 +95,10 @@ Run 'proc --help' for examples or visit https://github.com/yazeed/proc-cli"
     proc stop nginx --signal HUP   Send custom signal (config reload)
 
 Targets: :port, PID, or process name. Give several as separate arguments.
+A name matches the whole process name, ignoring case, like killall and pkill:
+'node' does not match 'Claude Helper'. Add --cmd to match any part of the name
+or the full command line instead (like pkill -f). proc has no wildcards: an
+unquoted node* is expanded by your shell into several targets, so quote it.
 Comma-separated targets (:3000,:8080) still work but are deprecated and will be
 removed in a future major release.
 --in takes the next word as its directory unless that word starts with '-':

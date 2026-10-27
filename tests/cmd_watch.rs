@@ -39,9 +39,9 @@ fn listener_path() -> PathBuf {
 
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
-/// A process name no process has, for this call alone. Name targets match
-/// command lines too, and the other tests run proc at the same time, so a name
-/// two tests share would match the other test's process.
+/// A process name no process has, for this call alone: the other tests run
+/// proc at the same time, so a name two tests share would match the other
+/// test's process (with `--cmd`, any process whose command line has it).
 fn unique_name() -> String {
     let n = COUNTER.fetch_add(1, Ordering::SeqCst);
     // Ends in `x`, so no name is the start of another (`-1x` in `-10x`)
@@ -52,10 +52,11 @@ fn unique_name() -> String {
 /// just written can be "busy" (ETXTBSY) for an instant: a fork in a parallel
 /// test still holds the write handle until it execs. That clears in
 /// milliseconds, so try again.
-fn spawn_copy(copy: &Path, dir: &Path) -> Child {
+fn spawn_copy(copy: &Path, args: &[&str], dir: &Path) -> Child {
     let mut attempts = 0;
     loop {
         let spawned = std::process::Command::new(copy)
+            .args(args)
             .current_dir(dir)
             .stdout(Stdio::piped())
             .stdin(Stdio::null())
@@ -99,13 +100,23 @@ impl Owned {
     }
 
     fn listener_named(name: &str) -> Self {
+        Self::start_named(name, &[])
+    }
+
+    /// A listener started with extra arguments (it ignores them, so they only
+    /// put words in its command line)
+    fn listener_with_args(args: &[&str]) -> Self {
+        Self::start_named(&unique_name(), args)
+    }
+
+    fn start_named(name: &str, args: &[&str]) -> Self {
         let tmp = tempfile::tempdir().unwrap();
         let raw_dir = tmp.path().to_path_buf();
         let dir = raw_dir.canonicalize().unwrap();
         let dir = PathBuf::from(strip_verbatim_prefix(&dir.to_string_lossy()));
         let file = format!("{name}{}", std::env::consts::EXE_SUFFIX);
         std::fs::copy(listener_path(), raw_dir.join(&file)).expect("copy the listener example");
-        let mut child = spawn_copy(&dir.join(&file), &raw_dir);
+        let mut child = spawn_copy(&dir.join(&file), args, &raw_dir);
         let mut line = String::new();
         let mut stdout = BufReader::new(child.stdout.take().unwrap());
         let read = stdout.read_line(&mut line);
@@ -385,6 +396,31 @@ fn a_port_target_watches_the_process_on_that_port() {
 fn a_name_target_watches_the_processes_with_that_name() {
     let owned = Owned::listener();
     let frame = first_frame(&[&owned.name]);
+    assert_eq!(pids(&frame), [u64::from(owned.pid())], "{frame}");
+}
+
+#[test]
+fn a_name_target_is_the_whole_name_and_cmd_widens_it_to_the_command_line() {
+    let word = unique_name();
+    let owned = Owned::listener_with_args(&[&word]);
+    let part = &owned.name[..owned.name.len() - 1];
+
+    // the name in any case; a part of it, or a word of the command line, is nothing
+    let frame = first_frame(&[&owned.name.to_uppercase()]);
+    assert_eq!(pids(&frame), [u64::from(owned.pid())], "{frame}");
+    assert_eq!(first_frame(&[part])["count"], 0);
+    assert_eq!(first_frame(&[&word])["count"], 0);
+
+    // with --cmd both find it
+    for text in [part, word.as_str()] {
+        let frame = first_frame(&[text, "--cmd"]);
+        assert!(lists(&frame, owned.pid()), "{text}: {frame}");
+    }
+
+    // --by follows the same rule
+    let pid = owned.pid().to_string();
+    assert_eq!(first_frame(&[&pid, "--by", part])["count"], 0);
+    let frame = first_frame(&[&pid, "--by", part, "--cmd"]);
     assert_eq!(pids(&frame), [u64::from(owned.pid())], "{frame}");
 }
 

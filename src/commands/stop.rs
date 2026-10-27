@@ -3,7 +3,8 @@
 //! Usage:
 //!   proc stop 1234              # Stop PID 1234
 //!   proc stop :3000             # Stop process on port 3000
-//!   proc stop node              # Stop all node processes
+//!   proc stop node              # Stop the processes named node
+//!   proc stop node --cmd        # ... or with node anywhere in their command line
 //!   proc stop 1234 5678         # Stop several targets: separate arguments
 //!   proc stop :3000 :8080 node  # Mixed targets (port + port + name)
 //!
@@ -12,7 +13,8 @@
 #[cfg(unix)]
 use crate::core::parse_signal_name;
 use crate::core::{
-    apply_filters, apply_to_each, flatten_targets, resolve_targets_excluding_self, Process,
+    apply_filters, apply_to_each, flatten_targets, resolve_targets_excluding_self, NameMatch,
+    Process,
 };
 use crate::error::{ProcError, Result};
 use crate::ui::Printer;
@@ -54,6 +56,10 @@ pub struct StopCommand {
     #[arg(long = "by", short = 'b')]
     pub by_name: Option<String>,
 
+    /// Match name targets and --by as a substring of the process name or full command line (like pkill -f)
+    #[arg(long)]
+    pub cmd: bool,
+
     /// Initial signal to send instead of SIGTERM (e.g. HUP, USR1, INT)
     #[arg(long, short = 'S')]
     pub signal: Option<String>,
@@ -84,15 +90,17 @@ impl StopCommand {
         // Split each value on commas and resolve to processes
         // Use resolve_targets_excluding_self to avoid stopping ourselves
         let targets = flatten_targets(&self.target);
-        let (mut processes, not_found) = resolve_targets_excluding_self(&targets);
+        let mode = NameMatch::from_flag(self.cmd);
+        let resolved = resolve_targets_excluding_self(&targets, mode);
 
         // Warn about targets that weren't found
-        if !not_found.is_empty() {
-            printer.warning(&format!("Not found: {}", not_found.join(", ")));
+        if let Some(warning) = resolved.warning() {
+            printer.warning(&warning);
         }
+        let mut processes = resolved.processes;
 
         // Apply --in and --by filters
-        apply_filters(&mut processes, &self.in_dir, &self.by_name);
+        apply_filters(&mut processes, &self.in_dir, &self.by_name, mode);
 
         // Real CPU readings whenever the list is shown or returned (dry run, the
         // confirmation prompt, or the error for a missing `--yes`); only `--yes`

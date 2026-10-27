@@ -4,12 +4,13 @@
 //!   proc info 1234              # Info for PID
 //!   proc info :3000             # Info for process on port 3000
 //!   proc info node              # Info for processes named node
+//!   proc info node --cmd        # ... or with node anywhere in their command line
 //!   proc info :3000 :8080       # Info for several targets: separate arguments
 //!   proc info :3000 1234 node   # Mixed targets (port + PID + name)
 //!
 //! Commas still work (`proc info :3000,:8080`) but are deprecated.
 
-use crate::core::{apply_filters, flatten_targets, resolve_target, Process};
+use crate::core::{apply_filters, flatten_targets, resolve_target, NameMatch, Process, Resolved};
 use crate::error::{ExitCode, ProcError, Result};
 use crate::ui::{colorize_status, format_duration, format_memory, Printer};
 use clap::Args;
@@ -40,6 +41,10 @@ pub struct InfoCommand {
     /// Filter by process name
     #[arg(long = "by", short = 'b')]
     pub by_name: Option<String>,
+
+    /// Match name targets and --by as a substring of the process name or full command line (like pkill -f)
+    #[arg(long)]
+    pub cmd: bool,
 }
 
 impl InfoCommand {
@@ -50,10 +55,17 @@ impl InfoCommand {
         // Separate arguments, each of which may still be a comma-separated list
         let all_targets = flatten_targets(&self.targets);
 
-        let (mut found, not_found) = resolve_all(&all_targets, resolve_target);
+        let mode = NameMatch::from_flag(self.cmd);
+        let resolved = resolve_all(&all_targets, |target| resolve_target(target, mode));
+        let warning = resolved.warning();
+        let Resolved {
+            processes: mut found,
+            not_found,
+            ..
+        } = resolved;
 
         // Apply --in and --by filters
-        apply_filters(&mut found, &self.in_dir, &self.by_name);
+        apply_filters(&mut found, &self.in_dir, &self.by_name, mode);
 
         // Real CPU readings for what's shown
         Process::measure_cpu(&mut found);
@@ -72,8 +84,8 @@ impl InfoCommand {
                 self.print_process_info(proc);
             }
 
-            if !not_found.is_empty() {
-                printer.warning(&format!("Not found: {}", not_found.join(", ")));
+            if let Some(warning) = warning {
+                printer.warning(&warning);
             }
         }
 
@@ -176,12 +188,10 @@ fn render_process_info(proc: &Process, verbose: bool, now_secs: u64) -> String {
 
 /// Resolve every target. Returns the processes found, each once however many
 /// targets name it, and the targets that matched nothing.
-fn resolve_all(
-    targets: &[String],
-    resolve: impl Fn(&str) -> Result<Vec<Process>>,
-) -> (Vec<Process>, Vec<String>) {
+fn resolve_all(targets: &[String], resolve: impl Fn(&str) -> Result<Vec<Process>>) -> Resolved {
     let mut found = Vec::new();
     let mut not_found = Vec::new();
+    let mut hints = Vec::new();
     let mut seen_pids = std::collections::HashSet::new();
 
     for target in targets {
@@ -198,11 +208,18 @@ fn resolve_all(
                     }
                 }
             }
-            Err(_) => not_found.push(target.clone()),
+            Err(error) => {
+                not_found.push(target.clone());
+                hints.extend(error.command_line_hint());
+            }
         }
     }
 
-    (found, not_found)
+    Resolved {
+        processes: found,
+        not_found,
+        hints,
+    }
 }
 
 #[derive(Serialize)]
@@ -227,6 +244,7 @@ mod tests {
             exe_path: None,
             cwd: None,
             command: None,
+            argv0: None,
             cpu_percent: 0.0,
             memory_mb: 0.0,
             status: ProcessStatus::Sleeping,
@@ -243,31 +261,49 @@ mod tests {
 
     #[test]
     fn a_target_that_resolves_to_nothing_is_not_found() {
-        let (found, not_found) = resolve_all(&targets(&["ghost"]), |_| Ok(Vec::new()));
-        assert!(found.is_empty());
-        assert_eq!(not_found, vec!["ghost"]);
+        let resolved = resolve_all(&targets(&["ghost"]), |_| Ok(Vec::new()));
+        assert!(resolved.processes.is_empty());
+        assert_eq!(resolved.not_found, vec!["ghost"]);
     }
 
     #[test]
     fn a_target_that_fails_to_resolve_is_not_found() {
-        let (found, not_found) = resolve_all(&targets(&["a", "b"]), |t| match t {
+        let resolved = resolve_all(&targets(&["a", "b"]), |t| match t {
             "a" => Ok(vec![process(1)]),
             _ => Err(ProcError::ProcessNotFound(t.to_string())),
         });
-        assert_eq!(found.len(), 1);
-        assert_eq!(not_found, vec!["b"]);
+        assert_eq!(resolved.processes.len(), 1);
+        assert_eq!(resolved.not_found, vec!["b"]);
+        assert!(resolved.hints.is_empty());
+        assert_eq!(resolved.warning().unwrap(), "Not found: b");
+    }
+
+    #[test]
+    fn a_name_in_command_lines_only_is_not_found_with_a_hint() {
+        let resolved = resolve_all(&targets(&["serve"]), |t| {
+            Err(ProcError::NameNotFound {
+                name: t.to_string(),
+                in_command_line: 2,
+            })
+        });
+        assert_eq!(resolved.not_found, vec!["serve"]);
+        assert_eq!(
+            resolved.warning().unwrap(),
+            "Not found: serve\n  2 processes have 'serve' in their command line (add --cmd to match those)"
+        );
     }
 
     #[test]
     fn a_process_two_targets_name_is_found_once() {
-        let (found, not_found) = resolve_all(&targets(&["a", "b", "c"]), |t| match t {
+        let resolved = resolve_all(&targets(&["a", "b", "c"]), |t| match t {
             "a" => Ok(vec![process(1), process(2)]),
             "b" => Ok(vec![process(2), process(3)]),
             _ => Ok(vec![process(1)]),
         });
-        let pids: Vec<u32> = found.iter().map(|p| p.pid).collect();
+        let pids: Vec<u32> = resolved.processes.iter().map(|p| p.pid).collect();
         assert_eq!(pids, vec![1, 2, 3]);
-        assert!(not_found.is_empty());
+        assert!(resolved.not_found.is_empty());
+        assert_eq!(resolved.warning(), None);
     }
 
     fn bare(pid: u32) -> Process {

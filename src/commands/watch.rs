@@ -2,7 +2,8 @@
 //!
 //! Examples:
 //!   proc watch                     # Watch all processes (alias: proc top)
-//!   proc watch node                # Watch node processes
+//!   proc watch node                # Watch the processes named node
+//!   proc watch node --cmd          # ... or with node anywhere in their command line
 //!   proc watch :3000               # Watch process on port 3000
 //!   proc watch :3000 :8080 node    # Watch several targets: separate arguments
 //!   proc watch --in . --by node    # Watch node processes in current directory
@@ -11,9 +12,10 @@
 //!
 //! Commas still work (`proc watch :3000,:8080`) but are deprecated.
 
+use crate::core::process::classify_sysinfo;
 use crate::core::{
-    flatten_targets, parse_target, resolve_in_dir, sort_processes, Process, ProcessStatus, SortKey,
-    TargetType,
+    flatten_targets, parse_target, resolve_in_dir, sort_processes, Hit, NameMatch, Process,
+    ProcessStatus, SortKey, TargetType,
 };
 use crate::error::Result;
 use crate::ui::format::{
@@ -64,6 +66,10 @@ pub struct WatchCommand {
     /// Filter by process name
     #[arg(long = "by", short = 'b')]
     pub by_name: Option<String>,
+
+    /// Match name targets and --by as a substring of the process name or full command line (like pkill -f)
+    #[arg(long)]
+    pub cmd: bool,
 
     /// Only show processes using more than this CPU %
     #[arg(long)]
@@ -199,6 +205,7 @@ impl WatchCommand {
     fn collect_with(&self, sys: &System, port_owner: impl Fn(u16) -> Option<u32>) -> Vec<Process> {
         let self_pid = Pid::from_u32(std::process::id());
         let in_dir_filter = resolve_in_dir(&self.in_dir);
+        let mode = NameMatch::from_flag(self.cmd);
 
         // Parse targets once
         let targets: Vec<TargetType> = flatten_targets(&self.target)
@@ -241,21 +248,11 @@ impl WatchCommand {
                         }
                     }
                     TargetType::Name(name) => {
-                        let pattern_lower = name.to_lowercase();
                         for (pid, proc) in sys.processes() {
                             if *pid == self_pid || crate::core::is_thread(proc) {
                                 continue;
                             }
-                            let proc_name = proc.name().to_string_lossy().to_string();
-                            let cmd: String = proc
-                                .cmd()
-                                .iter()
-                                .map(|s| s.to_string_lossy())
-                                .collect::<Vec<_>>()
-                                .join(" ");
-
-                            if (proc_name.to_lowercase().contains(&pattern_lower)
-                                || cmd.to_lowercase().contains(&pattern_lower))
+                            if classify_sysinfo(name, proc, mode) == Hit::Match
                                 && seen_pids.insert(pid.as_u32())
                             {
                                 processes.push(Process::from_sysinfo(*pid, proc));
@@ -268,7 +265,7 @@ impl WatchCommand {
 
         // Apply --by filter
         if let Some(ref by_name) = self.by_name {
-            processes.retain(|p| crate::core::matches_by_filter(p, by_name));
+            processes.retain(|p| crate::core::matches_by_filter(p, by_name, mode));
         }
 
         // Apply --in filter
@@ -695,6 +692,7 @@ mod tests {
             interval: 2.0,
             in_dir: None,
             by_name: None,
+            cmd: false,
             min_cpu: None,
             min_mem: None,
             json: false,
@@ -712,6 +710,7 @@ mod tests {
             exe_path: None,
             cwd: None,
             command: None,
+            argv0: None,
             cpu_percent: 1.5,
             memory_mb: 12.0,
             status: ProcessStatus::Sleeping,

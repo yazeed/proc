@@ -13,6 +13,7 @@
 //! - `{dir}`: a fresh temp directory, which is also the owned process's cwd
 //! - `{exe}`: the owned process's executable (the listener example)
 //! - `{name}`: the owned process's name, for name targets and `--by`
+//! - `{part}`: the start of that name, which matches only with `--cmd`
 
 use assert_cmd::Command;
 use clap::CommandFactory;
@@ -102,6 +103,9 @@ const CASES: &[Case] = &[
     code("on", &["{pid}", "--by", "{name}"], 0),
     code("on", &["{pid}", "-b", "{name}"], 0),
     code("on", &["{pid}", "--by", "no-such-process-name"], 2),
+    code("on", &["{part}", "--cmd"], 0),
+    code("on", &["{part}"], 2),
+    code("on", &["{pid}", "--by", "{part}", "--cmd"], 0),
     code("on", &[MISSING_PID], 2),
     code("on", &["{pid}", ":{port}"], 0),
     code("on", &["{pid}", ":{port},{name}", MISSING_PID], 0),
@@ -114,6 +118,7 @@ const CASES: &[Case] = &[
     code("for", &["{exe}", "--in", "{dir}"], 0),
     code("for", &["{exe}", "-i", "{dir}", "-b", "{name}"], 0),
     code("for", &["{exe}", "--by", "{name}"], 0),
+    code("for", &["{exe}", "--by", "{part}", "--cmd"], 0),
     code("for", &["{exe}", "--min-cpu", "0", "--min-mem", "0"], 0),
     code("for", &["{exe}", "--min-uptime", "0"], 0),
     code("for", &["{exe}", "--status", "zombie"], 2),
@@ -125,6 +130,8 @@ const CASES: &[Case] = &[
     // ---- by ----
     code("by", &["{name}"], 0),
     code("by", &["{name}", "--json"], 0),
+    code("by", &["{part}", "--cmd"], 0),
+    code("by", &["{part}"], 2),
     code("by", &["{name}", "-j", "-v"], 0),
     code("by", &["{name}", "--verbose", "--wide"], 0),
     code("by", &["{name}", "-w"], 0),
@@ -144,6 +151,7 @@ const CASES: &[Case] = &[
     code("in", &["{dir}", "--verbose", "--wide"], 0),
     code("in", &["{dir}", "-w"], 0),
     code("in", &["{dir}", "--by", "{name}"], 0),
+    code("in", &["{dir}", "--by", "{part}", "--cmd"], 0),
     code("in", &["{dir}", "-b", "{name}"], 0),
     code("in", &["{dir}", "--min-cpu", "0", "--min-mem", "0"], 0),
     code("in", &["{dir}", "--min-uptime", "0", "--parent", "1"], 0),
@@ -156,6 +164,7 @@ const CASES: &[Case] = &[
     // ---- list ----
     code("list", &[], 0),
     code("list", &["{name}", "--json"], 0),
+    code("list", &["{part}", "--cmd"], 0),
     code("list", &["{name}", "no-such-process-name"], 0),
     code("list", &["{name},no-such-process-name", "{name}"], 0),
     code("list", &["-j", "-v"], 0),
@@ -185,6 +194,8 @@ const CASES: &[Case] = &[
     code("info", &["{pid}", "-i", "{dir}"], 0),
     code("info", &["{pid}", "--by", "{name}"], 0),
     code("info", &["{pid}", "-b", "{name}"], 0),
+    code("info", &["{part}", "--cmd"], 0),
+    code("info", &["{part}"], 2),
     code("info", &[MISSING_PID], 2),
     // ---- ports ----
     code("ports", &[], 0),
@@ -193,6 +204,7 @@ const CASES: &[Case] = &[
     code("ports", &["--verbose"], 0),
     code("ports", &["--by", "{name}"], 0),
     code("ports", &["-b", "{name}"], 0),
+    code("ports", &["--by", "{part}", "--cmd"], 0),
     code("ports", &["--in", "{dir}"], 0),
     code("ports", &["-i", "{dir}"], 0),
     code("ports", &["--exposed"], 0),
@@ -218,6 +230,7 @@ const CASES: &[Case] = &[
     code("tree", &["--in", "{dir}"], 0),
     code("tree", &["-i", "{dir}", "-b", "{name}"], 0),
     code("tree", &["--by", "{name}"], 0),
+    code("tree", &["{part}", "--cmd"], 0),
     code("tree", &["--status", "no-such-status"], 4),
     // ---- watch (a table snapshot when stdout isn't a terminal) ----
     code("watch", &["{pid}"], 0),
@@ -233,6 +246,7 @@ const CASES: &[Case] = &[
     code("watch", &["{name}", "--sort", "pid"], 0),
     code("watch", &["{name}", "--sort", "name"], 0),
     code("watch", &["{name}", "--sort", "cpu"], 0),
+    code("watch", &["{part}", "--cmd"], 0),
     // ---- watch --json streams: read the first line, then kill it ----
     first_line("watch", &["{pid}", "--json", "--interval", "1"]),
     first_line("watch", &["{pid}", "-j", "-v"]),
@@ -253,6 +267,9 @@ const CASES: &[Case] = &[
     code("kill", &["{pid}", "--yes", "--in", "{dir}"], 0),
     code("kill", &["{pid}", "-y", "-i", "{dir}", "-b", "{name}"], 0),
     code("kill", &["{pid}", "--yes", "--by", "{name}"], 0),
+    code("kill", &["{part}", "--cmd", "--dry-run"], 0),
+    code("kill", &["{pid}", "--yes", "--by", "{part}", "--cmd"], 0),
+    code("kill", &["{pid}", "--yes", "--by", "{part}"], 2),
     code("kill", &["{pid}", "--yes", "--by", "no-such-process-name"], 2),
     code("kill", &["{pid}", "--json"], 4),
     code("kill", &[MISSING_PID, "--yes"], 2),
@@ -268,6 +285,8 @@ const CASES: &[Case] = &[
     code("stop", &["{pid}", "--yes", "--in", "{dir}"], 0),
     code("stop", &["{pid}", "-y", "-i", "{dir}", "-b", "{name}"], 0),
     code("stop", &["{pid}", "--yes", "--by", "{name}", "--verbose"], 0),
+    code("stop", &["{part}", "--cmd", "--dry-run"], 0),
+    code("stop", &["{pid}", "--yes", "--by", "{part}", "--cmd"], 0),
     per_os("stop", &["{pid}", "--yes", "--signal", "TERM"], 0, 4),
     per_os("stop", &["{pid}", "-y", "-S", "HUP"], 0, 4),
     code("stop", &["{pid}", "--yes", "--signal", "NOT-A-SIGNAL"], 4),
@@ -293,6 +312,8 @@ const CASES: &[Case] = &[
     per_os("freeze", &["{pid}", "--yes", "--in", "{dir}"], 0, 4),
     per_os("freeze", &["{pid}", "-y", "-i", "{dir}", "-b", "{name}"], 0, 4),
     per_os("freeze", &["{pid}", "--yes", "--by", "{name}"], 0, 4),
+    per_os("freeze", &["{part}", "--cmd", "--dry-run"], 0, 4),
+    per_os("freeze", &["{pid}", "--yes", "--by", "{part}", "--cmd"], 0, 4),
     code("freeze", &["{pid}", "--json"], 4),
     // ---- thaw (SIGCONT: unsupported on Windows) ----
     per_os("thaw", &["{pid}", "--yes"], 0, 4),
@@ -305,6 +326,8 @@ const CASES: &[Case] = &[
     per_os("thaw", &["{pid}", "--yes", "--in", "{dir}"], 0, 4),
     per_os("thaw", &["{pid}", "-y", "-i", "{dir}", "-b", "{name}"], 0, 4),
     per_os("thaw", &["{pid}", "--yes", "--by", "{name}"], 0, 4),
+    per_os("thaw", &["{part}", "--cmd", "--dry-run"], 0, 4),
+    per_os("thaw", &["{pid}", "--yes", "--by", "{part}", "--cmd"], 0, 4),
     code("thaw", &["{pid}", "--json"], 4),
     // ---- unstick (has a Windows path: it can only terminate, and only with --force) ----
     code("unstick", &["{pid}", "--yes"], 0),
@@ -315,6 +338,8 @@ const CASES: &[Case] = &[
     code("unstick", &["{pid}", "--yes", "--timeout", "1"], 0),
     code("unstick", &["{pid}", "--dry-run", "-v"], 0),
     code("unstick", &["--dry-run", "--in", "{dir}", "--by", "{name}"], 0),
+    code("unstick", &["{part}", "--cmd", "--dry-run"], 0),
+    code("unstick", &["--dry-run", "--in", "{dir}", "--by", "{part}", "--cmd"], 0),
     code("unstick", &["--yes", "--in", "{dir}", "-t", "1"], 0),
     code("unstick", &["--yes", "-i", "{dir}", "-b", "{name}"], 0),
     code("unstick", &["{pid}", "--json"], 4),
@@ -325,6 +350,7 @@ const CASES: &[Case] = &[
     code("orphans", &["--in", "{dir}", "--verbose", "--wide"], 0),
     code("orphans", &["-i", "{dir}", "-w", "-b", "{name}"], 0),
     code("orphans", &["--in", "{dir}", "--by", "{name}"], 0),
+    code("orphans", &["--in", "{dir}", "--by", "{part}", "--cmd"], 0),
     code("orphans", &["--kill", "--yes", "--in", "{dir}"], 0),
     code("orphans", &["-k", "-y", "-i", "{dir}"], 0),
     code("orphans", &["--kill", "--dry-run", "--in", "{dir}"], 0),
@@ -336,6 +362,7 @@ const CASES: &[Case] = &[
     code("stuck", &["--in", "{dir}", "--verbose", "--wide"], 0),
     code("stuck", &["-i", "{dir}", "-w", "-b", "{name}"], 0),
     code("stuck", &["--in", "{dir}", "--by", "{name}", "--timeout", "1"], 0),
+    code("stuck", &["--in", "{dir}", "--by", "{part}", "--cmd"], 0),
     code("stuck", &["-i", "{dir}", "-t", "1"], 0),
     code("stuck", &["--kill", "--yes", "--in", "{dir}"], 0),
     code("stuck", &["-k", "-y", "-i", "{dir}", "-t", "1"], 0),
@@ -346,6 +373,8 @@ const CASES: &[Case] = &[
     code("why", &[":{port}", "--json"], 0),
     code("why", &["{pid}", "-j", "-v"], 0),
     code("why", &["{pid}", "--verbose"], 0),
+    code("why", &["{part}", "--cmd"], 0),
+    code("why", &["{part}"], 2),
     code("why", &["{pid},:{port}"], 0),
     code("why", &["{pid}", ":{port}"], 0),
     code("why", &["{pid}", ":{port},{name}", MISSING_PID], 0),
@@ -359,6 +388,7 @@ const CASES: &[Case] = &[
     code("wait", &["{pid}", "-t", "1", "--in", "{dir}"], 1),
     code("wait", &["{pid}", "-t", "1", "-i", "{dir}", "-b", "{name}"], 1),
     code("wait", &["{pid}", "-t", "1", "--by", "{name}"], 1),
+    code("wait", &["{pid}", "-t", "1", "--by", "{part}", "--cmd"], 1),
     code("wait", &[MISSING_PID, "--timeout", "1"], 2),
     code("wait", &["{pid}", ":{port}", "-t", "1"], 1),
     code("wait", &["{pid}", ":{port},{pid}", "-t", "1"], 1),
@@ -629,6 +659,7 @@ impl Fixture {
             .replace("{dir}", &self.dir.to_string_lossy())
             .replace("{exe}", &listener_path().to_string_lossy())
             .replace("{name}", "listener")
+            .replace("{part}", "listene")
     }
 }
 
@@ -671,7 +702,7 @@ fn argv(case: &Case, fixture: Option<&Fixture>) -> Vec<String> {
 }
 
 fn needs_fixture(case: &Case) -> bool {
-    const PLACEHOLDERS: [&str; 5] = ["{pid}", "{port}", "{dir}", "{exe}", "{name}"];
+    const PLACEHOLDERS: [&str; 6] = ["{pid}", "{port}", "{dir}", "{exe}", "{name}", "{part}"];
     case.args
         .iter()
         .any(|a| PLACEHOLDERS.iter().any(|p| a.contains(p)))

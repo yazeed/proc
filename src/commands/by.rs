@@ -2,11 +2,12 @@
 //!
 //! Examples:
 //!   proc by node               # Processes named 'node'
+//!   proc by node --cmd         # ... or with node anywhere in their command line
 //!   proc by node --in .        # Node processes in current directory
 //!   proc by node --min-cpu 5   # Node processes using >5% CPU
 //!   proc by "my app"           # Processes with spaces in name
 
-use crate::core::{resolve_in_dir, sort_processes, Process, SortKey, StatusFilter};
+use crate::core::{resolve_in_dir, sort_processes, NameMatch, Process, SortKey, StatusFilter};
 use crate::error::Result;
 use crate::ui::Printer;
 use clap::Args;
@@ -15,8 +16,12 @@ use std::path::PathBuf;
 /// Filter processes by name
 #[derive(Args, Debug)]
 pub struct ByCommand {
-    /// Process name or pattern to match
+    /// Process name to match (the whole name, ignoring case)
     pub name: String,
+
+    /// Match the name as a substring of the process name or full command line (like pkill -f)
+    #[arg(long)]
+    pub cmd: bool,
 
     /// Filter by directory; takes the next word as the directory unless it starts with '-'
     /// (bare --in is the current directory, --in=DIR is explicit)
@@ -70,7 +75,7 @@ impl ByCommand {
         let printer = Printer::from_flags(self.json, self.verbose).wide(self.wide);
 
         // Get processes by name
-        let mut processes = Process::find_by_name(&self.name)?;
+        let mut processes = Process::find_by_name(&self.name, NameMatch::from_flag(self.cmd))?;
 
         // Real CPU readings for the table, --min-cpu and --sort cpu
         Process::measure_cpu(&mut processes);
@@ -169,6 +174,7 @@ mod tests {
     fn command() -> ByCommand {
         ByCommand {
             name: "x".to_string(),
+            cmd: false,
             in_dir: None,
             min_cpu: None,
             min_mem: None,
@@ -192,6 +198,7 @@ mod tests {
             exe_path: None,
             cwd: None,
             command: None,
+            argv0: None,
             cpu_percent: 0.0,
             memory_mb: 0.0,
             status: ProcessStatus::Sleeping,

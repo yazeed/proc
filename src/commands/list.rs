@@ -2,7 +2,8 @@
 //!
 //! Examples:
 //!   proc list                  # List all processes
-//!   proc list node             # Filter by name
+//!   proc list node             # Only the processes named node
+//!   proc list node --cmd       # ... or with node anywhere in their command line
 //!   proc list node python      # Several names: separate arguments
 //!   proc list --in             # Processes in current directory
 //!   proc list --in /project    # Processes in /project
@@ -12,7 +13,7 @@
 
 use crate::core::filters::resolve_dir;
 use crate::core::{
-    flatten_targets, resolve_in_dir, sort_processes, Process, SortKey, StatusFilter,
+    flatten_targets, resolve_in_dir, sort_processes, NameMatch, Process, SortKey, StatusFilter,
 };
 use crate::error::Result;
 use crate::ui::Printer;
@@ -22,9 +23,13 @@ use std::path::PathBuf;
 /// List processes
 #[derive(Args, Debug)]
 pub struct ListCommand {
-    /// Process name(s) or pattern(s) to filter by (separate arguments for several)
+    /// Process name(s) to filter by (separate arguments for several)
     #[arg(num_args = 0..)]
     pub name: Vec<String>,
+
+    /// Match the names as a substring of the process name or full command line (like pkill -f)
+    #[arg(long)]
+    pub cmd: bool,
 
     /// Filter by directory; takes the next word as the directory unless it starts with '-'
     /// (bare --in is the current directory, --in=DIR is explicit)
@@ -88,7 +93,7 @@ impl ListCommand {
             let mut all = Vec::new();
             let mut seen = std::collections::HashSet::new();
             for n in &names {
-                if let Ok(found) = Process::find_by_name(n) {
+                if let Ok(found) = Process::find_by_name(n, NameMatch::from_flag(self.cmd)) {
                     for p in found {
                         if seen.insert(p.pid) {
                             all.push(p);
@@ -217,6 +222,7 @@ mod tests {
     fn command() -> ListCommand {
         ListCommand {
             name: Vec::new(),
+            cmd: false,
             in_dir: None,
             path: None,
             min_cpu: None,
@@ -242,6 +248,7 @@ mod tests {
             exe_path: None,
             cwd: None,
             command: None,
+            argv0: None,
             cpu_percent: 0.0,
             memory_mb: 0.0,
             status: ProcessStatus::Sleeping,

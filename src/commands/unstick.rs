@@ -14,12 +14,15 @@
 //!   proc unstick           # Find and unstick all stuck processes
 //!   proc unstick :3000     # Unstick process on port 3000
 //!   proc unstick 1234      # Unstick PID 1234
-//!   proc unstick node      # Unstick stuck node processes
+//!   proc unstick node      # Unstick the stuck processes named node
+//!   proc unstick node --cmd   # ... or with node anywhere in their command line
 //!   proc unstick :3000 1234   # Several targets: separate arguments
 //!
 //! Commas still work (`proc unstick :3000,1234`) but are deprecated.
 
-use crate::core::{apply_filters, flatten_targets, resolve_targets_excluding_self, Process};
+use crate::core::{
+    apply_filters, flatten_targets, resolve_targets_excluding_self, NameMatch, Process,
+};
 use crate::error::{ExitCode, ProcError, Result};
 use crate::ui::{format_duration, must_confirm, plural, Printer};
 use clap::Args;
@@ -70,6 +73,10 @@ pub struct UnstickCommand {
     /// Filter by process name
     #[arg(long = "by", short = 'b')]
     pub by_name: Option<String>,
+
+    /// Match name targets and --by as a substring of the process name or full command line (like pkill -f)
+    #[arg(long)]
+    pub cmd: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -97,7 +104,12 @@ impl UnstickCommand {
         };
 
         // Apply --in and --by filters
-        apply_filters(&mut stuck, &self.in_dir, &self.by_name);
+        apply_filters(
+            &mut stuck,
+            &self.in_dir,
+            &self.by_name,
+            NameMatch::from_flag(self.cmd),
+        );
 
         if stuck.is_empty() {
             // An explicit target filtered down to nothing is "not found", like other commands
@@ -294,7 +306,8 @@ impl UnstickCommand {
     /// Resolve target to processes, excluding self
     fn resolve_target_processes(&self, typed: &[String]) -> Result<Vec<Process>> {
         let targets = flatten_targets(typed);
-        let (processes, _) = resolve_targets_excluding_self(&targets);
+        let processes =
+            resolve_targets_excluding_self(&targets, NameMatch::from_flag(self.cmd)).processes;
         if processes.is_empty() {
             Err(ProcError::ProcessNotFound(typed.join(" ")))
         } else {

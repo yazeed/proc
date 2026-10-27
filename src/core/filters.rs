@@ -2,7 +2,7 @@
 //!
 //! Provides common filter resolution logic to avoid duplication.
 
-use crate::core::{Process, ProcessStatus};
+use crate::core::{matches_name, NameMatch, Process, ProcessStatus};
 use clap::ValueEnum;
 use std::path::{Path, PathBuf};
 
@@ -79,19 +79,10 @@ pub fn sort_processes(processes: &mut [Process], key: SortKey) {
 
 /// Check if a process matches a `--by` name filter.
 ///
-/// Matches against both the process name AND full command line (case-insensitive),
-/// consistent with how positional targets work via `find_by_name`.
-pub fn matches_by_filter(process: &Process, pattern: &str) -> bool {
-    let pattern_lower = pattern.to_lowercase();
-    if process.name.to_lowercase().contains(&pattern_lower) {
-        return true;
-    }
-    if let Some(ref cmd) = process.command {
-        if cmd.to_lowercase().contains(&pattern_lower) {
-            return true;
-        }
-    }
-    false
+/// The same comparison as a positional name target (see [`NameMatch`]): the
+/// whole name by default, any part of the name or command line with `--cmd`.
+pub fn matches_by_filter(process: &Process, pattern: &str, mode: NameMatch) -> bool {
+    matches_name(pattern, &process.names(), mode)
 }
 
 /// Check if a process matches an `--in` directory filter.
@@ -149,6 +140,7 @@ pub fn apply_filters(
     processes: &mut Vec<Process>,
     in_dir: &Option<String>,
     by_name: &Option<String>,
+    mode: NameMatch,
 ) {
     let in_dir_filter = resolve_in_dir(in_dir);
     processes.retain(|p| {
@@ -158,7 +150,7 @@ pub fn apply_filters(
             }
         }
         if let Some(ref name) = by_name {
-            if !matches_by_filter(p, name) {
+            if !matches_by_filter(p, name, mode) {
                 return false;
             }
         }
@@ -334,8 +326,8 @@ mod resolve_tests {
 
 #[cfg(test)]
 mod match_tests {
-    use super::{matches_by_filter, matches_in_filter};
-    use crate::core::{Process, ProcessStatus};
+    use super::{apply_filters, matches_by_filter, matches_in_filter};
+    use crate::core::{NameMatch, Process, ProcessStatus};
     use std::path::Path;
 
     /// A process record with no working directory and no command line, which
@@ -347,6 +339,7 @@ mod match_tests {
             exe_path: None,
             cwd: None,
             command: None,
+            argv0: None,
             cpu_percent: 0.0,
             memory_mb: 0.0,
             status: ProcessStatus::Sleeping,
@@ -372,14 +365,63 @@ mod match_tests {
         assert!(!matches_in_filter(&process, Path::new("/srv/app/web")));
     }
 
+    const EXACT: NameMatch = NameMatch::Exact;
+    const CMD: NameMatch = NameMatch::Command;
+
     #[test]
-    fn a_name_matches_by_name_or_by_command_line_ignoring_case() {
+    fn by_matches_the_whole_name_ignoring_case_and_not_a_part_of_it() {
+        let process = bare_process(); // named "Worker"
+        assert!(matches_by_filter(&process, "worker", EXACT));
+        assert!(matches_by_filter(&process, "WORKER", EXACT));
+        assert!(!matches_by_filter(&process, "work", EXACT));
+        assert!(!matches_by_filter(&process, "node", EXACT));
+    }
+
+    #[test]
+    fn by_matches_the_executable_or_first_argument_file_name() {
         let mut process = bare_process();
-        assert!(matches_by_filter(&process, "work"));
-        assert!(!matches_by_filter(&process, "node"));
+        process.exe_path = Some("/opt/tools/serve".to_string());
+        assert!(matches_by_filter(&process, "serve", EXACT));
+        process.exe_path = None;
+        process.argv0 = Some("./bin/runner".to_string());
+        assert!(matches_by_filter(&process, "runner", EXACT));
+        assert!(!matches_by_filter(&process, "bin", EXACT));
+    }
+
+    #[test]
+    fn by_looks_in_the_command_line_only_with_cmd() {
+        let mut process = bare_process();
+        assert!(matches_by_filter(&process, "work", CMD));
+        assert!(!matches_by_filter(&process, "node", CMD));
         process.command = Some("/usr/bin/Node server.js".to_string());
-        assert!(matches_by_filter(&process, "node"));
-        assert!(!matches_by_filter(&process, "python"));
+        assert!(matches_by_filter(&process, "node", CMD));
+        assert!(!matches_by_filter(&process, "node", EXACT));
+        assert!(!matches_by_filter(&process, "python", CMD));
+    }
+
+    #[test]
+    fn apply_filters_keeps_what_by_matches_under_the_given_mode() {
+        let mut running_node = bare_process();
+        running_node.pid = 2;
+        running_node.name = "helper".to_string();
+        running_node.command = Some("helper --engine node".to_string());
+        let mut named_node = bare_process();
+        named_node.pid = 3;
+        named_node.name = "node".to_string();
+        let both = vec![running_node, named_node];
+        let by = Some("node".to_string());
+
+        let mut exact = both.clone();
+        apply_filters(&mut exact, &None, &by, EXACT);
+        assert_eq!(exact.iter().map(|p| p.pid).collect::<Vec<_>>(), vec![3]);
+
+        let mut cmd = both.clone();
+        apply_filters(&mut cmd, &None, &by, CMD);
+        assert_eq!(cmd.iter().map(|p| p.pid).collect::<Vec<_>>(), vec![2, 3]);
+
+        let mut unfiltered = both;
+        apply_filters(&mut unfiltered, &None, &None, EXACT);
+        assert_eq!(unfiltered.len(), 2);
     }
 }
 

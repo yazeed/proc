@@ -5,9 +5,11 @@
 //!   proc for ./app               # Relative path
 //!   proc for /var/log/app.log    # What has this file open?
 //!   proc for ~/bin/myapp         # Tilde expansion
+//!   proc for app.log --by node   # Only the process named node (--cmd: node anywhere in the command line)
 
 use crate::core::{
-    find_ports_for_pid, resolve_in_dir, sort_processes, PortInfo, Process, SortKey, StatusFilter,
+    find_ports_for_pid, resolve_in_dir, sort_processes, NameMatch, PortInfo, Process, SortKey,
+    StatusFilter,
 };
 use crate::error::{ProcError, Result};
 use crate::ui::{format_duration, format_memory, Printer};
@@ -31,6 +33,10 @@ pub struct ForCommand {
     /// Filter by process name
     #[arg(long = "by", short = 'b')]
     pub by_name: Option<String>,
+
+    /// Match --by as a substring of the process name or full command line (like pkill -f)
+    #[arg(long)]
+    pub cmd: bool,
 
     /// Only show processes using more than this CPU %
     #[arg(long)]
@@ -183,7 +189,7 @@ impl ForCommand {
 
             // Name filter (--by)
             if let Some(ref name) = self.by_name {
-                if !crate::core::matches_by_filter(p, name) {
+                if !crate::core::matches_by_filter(p, name, NameMatch::from_flag(self.cmd)) {
                     return false;
                 }
             }
@@ -355,6 +361,7 @@ mod tests {
             file: "x".to_string(),
             in_dir: None,
             by_name: None,
+            cmd: false,
             min_cpu: None,
             min_mem: None,
             status: None,
@@ -376,6 +383,7 @@ mod tests {
             exe_path: None,
             cwd: None,
             command: None,
+            argv0: None,
             cpu_percent: 0.0,
             memory_mb: 0.0,
             status: ProcessStatus::Sleeping,

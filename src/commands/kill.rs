@@ -1,7 +1,8 @@
 //! `proc kill` - Kill processes
 //!
 //! Examples:
-//!   proc kill node              # Kill all Node.js processes
+//!   proc kill node              # Kill the processes named node
+//!   proc kill node --cmd        # ... or with node anywhere in their command line
 //!   proc kill :3000             # Kill what's on port 3000
 //!   proc kill 1234              # Kill specific PID
 //!   proc kill 1234 5678         # Kill several targets: separate arguments
@@ -11,7 +12,8 @@
 //! Commas still work (`proc kill :3000,:8080`) but are deprecated.
 
 use crate::core::{
-    apply_filters, apply_to_each, flatten_targets, resolve_targets_excluding_self, Process,
+    apply_filters, apply_to_each, flatten_targets, resolve_targets_excluding_self, NameMatch,
+    Process,
 };
 use crate::error::{ProcError, Result};
 use crate::ui::Printer;
@@ -52,6 +54,10 @@ pub struct KillCommand {
     /// Filter by process name
     #[arg(long = "by", short = 'b')]
     pub by_name: Option<String>,
+
+    /// Match name targets and --by as a substring of the process name or full command line (like pkill -f)
+    #[arg(long)]
+    pub cmd: bool,
 }
 
 impl KillCommand {
@@ -62,15 +68,17 @@ impl KillCommand {
         // Split each value on commas and resolve to processes
         // Use resolve_targets_excluding_self to avoid killing ourselves
         let targets = flatten_targets(&self.target);
-        let (mut processes, not_found) = resolve_targets_excluding_self(&targets);
+        let mode = NameMatch::from_flag(self.cmd);
+        let resolved = resolve_targets_excluding_self(&targets, mode);
 
         // Warn about targets that weren't found
-        if !not_found.is_empty() {
-            printer.warning(&format!("Not found: {}", not_found.join(", ")));
+        if let Some(warning) = resolved.warning() {
+            printer.warning(&warning);
         }
+        let mut processes = resolved.processes;
 
         // Apply --in and --by filters
-        apply_filters(&mut processes, &self.in_dir, &self.by_name);
+        apply_filters(&mut processes, &self.in_dir, &self.by_name, mode);
 
         // Real CPU readings whenever the list is shown or returned (dry run, the
         // confirmation prompt, or the error for a missing `--yes`); only `--yes`

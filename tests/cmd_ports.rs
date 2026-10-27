@@ -62,9 +62,9 @@ fn fresh_dir() -> (tempfile::TempDir, PathBuf) {
     (tmp, dir)
 }
 
-/// A process name no process has, for this call alone. Name targets match
-/// command lines too, and the other tests run proc at the same time, so a name
-/// two tests share would match the other test's proc.
+/// A process name no process has, for this call alone: the other tests run
+/// proc at the same time, so a name two tests share would match the other
+/// test's process.
 fn nobody() -> String {
     let n = COUNTER.fetch_add(1, Ordering::SeqCst);
     // Ends in `x`, so no name is the start of another (`-1x` in `-10x`)
@@ -83,10 +83,11 @@ static COUNTER: AtomicUsize = AtomicUsize::new(0);
 /// just written can be "busy" (ETXTBSY) for an instant: a fork in a parallel
 /// test still holds the write handle until it execs. That clears in
 /// milliseconds, so try again.
-fn spawn_copy(copy: &std::path::Path, dir: &std::path::Path) -> Child {
+fn spawn_copy(copy: &std::path::Path, args: &[&str], dir: &std::path::Path) -> Child {
     let mut attempts = 0;
     loop {
         let spawned = std::process::Command::new(copy)
+            .args(args)
             .current_dir(dir)
             .stdout(Stdio::piped())
             .stdin(Stdio::null())
@@ -133,11 +134,17 @@ impl Owned {
     /// A listener whose process name is exactly `name` (15 characters at most:
     /// Linux cuts a process name there)
     fn named(name: &str) -> Self {
+        Self::named_with_args(name, &[])
+    }
+
+    /// [`Owned::named`], started with extra arguments (the listener ignores them,
+    /// so they only put words in its command line)
+    fn named_with_args(name: &str, args: &[&str]) -> Self {
         assert!(name.len() <= 15, "{name} is too long for Linux");
         let (tmp, dir) = fresh_dir();
         let copy = dir.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
         std::fs::copy(listener_path(), &copy).expect("copy the listener example");
-        let mut child = spawn_copy(&copy, &dir);
+        let mut child = spawn_copy(&copy, args, &dir);
         let mut line = String::new();
         let mut stdout = BufReader::new(child.stdout.take().unwrap());
         let read = stdout.read_line(&mut line);
@@ -397,6 +404,35 @@ fn on_name_applies_in_and_by() {
 }
 
 #[test]
+fn on_name_is_the_whole_name_and_cmd_widens_it_to_the_command_line() {
+    let word = nobody();
+    let p = Owned::named_with_args(&format!("pcp{}on", std::process::id()), &[&word]);
+
+    // the word is only in the command line: not a name, and the error says so
+    let (out, err, code) = run_text(&["on", &word]);
+    assert_eq!(code, 2, "{out}{err}");
+    assert!(err.contains("No process found matching"), "{err}");
+    assert!(
+        err.contains(&format!(
+            "1 process has '{word}' in its command line (add --cmd to match those)"
+        )),
+        "{err}"
+    );
+
+    let (json, code) = run_json(&["on", &word, "--cmd", "--json"]);
+    assert_eq!(code, 0, "{json}");
+    assert_eq!(json["count"], 1, "{json}");
+    assert_eq!(json["results"][0]["process"]["pid"], p.pid());
+
+    // part of the name is not the name either
+    let part = &p.name[..p.name.len() - 1];
+    let (out, err, code) = run_text(&["on", part]);
+    assert_eq!(code, 2, "{out}{err}");
+    let (json, code) = run_json(&["on", part, "--cmd", "--json"]);
+    assert_eq!(code, 0, "{json}");
+}
+
+#[test]
 fn on_a_name_nothing_runs_exits_not_found() {
     let (out, err, code) = run_text(&["on", &nobody()]);
     assert_eq!(code, 2, "{out}{err}");
@@ -580,7 +616,8 @@ fn on_with_nothing_found_echoes_the_targets_as_typed() {
 
 // ---- ports ----
 
-/// The `ports` rows (JSON) for the listeners whose process name contains `name`
+/// The `ports` rows (JSON) for the listeners whose process name is `name`
+/// (`--cmd` in `extra` makes it any part of the name)
 fn ports_by(name: &str, extra: &[&str]) -> Value {
     let mut args = vec!["ports", "--by", name, "--json"];
     args.extend_from_slice(extra);
@@ -611,9 +648,11 @@ fn ports_lists_a_listener_as_a_table() {
 
 #[test]
 fn ports_pluralises_the_count() {
-    let a = Owned::named(&format!("pcp{}pl1", std::process::id()));
-    let b = Owned::named(&format!("pcp{}pl2", std::process::id()));
-    let (out, _, code) = run_text(&["ports", "--by", &format!("pcp{}pl", std::process::id())]);
+    // two listeners with one name, in directories of their own
+    let name = format!("pcp{}pl", std::process::id());
+    let a = Owned::named(&name);
+    let b = Owned::named(&name);
+    let (out, _, code) = run_text(&["ports", "--by", &name]);
     assert_eq!(code, 0, "{out}");
     assert!(out.contains("Found 2 listening ports\n"), "{out}");
     drop((a, b));
@@ -647,10 +686,37 @@ fn ports_json_describes_each_listener() {
 }
 
 #[test]
-fn ports_by_matches_part_of_the_name_in_any_case() {
+fn ports_by_matches_the_whole_name_in_any_case() {
     let p = Owned::listener();
     let shouted = p.name.to_uppercase();
     let json = ports_by(&shouted, &[]);
+    assert_eq!(json["count"], 1, "{json}");
+    assert_eq!(json["ports"][0]["pid"], p.pid());
+}
+
+#[test]
+fn ports_by_does_not_match_part_of_a_name_unless_cmd_is_given() {
+    let p = Owned::listener();
+    // the name without its last character
+    let part = &p.name[..p.name.len() - 1];
+    assert_eq!(ports_by(part, &[])["count"], 0);
+    let json = ports_by(part, &["--cmd"]);
+    assert!(
+        json["ports"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row["pid"] == p.pid()),
+        "{json}"
+    );
+}
+
+#[test]
+fn ports_by_ignores_a_word_that_is_only_in_the_command_line_unless_cmd_is_given() {
+    let word = nobody();
+    let p = Owned::named_with_args(&format!("pcp{}cl", std::process::id()), &[&word]);
+    assert_eq!(ports_by(&word, &[])["count"], 0);
+    let json = ports_by(&word, &["--cmd"]);
     assert_eq!(json["count"], 1, "{json}");
     assert_eq!(json["ports"][0]["pid"], p.pid());
 }
@@ -714,10 +780,11 @@ fn ports_sorts_by_port_pid_or_name() {
     // The first one started has the later name, so name order differs from start order
     let first = Owned::named(&format!("pcp{pid}so_z"));
     let second = Owned::named(&format!("pcp{pid}so_a"));
+    // both names start with it, so this needs --cmd
     let filter = format!("pcp{pid}so_");
 
     let order = |sort: &str, key: &str| -> Vec<Value> {
-        let json = ports_by(&filter, &["--sort", sort]);
+        let json = ports_by(&filter, &["--cmd", "--sort", sort]);
         assert_eq!(json["count"], 2, "{json}");
         json["ports"]
             .as_array()
@@ -745,9 +812,10 @@ fn ports_sorts_by_port_pid_or_name() {
 #[test]
 fn ports_limit_cuts_the_list() {
     let pid = std::process::id();
-    let _a = Owned::named(&format!("pcp{pid}lm_a"));
-    let _b = Owned::named(&format!("pcp{pid}lm_b"));
-    let filter = format!("pcp{pid}lm_");
+    // two listeners with one name, in directories of their own
+    let filter = format!("pcp{pid}lm");
+    let _a = Owned::named(&filter);
+    let _b = Owned::named(&filter);
     assert_eq!(ports_by(&filter, &[])["count"], 2);
     let json = ports_by(&filter, &["--limit", "1"]);
     assert_eq!(json["count"], 1, "{json}");

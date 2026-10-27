@@ -2,7 +2,8 @@
 //!
 //! Examples:
 //!   proc why :3000              # Why is port 3000 busy? (ancestry + port context)
-//!   proc why node               # Show ancestry for node processes
+//!   proc why node               # Show ancestry for the processes named node
+//!   proc why node --cmd         # ... or with node anywhere in their command line
 //!   proc why 1234               # Show ancestry for PID 1234
 //!   proc why :3000 :8080        # Several targets: separate arguments
 //!   proc why :3000 --json       # JSON output with port context
@@ -10,8 +11,8 @@
 //! Commas still work (`proc why :3000,:8080`) but are deprecated.
 
 use crate::core::{
-    find_ports_for_pid, flatten_targets, parse_target, resolve_target, PortInfo, Process,
-    ProcessStatus, Protocol, TargetType,
+    find_ports_for_pid, flatten_targets, parse_target, resolve_target, NameMatch, PortInfo,
+    Process, ProcessStatus, Protocol, TargetType,
 };
 use crate::error::{ExitCode, ProcError, Result};
 use crate::ui::{uptime_label, Printer};
@@ -26,6 +27,10 @@ pub struct WhyCommand {
     /// Target(s): :port, PID, or process name (separate arguments for several)
     #[arg(required = true, num_args = 1.., value_parser = crate::core::validate_target_arg)]
     pub target: Vec<String>,
+
+    /// Match name targets as a substring of the process name or full command line (like pkill -f)
+    #[arg(long)]
+    pub cmd: bool,
 
     /// Output as JSON
     #[arg(long, short = 'j')]
@@ -45,6 +50,7 @@ impl WhyCommand {
         let pid_map: HashMap<u32, &Process> = all_processes.iter().map(|p| (p.pid, p)).collect();
 
         let targets = flatten_targets(&self.target);
+        let mode = NameMatch::from_flag(self.cmd);
 
         // JSON results are collected across targets and printed as one document
         let mut json_results: Vec<WhyOutput> = Vec::new();
@@ -66,7 +72,7 @@ impl WhyCommand {
             };
 
             // Resolve to processes
-            let target_processes = match found_processes(target_str, resolve_target) {
+            let target_processes = match found_processes(target_str, |t| resolve_target(t, mode)) {
                 Ok(procs) => procs,
                 Err((error, warning)) => {
                     printer.warning(&warning);
@@ -349,6 +355,7 @@ mod tests {
             exe_path: None,
             cwd: None,
             command: None,
+            argv0: None,
             cpu_percent: 0.0,
             memory_mb: 0.0,
             status: ProcessStatus::Sleeping,

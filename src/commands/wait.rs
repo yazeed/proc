@@ -1,7 +1,8 @@
 //! `proc wait` - Wait for process(es) to exit
 //!
 //! Examples:
-//!   proc wait node                   # Wait until all node processes exit
+//!   proc wait node                   # Wait until the processes named node exit
+//!   proc wait node --cmd             # ... or with node anywhere in their command line
 //!   proc wait 1234                   # Wait for PID 1234 to exit
 //!   proc wait :3000                  # Wait for whatever is on port 3000 to exit
 //!   proc wait node python            # Wait for all to exit (separate arguments)
@@ -10,7 +11,7 @@
 //!
 //! Commas still work (`proc wait node,python`) but are deprecated.
 
-use crate::core::{apply_filters, flatten_targets, resolve_targets, Process};
+use crate::core::{apply_filters, flatten_targets, resolve_targets, NameMatch, Process};
 use crate::error::{ExitCode, ProcError, Result};
 use crate::ui::{format_duration, plural, Printer};
 use clap::Args;
@@ -49,6 +50,10 @@ pub struct WaitCommand {
     #[arg(long = "by", short = 'b')]
     pub by_name: Option<String>,
 
+    /// Match name targets and --by as a substring of the process name or full command line (like pkill -f)
+    #[arg(long)]
+    pub cmd: bool,
+
     /// Suppress periodic status messages (only print final result)
     #[arg(long, short = 'q')]
     quiet: bool,
@@ -64,14 +69,16 @@ impl WaitCommand {
 
         // Parse and resolve targets
         let targets = flatten_targets(&self.target);
-        let (mut processes, not_found) = resolve_targets(&targets);
+        let mode = NameMatch::from_flag(self.cmd);
+        let resolved = resolve_targets(&targets, mode);
 
-        if !not_found.is_empty() {
-            printer.warning(&format!("Not found: {}", not_found.join(", ")));
+        if let Some(warning) = resolved.warning() {
+            printer.warning(&warning);
         }
+        let mut processes = resolved.processes;
 
         // Apply --in and --by filters
-        apply_filters(&mut processes, &self.in_dir, &self.by_name);
+        apply_filters(&mut processes, &self.in_dir, &self.by_name, mode);
 
         if processes.is_empty() {
             return Err(ProcError::ProcessNotFound(self.target.join(" ")));

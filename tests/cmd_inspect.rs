@@ -60,9 +60,9 @@ fn listener_path() -> PathBuf {
 
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
-/// A process name no process has, for this call alone. Name targets match
-/// command lines too, and the other tests run proc at the same time, so a name
-/// two tests share would match the other test's proc.
+/// A process name no process has, for this call alone: the other tests run
+/// proc at the same time, so a name two tests share would match the other
+/// test's process (with `--cmd`, any process whose command line has it).
 fn nobody() -> String {
     let n = COUNTER.fetch_add(1, Ordering::SeqCst);
     // Ends in `x`, so no name is the start of another (`-1x` in `-10x`)
@@ -82,10 +82,11 @@ fn free_port() -> u16 {
 /// just written can be "busy" (ETXTBSY) for an instant: a fork in a parallel
 /// test still holds the write handle until it execs. That clears in
 /// milliseconds, so try again.
-fn spawn_copy(copy: &Path, dir: &Path) -> Child {
+fn spawn_copy(copy: &Path, args: &[&str], dir: &Path) -> Child {
     let mut attempts = 0;
     loop {
         let spawned = std::process::Command::new(copy)
+            .args(args)
             .current_dir(dir)
             .stdout(Stdio::piped())
             .stdin(Stdio::null())
@@ -142,6 +143,12 @@ struct Owned {
 
 impl Owned {
     fn listener() -> Self {
+        Self::listener_with_args(&[])
+    }
+
+    /// A listener started with extra arguments (it ignores them, so they only
+    /// put words in its command line)
+    fn listener_with_args(args: &[&str]) -> Self {
         let tmp = tempfile::tempdir().unwrap();
         let raw_dir = tmp.path().to_path_buf();
         let dir = raw_dir.canonicalize().unwrap();
@@ -153,7 +160,7 @@ impl Owned {
         // Started by its canonical path, so the executable path processes
         // report is that path on every OS; the cwd is the path as the user
         // would type it
-        let mut child = spawn_copy(&dir.join(&file), &raw_dir);
+        let mut child = spawn_copy(&dir.join(&file), args, &raw_dir);
         let mut line = String::new();
         let mut stdout = BufReader::new(child.stdout.take().unwrap());
         let read = stdout.read_line(&mut line);
@@ -408,6 +415,35 @@ fn why_a_name_traces_every_process_with_that_name() {
         "{out}"
     );
     assert!(target_line(&out).contains(&format!("[{}]", owned.pid())));
+}
+
+#[test]
+fn why_a_name_is_the_whole_name_and_cmd_widens_it_to_the_command_line() {
+    let word = nobody();
+    let owned = Owned::listener_with_args(&[&word]);
+    let part = &owned.name[..owned.name.len() - 1];
+
+    // a part of the name, or a word of the command line, names nothing
+    for text in [part, word.as_str()] {
+        let (out, err, code) = run_text(&["why", text]);
+        assert_eq!(code, 2, "{text}: {out}{err}");
+    }
+    let (out, err, _) = run_text(&["why", &word]);
+    assert!(
+        format!("{out}{err}").contains(&format!(
+            "1 process has '{word}' in its command line (add --cmd to match those)"
+        )),
+        "{out}{err}"
+    );
+
+    for text in [part, word.as_str()] {
+        let (out, _, code) = run_text(&["why", text, "--cmd"]);
+        assert_eq!(code, 0, "{text}: {out}");
+        assert!(
+            target_line(&out).contains(&format!("[{}]", owned.pid())),
+            "{out}"
+        );
+    }
 }
 
 #[test]
@@ -897,10 +933,61 @@ fn info_in_keeps_a_process_running_in_the_directory_and_drops_one_that_is_not() 
 }
 
 #[test]
+fn info_name_is_the_whole_name_and_cmd_widens_it_to_the_command_line() {
+    let word = nobody();
+    let owned = Owned::listener_with_args(&[&word]);
+    let part = &owned.name[..owned.name.len() - 1];
+
+    // the whole name, in any case
+    for name in [owned.name.clone(), owned.name.to_uppercase()] {
+        let (json, code) = run_json(&["info", &name, "--json"]);
+        assert_eq!(code, 0, "{json}");
+        assert_eq!(json["processes"][0]["pid"], owned.pid(), "{json}");
+    }
+
+    // a part of the name, or a word of the command line, is not found, and the
+    // warning says --cmd would find the word
+    for text in [part, word.as_str()] {
+        let (json, code) = run_json(&["info", text, "--json"]);
+        assert_eq!(code, 2, "{json}");
+        assert_eq!(json["not_found"][0], text, "{json}");
+    }
+    let (out, err, code) = run_text(&["info", &word]);
+    assert_eq!(code, 2, "{out}{err}");
+    assert!(
+        format!("{out}{err}").contains(&format!(
+            "Not found: {word}\n  1 process has '{word}' in its command line (add --cmd to match those)"
+        )),
+        "{out}{err}"
+    );
+
+    for text in [part, word.as_str()] {
+        let (json, code) = run_json(&["info", text, "--cmd", "--json"]);
+        assert_eq!(code, 0, "{json}");
+        assert!(
+            json["processes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|p| p["pid"] == owned.pid()),
+            "{json}"
+        );
+    }
+}
+
+#[test]
 fn info_by_keeps_a_process_with_that_name_and_drops_one_without() {
     let owned = Owned::listener();
     let (out, _, code) = run_text(&["info", &owned.pid_arg(), "--by", &owned.name]);
     assert_eq!(code, 0);
+    assert_eq!(out.matches("✓ Process").count(), 1, "{out}");
+
+    // --by is the whole name too; --cmd makes it any part of the name
+    let part = &owned.name[..owned.name.len() - 1];
+    let (_, _, code) = run_text(&["info", &owned.pid_arg(), "--by", part]);
+    assert_eq!(code, 2);
+    let (out, _, code) = run_text(&["info", &owned.pid_arg(), "--by", part, "--cmd"]);
+    assert_eq!(code, 0, "{out}");
     assert_eq!(out.matches("✓ Process").count(), 1, "{out}");
 
     let (json, code) = run_json(&["info", &owned.pid_arg(), "-b", &nobody(), "--json"]);

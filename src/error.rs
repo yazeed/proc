@@ -12,6 +12,16 @@ pub enum ProcError {
     #[error("No process found matching '{0}'\n  Try: proc list to list all processes")]
     ProcessNotFound(String),
 
+    /// No process has this name, but some have it in their command line, which
+    /// `--cmd` would match
+    #[error("No process found matching '{name}'\n  {}\n  Try: proc list to list all processes", command_line_hint(.name, *.in_command_line))]
+    NameNotFound {
+        /// The name that was looked for
+        name: String,
+        /// How many processes have it in their command line (at least one)
+        in_command_line: usize,
+    },
+
     /// No process is listening on the specified port
     #[error("No process listening on port {0}\n  Try: proc ports")]
     PortNotFound(u16),
@@ -71,7 +81,28 @@ pub enum ProcError {
     },
 }
 
+/// The hint for a name that matched nothing by name but is in some command lines
+pub fn command_line_hint(name: &str, count: usize) -> String {
+    let (who, has, its) = if count == 1 {
+        ("process", "has", "its")
+    } else {
+        ("processes", "have", "their")
+    };
+    format!("{count} {who} {has} '{name}' in {its} command line (add --cmd to match those)")
+}
+
 impl ProcError {
+    /// The `--cmd` hint, when this error carries one
+    pub fn command_line_hint(&self) -> Option<String> {
+        match self {
+            ProcError::NameNotFound {
+                name,
+                in_command_line,
+            } => Some(command_line_hint(name, *in_command_line)),
+            _ => None,
+        }
+    }
+
     /// Creates a [`ProcError::Reported`] for a result that has already been printed.
     pub fn reported(exit_code: ExitCode, message: impl Into<String>) -> Self {
         ProcError::Reported {
@@ -130,7 +161,9 @@ pub enum ExitCode {
 impl From<&ProcError> for ExitCode {
     fn from(err: &ProcError) -> Self {
         match err {
-            ProcError::ProcessNotFound(_) | ProcError::PortNotFound(_) => ExitCode::NotFound,
+            ProcError::ProcessNotFound(_)
+            | ProcError::NameNotFound { .. }
+            | ProcError::PortNotFound(_) => ExitCode::NotFound,
             ProcError::PermissionDenied(_) => ExitCode::PermissionDenied,
             ProcError::InvalidInput(_)
             | ProcError::NotSupported(_)
@@ -167,6 +200,14 @@ mod tests {
             (
                 ProcError::ProcessNotFound("node".to_string()),
                 "No process found matching 'node'\n  Try: proc list to list all processes",
+                2,
+            ),
+            (
+                ProcError::NameNotFound {
+                    name: "serve".to_string(),
+                    in_command_line: 2,
+                },
+                "No process found matching 'serve'\n  2 processes have 'serve' in their command line (add --cmd to match those)\n  Try: proc list to list all processes",
                 2,
             ),
             (
@@ -226,6 +267,30 @@ mod tests {
             assert_eq!(err.to_string(), message);
             assert_eq!(exit_code(err), code, "{message}");
         }
+    }
+
+    #[test]
+    fn only_a_name_that_is_in_command_lines_carries_the_cmd_hint() {
+        let one = ProcError::NameNotFound {
+            name: "serve".to_string(),
+            in_command_line: 1,
+        };
+        assert_eq!(
+            one.command_line_hint().unwrap(),
+            "1 process has 'serve' in its command line (add --cmd to match those)"
+        );
+        let many = ProcError::NameNotFound {
+            name: "serve".to_string(),
+            in_command_line: 3,
+        };
+        assert_eq!(
+            many.command_line_hint().unwrap(),
+            "3 processes have 'serve' in their command line (add --cmd to match those)"
+        );
+        assert_eq!(
+            ProcError::ProcessNotFound("serve".to_string()).command_line_hint(),
+            None
+        );
     }
 
     #[test]

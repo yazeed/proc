@@ -168,8 +168,16 @@ impl Owned {
     /// A listener that spins on a core: stuck by proc's measure (over half a
     /// core in two readings a second apart). Returns once proc sees it as stuck.
     fn busy() -> Self {
+        Self::busy_with(&[])
+    }
+
+    /// [`Owned::busy`] with extra arguments, which the listener ignores, so
+    /// they only put words in its command line
+    fn busy_with(extra: &[&str]) -> Self {
         let guard = busy_lock();
-        let mut busy = Self::start(&["--busy"], None);
+        let mut args = vec!["--busy"];
+        args.extend_from_slice(extra);
+        let mut busy = Self::start(&args, None);
         busy._busy = Some(guard);
         // proc has no CPU reading for a process that has used no CPU yet, so a
         // process started this instant is not found until a later look
@@ -633,6 +641,85 @@ fn wait_json_timeout_reports_the_exited_and_the_still_running() {
 }
 
 // ---- stop ----
+
+/// A word no process has, for this call alone
+fn unused_word() -> String {
+    let n = COUNTER.fetch_add(1, Ordering::SeqCst);
+    format!("word{}n{n}x", std::process::id())
+}
+
+#[test]
+fn a_name_target_is_the_whole_name_and_cmd_widens_it_to_the_command_line() {
+    let word = unused_word();
+    let mut owned = Owned::start(&[&word], None);
+    let part = owned.name[..owned.name.len() - 1].to_string();
+    let hint = format!("1 process has '{word}' in its command line (add --cmd to match those)");
+
+    let mut actions = vec!["kill", "stop"];
+    if cfg!(unix) {
+        actions.extend(["freeze", "thaw"]);
+    }
+    for action in actions {
+        // the exact name finds it, in any case
+        for name in [owned.name.clone(), owned.name.to_uppercase()] {
+            let (json, code) = run_json(&[action, &name, "--dry-run", "--json"]);
+            assert_eq!(code, 0, "{action} {name}: {json}");
+            assert!(lists(&json, "processes", owned.pid()), "{json}");
+        }
+        // a part of the name, or a word of the command line, finds nothing ...
+        for text in [&part, &word] {
+            let r = run(&[action, text, "--dry-run"]);
+            assert_eq!(r.code, 2, "{action} {text}: {}{}", r.stdout, r.stderr);
+        }
+        // ... and for the word, the output says --cmd would
+        let r = run(&[action, &word, "--dry-run"]);
+        assert!(
+            r.stdout.contains(&hint) || r.stderr.contains(&hint),
+            "{}{}",
+            r.stdout,
+            r.stderr
+        );
+        // with --cmd both find it
+        for text in [&part, &word] {
+            let (json, code) = run_json(&[action, text, "--cmd", "--dry-run", "--json"]);
+            assert_eq!(code, 0, "{action} {text} --cmd: {json}");
+            assert!(lists(&json, "processes", owned.pid()), "{json}");
+        }
+    }
+    assert!(owned.alive());
+}
+
+#[test]
+fn wait_takes_a_name_the_same_way() {
+    let word = unused_word();
+    let owned = Owned::start(&[&word], None);
+    // it never exits: the whole name times out (1), the word alone is not found (2)
+    let r = run(&["wait", &owned.name, "--timeout", "1", "--json"]);
+    assert_eq!(r.code, 1, "{}{}", r.stdout, r.stderr);
+    let r = run(&["wait", &word, "--timeout", "1", "--json"]);
+    assert_eq!(r.code, 2, "{}{}", r.stdout, r.stderr);
+    let r = run(&["wait", &word, "--cmd", "--timeout", "1", "--json"]);
+    assert_eq!(r.code, 1, "{}{}", r.stdout, r.stderr);
+}
+
+#[test]
+fn unstick_takes_a_name_the_same_way() {
+    let word = unused_word();
+    let mut busy = Owned::busy_with(&[&word]);
+    let name = busy.name.clone();
+    let r = run(&["unstick", &word, "--dry-run", "--json"]);
+    assert_eq!(r.code, 2, "{}{}", r.stdout, r.stderr);
+    for target in [&name, &word] {
+        let mut args = vec!["unstick", target, "--dry-run", "--json"];
+        if *target == word {
+            args.push("--cmd");
+        }
+        let (json, code) = run_json(&args);
+        assert_eq!(code, 0, "{target}: {json}");
+        assert!(lists(&json, "processes", busy.pid()), "{json}");
+    }
+    assert!(busy.alive());
+}
 
 #[test]
 fn stop_dry_run_says_what_it_would_stop_and_stops_nothing() {

@@ -3,6 +3,7 @@
 //! Provides a unified interface for discovering and managing processes
 //! across macOS, Linux, and Windows.
 
+use crate::core::name_match::{classify, Hit, NameMatch, Names};
 use crate::error::{ProcError, Result};
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
@@ -234,6 +235,7 @@ fn zombies_in(buf: &[u8], known: &std::collections::HashSet<u32>) -> Vec<Process
                 exe_path: None,
                 cwd: None,
                 command: None,
+                argv0: None,
                 cpu_percent: 0.0,
                 memory_mb: 0.0,
                 status: ProcessStatus::Zombie,
@@ -312,6 +314,10 @@ pub struct Process {
     /// Full command line (if available)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
+    /// The first word of the command line, kept whole (a path with spaces in
+    /// it stays one piece), for matching names; not part of the JSON
+    #[serde(skip)]
+    pub argv0: Option<String>,
     /// CPU usage percentage (0.0 - 100.0+)
     pub cpu_percent: f32,
     /// Memory usage in megabytes
@@ -332,13 +338,54 @@ pub struct Process {
     pub uptime_secs: Option<u64>,
 }
 
+/// How a name relates to a process sysinfo listed, under `mode`. Reads the
+/// name, executable and command line straight from sysinfo, so no record is
+/// built for the many processes that don't match.
+pub(crate) fn classify_sysinfo(pattern: &str, proc: &sysinfo::Process, mode: NameMatch) -> Hit {
+    let name = proc.name().to_string_lossy();
+    let exe = proc.exe().map(|exe| exe.to_string_lossy());
+    let argv0 = proc.cmd().first().map(|arg| arg.to_string_lossy());
+    // the joined command line is only needed to search inside it
+    let command = (!proc.cmd().is_empty()).then(|| {
+        proc.cmd()
+            .iter()
+            .map(|arg| arg.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join(" ")
+    });
+    classify(
+        pattern,
+        &Names {
+            name: &name,
+            exe: exe.as_deref(),
+            argv0: argv0.as_deref(),
+            command: command.as_deref(),
+        },
+        mode,
+    )
+}
+
 impl Process {
-    /// Find all processes matching a name pattern (case-insensitive)
-    pub fn find_by_name(pattern: &str) -> Result<Vec<Process>> {
+    /// The names a name target is compared with
+    pub fn names(&self) -> Names<'_> {
+        Names {
+            name: &self.name,
+            exe: self.exe_path.as_deref(),
+            argv0: self.argv0.as_deref(),
+            command: self.command.as_deref(),
+        }
+    }
+
+    /// Find all processes a name matches (see [`NameMatch`]): by default the
+    /// whole name, with `--cmd` any part of the name or command line.
+    ///
+    /// Proc itself and its ancestor shells never match. When nothing matches by
+    /// name but processes have the text in their command line, the error says
+    /// so: it costs nothing, the same pass over the processes counts them.
+    pub fn find_by_name(pattern: &str, mode: NameMatch) -> Result<Vec<Process>> {
         let mut sys = System::new_all();
         sys.refresh_all();
 
-        let pattern_lower = pattern.to_lowercase();
         let self_pid = sysinfo::Pid::from_u32(std::process::id());
         // Exclude the entire ancestor chain — their command lines contain proc's
         // arguments (e.g. "zsh -c proc by node"), causing false positives.
@@ -357,6 +404,7 @@ impl Process {
             }
             pids
         };
+        let mut in_command_line_only = 0;
         let processes: Vec<Process> = sys
             .processes()
             .iter()
@@ -365,28 +413,26 @@ impl Process {
                 if ancestor_pids.contains(pid) || is_thread(proc) {
                     return None;
                 }
-
-                let name = proc.name().to_string_lossy().to_string();
-                let cmd: String = proc
-                    .cmd()
-                    .iter()
-                    .map(|s| s.to_string_lossy())
-                    .collect::<Vec<_>>()
-                    .join(" ");
-
-                // Match against name or command
-                if name.to_lowercase().contains(&pattern_lower)
-                    || cmd.to_lowercase().contains(&pattern_lower)
-                {
-                    Some(Process::from_sysinfo(*pid, proc))
-                } else {
-                    None
+                match classify_sysinfo(pattern, proc, mode) {
+                    Hit::Match => Some(Process::from_sysinfo(*pid, proc)),
+                    Hit::CommandLineOnly => {
+                        in_command_line_only += 1;
+                        None
+                    }
+                    Hit::No => None,
                 }
             })
             .collect();
 
         if processes.is_empty() {
-            return Err(ProcError::ProcessNotFound(pattern.to_string()));
+            return Err(if in_command_line_only > 0 {
+                ProcError::NameNotFound {
+                    name: pattern.to_string(),
+                    in_command_line: in_command_line_only,
+                }
+            } else {
+                ProcError::ProcessNotFound(pattern.to_string())
+            });
         }
 
         Ok(processes)
@@ -854,6 +900,9 @@ impl Process {
             exe_path,
             cwd,
             command,
+            argv0: cmd_vec
+                .first()
+                .map(|arg| escape_control(&arg.to_string_lossy()).into_owned()),
             cpu_percent: proc.cpu_usage(),
             memory_mb: proc.memory() as f64 / 1024.0 / 1024.0,
             status: ProcessStatus::from(proc.status()),
@@ -1089,9 +1138,49 @@ mod tests {
     }
 
     #[test]
-    fn test_find_nonexistent_process() {
-        let result = Process::find_by_name("nonexistent_process_12345");
-        assert!(result.is_err());
+    fn a_name_nothing_has_is_plain_not_found_in_both_modes() {
+        for mode in [NameMatch::Exact, NameMatch::Command] {
+            let result = Process::find_by_name("nonexistent_process_12345", mode);
+            assert!(
+                matches!(&result, Err(ProcError::ProcessNotFound(n)) if n == "nonexistent_process_12345"),
+                "{result:?}"
+            );
+        }
+    }
+
+    /// A shell waiting for input that never comes, with a marker in its command
+    /// line: it is named `sh`, and the marker is only in `sh -c ...`. It runs
+    /// nothing else, so there is no child to leave behind.
+    #[cfg(unix)]
+    fn waiting_shell_with(marker: &str) -> std::process::Child {
+        std::process::Command::new("sh")
+            .args(["-c", &format!("read line; : {marker}")])
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .unwrap()
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_word_only_in_a_command_line_is_found_with_cmd_and_hinted_without() {
+        let marker = format!("hintmarker{}", std::process::id());
+        let mut child = waiting_shell_with(&marker);
+        let pid = child.id();
+        let exact = Process::find_by_name(&marker, NameMatch::Exact);
+        let cmd = Process::find_by_name(&marker, NameMatch::Command);
+        let _ = child.kill();
+        let _ = child.wait();
+
+        // by default no process is named that, and the error says one has it
+        // in its command line
+        assert!(
+            matches!(&exact, Err(ProcError::NameNotFound { name, in_command_line })
+                if name == &marker && *in_command_line >= 1),
+            "{exact:?}"
+        );
+        // with --cmd that process is the match, and the only one
+        let found = cmd.unwrap();
+        assert_eq!(found.iter().map(|p| p.pid).collect::<Vec<_>>(), vec![pid]);
     }
 
     #[test]
@@ -1109,6 +1198,7 @@ mod tests {
             exe_path: exe.map(String::from),
             cwd: cwd.map(String::from),
             command: None,
+            argv0: None,
             cpu_percent: 0.0,
             memory_mb: 0.0,
             status: ProcessStatus::Running,
@@ -1233,6 +1323,7 @@ mod tests {
             exe_path: None,
             cwd: None,
             command: None,
+            argv0: None,
             cpu_percent: 0.0,
             memory_mb: 0.0,
             status: ProcessStatus::Running,
@@ -1254,6 +1345,7 @@ mod tests {
             exe_path: None,
             cwd: None,
             command: None,
+            argv0: None,
             cpu_percent: 0.0,
             memory_mb: 0.0,
             status: ProcessStatus::Running,

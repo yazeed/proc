@@ -52,9 +52,9 @@ fn listener_path() -> PathBuf {
 
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
-/// A process name no process has, for this call alone. Name targets match
-/// command lines too, and the other tests run proc at the same time, so a name
-/// two tests share would match the other test's proc.
+/// A process name no process has, for this call alone: the other tests run
+/// proc at the same time, so a name two tests share would match the other
+/// test's process (with `--cmd`, any process whose command line has it).
 fn nobody() -> String {
     let n = COUNTER.fetch_add(1, Ordering::SeqCst);
     // Ends in `x`, so no name is the start of another (`-1x` in `-10x`)
@@ -65,10 +65,11 @@ fn nobody() -> String {
 /// just written can be "busy" (ETXTBSY) for an instant: a fork in a parallel
 /// test still holds the write handle until it execs. That clears in
 /// milliseconds, so try again.
-fn spawn_copy(copy: &Path, dir: &Path) -> Child {
+fn spawn_copy(copy: &Path, args: &[&str], dir: &Path) -> Child {
     let mut attempts = 0;
     loop {
         let spawned = std::process::Command::new(copy)
+            .args(args)
             .current_dir(dir)
             .stdout(Stdio::piped())
             .stdin(Stdio::null())
@@ -114,6 +115,12 @@ struct Owned {
 
 impl Owned {
     fn listener() -> Self {
+        Self::listener_with_args(&[])
+    }
+
+    /// A listener started with extra arguments (it ignores them, so they only
+    /// put words in its command line)
+    fn listener_with_args(args: &[&str]) -> Self {
         let tmp = tempfile::tempdir().unwrap();
         let raw_dir = tmp.path().to_path_buf();
         let dir = raw_dir.canonicalize().unwrap();
@@ -125,7 +132,7 @@ impl Owned {
         // Started by its canonical path, so the executable path processes
         // report is that path on every OS; the cwd is the path as the user
         // would type it
-        let mut child = spawn_copy(&dir.join(&file), &raw_dir);
+        let mut child = spawn_copy(&dir.join(&file), args, &raw_dir);
         let mut line = String::new();
         let mut stdout = BufReader::new(child.stdout.take().unwrap());
         let read = stdout.read_line(&mut line);
@@ -296,15 +303,16 @@ fn in_follows_a_symlink_to_the_directory() {
 
 #[cfg(unix)]
 #[test]
-fn tree_by_name_skips_the_shell_whose_command_line_holds_the_name() {
+fn tree_by_name_with_cmd_skips_the_shell_whose_command_line_holds_the_name() {
     let owned = Owned::listener();
     let proc_exe = assert_cmd::cargo::cargo_bin("proc");
     // The `exit` keeps sh alive as proc's parent (a bare `sh -c cmd` may exec
-    // cmd in place); sh's own command line holds the name
+    // cmd in place); sh's own command line holds the name, which only --cmd
+    // looks at
     let output = std::process::Command::new("sh")
         .args(["-c", r#""$0" "$@"; exit $?"#])
         .arg(&proc_exe)
-        .args(["tree", &owned.name, "--json", "--depth", "0"])
+        .args(["tree", &owned.name, "--cmd", "--json", "--depth", "0"])
         .env("NO_COLOR", "1")
         .output()
         .unwrap();
@@ -355,6 +363,33 @@ fn list_a_comma_separated_name_list_finds_each_name_once() {
     let mut expected = vec![u64::from(first.pid()), u64::from(second.pid())];
     expected.sort_unstable();
     assert_eq!(pids(&json), expected, "{json}");
+}
+
+#[test]
+fn list_name_is_the_whole_name_and_cmd_widens_it_to_the_command_line() {
+    let word = nobody();
+    let owned = Owned::listener_with_args(&[&word]);
+    let part = &owned.name[..owned.name.len() - 1];
+
+    // the whole name, in any case
+    let (json, _) = run_json(&["list", &owned.name.to_uppercase(), "--json"]);
+    assert_eq!(pids(&json), [u64::from(owned.pid())], "{json}");
+
+    // a part of the name, or a word of the command line, lists nothing
+    for text in [part, word.as_str()] {
+        let (json, code) = run_json(&["list", text, "--json"]);
+        assert_eq!(code, 0, "{json}");
+        assert!(pids(&json).is_empty(), "{text}: {json}");
+    }
+
+    // with --cmd both list it
+    for text in [part, word.as_str()] {
+        let (json, _) = run_json(&["list", text, "--cmd", "--json"]);
+        assert!(
+            pids(&json).contains(&u64::from(owned.pid())),
+            "{text}: {json}"
+        );
+    }
 }
 
 #[test]
@@ -906,6 +941,50 @@ fn tree_ancestors_of_a_name_nothing_has_is_a_warning() {
 }
 
 #[test]
+fn tree_name_is_the_whole_name_and_cmd_widens_it_to_the_command_line() {
+    let word = nobody();
+    let owned = Owned::listener_with_args(&[&word]);
+    let hint = format!("1 process has '{word}' in its command line (add --cmd to match those)");
+
+    // only in the command line: no match by default, and the warning says so
+    let (out, _, code) = run_text(&["tree", &word]);
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        out.contains(&format!("No processes found for '{word}'")),
+        "{out}"
+    );
+    assert!(out.contains(&hint), "{out}");
+    let (out, _, _) = run_text(&["tree", &word, "--ancestors"]);
+    assert!(
+        out.contains(&format!("No process found for '{word}'")),
+        "{out}"
+    );
+    assert!(out.contains(&hint), "{out}");
+    let (json, _) = run_json(&["tree", &word, "--json"]);
+    assert_eq!(json["tree"].as_array().unwrap().len(), 0, "{json}");
+
+    // with --cmd it is the match, for the tree and for the ancestry
+    let (json, _) = run_json(&["tree", &word, "--cmd", "--json", "--depth", "0"]);
+    assert_eq!(json["tree"][0]["pid"], owned.pid(), "{json}");
+    let (json, _) = run_json(&["tree", &word, "--cmd", "--ancestors", "--json"]);
+    assert_eq!(json["ancestry"][0]["target_pid"], owned.pid(), "{json}");
+
+    // part of the name is not the name either
+    let part = &owned.name[..owned.name.len() - 1];
+    let (json, _) = run_json(&["tree", part, "--json", "--depth", "0"]);
+    assert_eq!(json["tree"].as_array().unwrap().len(), 0, "{json}");
+    let (json, _) = run_json(&["tree", part, "--cmd", "--json", "--depth", "0"]);
+    assert!(
+        json["tree"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|n| n["pid"] == owned.pid()),
+        "{json}"
+    );
+}
+
+#[test]
 fn tree_ancestors_without_a_target_asks_for_one() {
     let (out, _, code) = run_text(&["tree", "--ancestors"]);
     assert_eq!(code, 0);
@@ -917,13 +996,13 @@ fn tree_ancestors_without_a_target_asks_for_one() {
 
 #[cfg(unix)]
 #[test]
-fn tree_ancestors_by_name_skips_the_shell_whose_command_line_holds_the_name() {
+fn tree_ancestors_by_name_with_cmd_skips_the_shell_whose_command_line_holds_the_name() {
     let owned = Owned::listener();
     let proc_exe = assert_cmd::cargo::cargo_bin("proc");
     let output = std::process::Command::new("sh")
         .args(["-c", r#""$0" "$@"; exit $?"#])
         .arg(&proc_exe)
-        .args(["tree", &owned.name, "--ancestors", "--json"])
+        .args(["tree", &owned.name, "--cmd", "--ancestors", "--json"])
         .env("NO_COLOR", "1")
         .output()
         .unwrap();

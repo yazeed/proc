@@ -4,14 +4,15 @@
 //!   proc on :3000              # What process is on port 3000?
 //!   proc on :3000 :8080        # What's on several ports? (separate arguments)
 //!   proc on 1234               # What ports is PID 1234 listening on?
-//!   proc on node               # What ports are node processes listening on?
+//!   proc on node               # What ports are the processes named node listening on?
+//!   proc on node --cmd         # ... or with node anywhere in their command line
 //!   proc on node --in .        # Node processes in cwd and their ports
 //!
 //! Commas still work (`proc on :3000,:8080`) but are deprecated.
 
 use crate::core::{
-    find_ports_for_pid, flatten_targets, parse_target, resolve_in_dir, resolve_target, PortInfo,
-    Process, TargetType,
+    find_ports_for_pid, flatten_targets, parse_target, resolve_in_dir, resolve_target, NameMatch,
+    PortInfo, Process, TargetType,
 };
 use crate::error::{ExitCode, ProcError, Result};
 use crate::ui::{format_duration, format_memory, Printer};
@@ -38,6 +39,10 @@ pub struct OnCommand {
     /// Filter by process name
     #[arg(long = "by", short = 'b')]
     pub by_name: Option<String>,
+
+    /// Match name targets and --by as a substring of the process name or full command line (like pkill -f)
+    #[arg(long)]
+    pub cmd: bool,
 
     /// Output as JSON
     #[arg(long, short = 'j')]
@@ -160,7 +165,7 @@ impl OnCommand {
     /// Check if process matches --by filter
     fn matches_by_filter(&self, proc: &Process) -> bool {
         if let Some(ref name) = self.by_name {
-            crate::core::matches_by_filter(proc, name)
+            crate::core::matches_by_filter(proc, name, NameMatch::from_flag(self.cmd))
         } else {
             true
         }
@@ -279,7 +284,7 @@ impl OnCommand {
     /// Find processes by name and their listening ports, applying --in/--by
     fn lookup_name(&self, name: &str) -> Result<Vec<(Process, Vec<PortInfo>)>> {
         // A name that matches nothing is an error here, never an empty list
-        let mut processes = resolve_target(name)?;
+        let mut processes = resolve_target(name, NameMatch::from_flag(self.cmd))?;
 
         // Apply --in and --by filters if present
         if self.in_dir.is_some() || self.by_name.is_some() {
@@ -539,6 +544,7 @@ mod tests {
             target: vec!["x".to_string()],
             in_dir: in_dir.map(String::from),
             by_name: None,
+            cmd: false,
             json: false,
             verbose: false,
         }
@@ -553,6 +559,7 @@ mod tests {
             exe_path: None,
             cwd: None,
             command: None,
+            argv0: None,
             cpu_percent: 0.0,
             memory_mb: 0.0,
             status: ProcessStatus::Sleeping,

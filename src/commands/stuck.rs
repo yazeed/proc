@@ -9,8 +9,9 @@
 //!   proc stuck              # Running over 5 minutes, and busy or blocked for 2 seconds
 //!   proc stuck --timeout 60 # The same, for processes running over 1 minute
 //!   proc stuck --kill       # Find and kill stuck processes
+//!   proc stuck --by node    # Only those named node (--cmd: node anywhere in the command line)
 
-use crate::core::{apply_filters, apply_to_each, Process};
+use crate::core::{apply_filters, apply_to_each, NameMatch, Process};
 use crate::error::Result;
 use crate::ui::{must_confirm, plural, Printer};
 use clap::Args;
@@ -56,6 +57,10 @@ pub struct StuckCommand {
     /// Filter by process name
     #[arg(long = "by", short = 'b')]
     pub by_name: Option<String>,
+
+    /// Match --by as a substring of the process name or full command line (like pkill -f)
+    #[arg(long)]
+    pub cmd: bool,
 }
 
 impl StuckCommand {
@@ -67,7 +72,12 @@ impl StuckCommand {
         let mut processes = Process::find_stuck(timeout)?;
 
         // Apply --in and --by filters
-        apply_filters(&mut processes, &self.in_dir, &self.by_name);
+        apply_filters(
+            &mut processes,
+            &self.in_dir,
+            &self.by_name,
+            NameMatch::from_flag(self.cmd),
+        );
 
         if processes.is_empty() {
             printer.print_empty_result(

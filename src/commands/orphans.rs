@@ -3,10 +3,11 @@
 //! Examples:
 //!   proc orphans              # List orphaned processes
 //!   proc orphans --in .       # Orphans in current directory
+//!   proc orphans --by node    # Only those named node (--cmd: node anywhere in the command line)
 //!   proc orphans --kill       # Find and kill orphans
 //!   proc orphans --kill --yes # Kill orphans without confirmation
 
-use crate::core::{apply_filters, apply_to_each, Process};
+use crate::core::{apply_filters, apply_to_each, NameMatch, Process};
 use crate::error::Result;
 use crate::ui::{must_confirm, plural, Printer};
 use clap::Args;
@@ -47,6 +48,10 @@ pub struct OrphansCommand {
     /// Filter by process name
     #[arg(long = "by", short = 'b')]
     pub by_name: Option<String>,
+
+    /// Match --by as a substring of the process name or full command line (like pkill -f)
+    #[arg(long)]
+    pub cmd: bool,
 }
 
 impl OrphansCommand {
@@ -57,7 +62,12 @@ impl OrphansCommand {
         let mut processes = Process::find_orphans()?;
 
         // Apply --in and --by filters
-        apply_filters(&mut processes, &self.in_dir, &self.by_name);
+        apply_filters(
+            &mut processes,
+            &self.in_dir,
+            &self.by_name,
+            NameMatch::from_flag(self.cmd),
+        );
 
         // Real CPU readings for every view that shows or returns the list; only
         // `--kill --json --yes` (no dry run) goes straight to killing

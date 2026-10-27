@@ -3,11 +3,12 @@
 //! Examples:
 //!   proc in .                  # Processes in current directory
 //!   proc in /path/to/project   # Processes in specific directory
-//!   proc in . --by node        # Node processes in cwd
+//!   proc in . --by node        # Processes named node in cwd
+//!   proc in . --by node --cmd  # ... or with node anywhere in their command line
 //!   proc in ~/projects         # Processes in ~/projects
 
 use crate::core::filters::resolve_dir;
-use crate::core::{sort_processes, Process, SortKey, StatusFilter};
+use crate::core::{sort_processes, NameMatch, Process, SortKey, StatusFilter};
 use crate::error::{ProcError, Result};
 use crate::ui::{OutputFormat, Printer};
 use clap::Args;
@@ -22,6 +23,10 @@ pub struct InCommand {
     /// Filter by process name
     #[arg(long = "by", short = 'b')]
     pub by_name: Option<String>,
+
+    /// Match --by as a substring of the process name or full command line (like pkill -f)
+    #[arg(long)]
+    pub cmd: bool,
 
     /// Only show processes using more than this CPU %
     #[arg(long)]
@@ -90,7 +95,7 @@ impl InCommand {
 
         // Get base process list
         let mut processes = if let Some(ref name) = self.by_name {
-            Process::find_by_name(name)?
+            Process::find_by_name(name, NameMatch::from_flag(self.cmd))?
         } else {
             Process::find_all()?
         };
@@ -203,6 +208,7 @@ mod tests {
         InCommand {
             path: ".".to_string(),
             by_name: None,
+            cmd: false,
             min_cpu: None,
             min_mem: None,
             status: None,
@@ -224,6 +230,7 @@ mod tests {
             exe_path: None,
             cwd: None,
             command: None,
+            argv0: None,
             cpu_percent: 0.0,
             memory_mb: 0.0,
             status: ProcessStatus::Sleeping,

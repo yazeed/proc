@@ -6,7 +6,7 @@
 //! - `name` - Processes matching this name
 
 use crate::core::port::{parse_port, PortInfo};
-use crate::core::Process;
+use crate::core::{NameMatch, Process};
 use crate::error::{ProcError, Result};
 
 /// Resolved target type
@@ -16,7 +16,8 @@ pub enum TargetType {
     Port(u16),
     /// Target a process by its process ID (e.g., `1234`)
     Pid(u32),
-    /// Target processes by name pattern (e.g., `node`)
+    /// Target processes by name (e.g., `node`): the whole name, or with `--cmd`
+    /// any part of the name or command line
     Name(String),
 }
 
@@ -56,12 +57,12 @@ pub fn parse_target(target: &str) -> TargetType {
     TargetType::Name(target.to_string())
 }
 
-/// Resolve a target to processes
-pub fn resolve_target(target: &str) -> Result<Vec<Process>> {
+/// Resolve a target to processes; `mode` says how a name is compared
+pub fn resolve_target(target: &str, mode: NameMatch) -> Result<Vec<Process>> {
     match parse_target(target) {
         TargetType::Port(port) => resolve_port(port),
         TargetType::Pid(pid) => resolve_pid(pid),
-        TargetType::Name(name) => Process::find_by_name(&name),
+        TargetType::Name(name) => Process::find_by_name(&name, mode),
     }
 }
 
@@ -125,31 +126,55 @@ pub fn flatten_targets(values: &[String]) -> Vec<String> {
     values.iter().flat_map(|v| parse_targets(v)).collect()
 }
 
+/// What resolving several targets came to
+#[derive(Debug, Default)]
+pub struct Resolved {
+    /// The processes found, each once however many targets name it
+    pub processes: Vec<Process>,
+    /// The targets that matched nothing
+    pub not_found: Vec<String>,
+    /// For a name that matched nothing, but is in some command lines: what
+    /// `--cmd` would find
+    pub hints: Vec<String>,
+}
+
+impl Resolved {
+    /// The warning for the targets that matched nothing, if there were any
+    pub fn warning(&self) -> Option<String> {
+        if self.not_found.is_empty() {
+            return None;
+        }
+        let mut warning = format!("Not found: {}", self.not_found.join(", "));
+        for hint in &self.hints {
+            warning.push_str("\n  ");
+            warning.push_str(hint);
+        }
+        Some(warning)
+    }
+}
+
 /// Resolve multiple targets, deduplicating by PID
-///
-/// Returns a tuple of (found processes, not found target strings)
-pub fn resolve_targets(targets: &[String]) -> (Vec<Process>, Vec<String>) {
-    resolve_targets_impl(targets, false)
+pub fn resolve_targets(targets: &[String], mode: NameMatch) -> Resolved {
+    resolve_targets_impl(targets, false, mode)
 }
 
 /// Resolve multiple targets, excluding the current process (self)
 ///
 /// Use this for destructive commands (kill, stop) to avoid proc killing itself
 /// when the target pattern matches proc's own command line arguments.
-pub fn resolve_targets_excluding_self(targets: &[String]) -> (Vec<Process>, Vec<String>) {
-    resolve_targets_impl(targets, true)
+pub fn resolve_targets_excluding_self(targets: &[String], mode: NameMatch) -> Resolved {
+    resolve_targets_impl(targets, true, mode)
 }
 
-fn resolve_targets_impl(targets: &[String], exclude_self: bool) -> (Vec<Process>, Vec<String>) {
+fn resolve_targets_impl(targets: &[String], exclude_self: bool, mode: NameMatch) -> Resolved {
     use std::collections::HashSet;
 
-    let mut all_processes = Vec::new();
+    let mut resolved = Resolved::default();
     let mut seen_pids = HashSet::new();
-    let mut not_found = Vec::new();
     let self_pid = std::process::id();
 
     for target in targets {
-        match resolve_target(target) {
+        match resolve_target(target, mode) {
             Ok(processes) => {
                 for proc in processes {
                     // Skip self if requested (for destructive commands)
@@ -157,15 +182,18 @@ fn resolve_targets_impl(targets: &[String], exclude_self: bool) -> (Vec<Process>
                         continue;
                     }
                     if seen_pids.insert(proc.pid) {
-                        all_processes.push(proc);
+                        resolved.processes.push(proc);
                     }
                 }
             }
-            Err(_) => not_found.push(target.clone()),
+            Err(error) => {
+                resolved.not_found.push(target.clone());
+                resolved.hints.extend(error.command_line_hint());
+            }
         }
     }
 
-    (all_processes, not_found)
+    resolved
 }
 
 #[cfg(test)]
@@ -308,13 +336,26 @@ mod tests {
         let targets = vec![me.clone(), me.clone(), "99999999".to_string()];
 
         // listed twice, found once; the made-up PID is not found
-        let (found, missing) = resolve_targets(&targets);
-        assert_eq!(found.len(), 1);
-        assert_eq!(found[0].pid, std::process::id());
-        assert_eq!(missing, vec!["99999999".to_string()]);
+        let resolved = resolve_targets(&targets, NameMatch::Exact);
+        assert_eq!(resolved.processes.len(), 1);
+        assert_eq!(resolved.processes[0].pid, std::process::id());
+        assert_eq!(resolved.not_found, vec!["99999999".to_string()]);
+        assert_eq!(
+            resolved.warning().unwrap(),
+            "Not found: 99999999",
+            "a PID has no --cmd hint"
+        );
 
-        let (found, missing) = resolve_targets_excluding_self(&targets);
-        assert!(found.is_empty());
-        assert_eq!(missing, vec!["99999999".to_string()]);
+        let resolved = resolve_targets_excluding_self(&targets, NameMatch::Exact);
+        assert!(resolved.processes.is_empty());
+        assert_eq!(resolved.not_found, vec!["99999999".to_string()]);
+    }
+
+    #[test]
+    fn nothing_missing_means_no_warning() {
+        let me = std::process::id().to_string();
+        let resolved = resolve_targets(&[me], NameMatch::Exact);
+        assert!(resolved.not_found.is_empty());
+        assert_eq!(resolved.warning(), None);
     }
 }

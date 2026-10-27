@@ -149,10 +149,30 @@ impl Owned {
         }
     }
 
-    fn start(args: &[&str], exe: Option<&Path>) -> Self {
-        let (tmp, dir) = fresh_dir();
+    /// A listener with extra arguments (it ignores them, so they only put words
+    /// in its command line)
+    fn with_args(args: &[&str]) -> Self {
+        Self::start(args, None)
+    }
+
+    /// A listener whose name is longer than the 15 characters Linux reports
+    /// for a process name
+    fn long_named() -> Self {
         let n = COUNTER.fetch_add(1, Ordering::SeqCst);
-        let name = format!("pcf{}n{n}x", std::process::id());
+        Self::start_as(
+            format!("pcf-a-long-name-{}n{n}x", std::process::id()),
+            &[],
+            None,
+        )
+    }
+
+    fn start(args: &[&str], exe: Option<&Path>) -> Self {
+        let n = COUNTER.fetch_add(1, Ordering::SeqCst);
+        Self::start_as(format!("pcf{}n{n}x", std::process::id()), args, exe)
+    }
+
+    fn start_as(name: String, args: &[&str], exe: Option<&Path>) -> Self {
+        let (tmp, dir) = fresh_dir();
         let exe = match exe {
             Some(shared) => shared.to_path_buf(),
             None => {
@@ -285,6 +305,101 @@ fn by_lists_the_process_as_json() {
     assert_eq!(json["action"], "by");
     assert_eq!(json["count"], 1, "{json}");
     assert!(lists(&json, "processes", p.pid()), "{json}");
+}
+
+/// A name nothing runs, for this call alone
+fn unused_word() -> String {
+    let n = COUNTER.fetch_add(1, Ordering::SeqCst);
+    format!("word{}n{n}x", std::process::id())
+}
+
+#[test]
+fn by_matches_the_whole_name_in_any_case_and_not_a_part_of_it() {
+    let p = Owned::listener();
+    let (json, code) = run_json(&["by", &p.name.to_uppercase(), "--json"]);
+    assert_eq!(code, 0, "{json}");
+    assert!(lists(&json, "processes", p.pid()), "{json}");
+
+    // the name without its last character is not the name
+    let part = &p.name[..p.name.len() - 1];
+    let (json, code) = run_json(&["by", part, "--json"]);
+    assert_eq!(code, 2, "{json}");
+    assert_eq!(json["success"], false, "{json}");
+}
+
+#[test]
+fn by_cmd_matches_a_part_of_the_name() {
+    let p = Owned::listener();
+    let part = &p.name[..p.name.len() - 1];
+    let (json, code) = run_json(&["by", part, "--cmd", "--json"]);
+    assert_eq!(code, 0, "{json}");
+    assert!(lists(&json, "processes", p.pid()), "{json}");
+}
+
+#[test]
+fn by_ignores_a_word_only_in_the_command_line_and_says_cmd_would_find_it() {
+    let word = unused_word();
+    let p = Owned::with_args(&[&word]);
+
+    let output = proc_cmd().args(["by", &word]).output().unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    let err = String::from_utf8(output.stderr).unwrap();
+    assert!(err.contains("No process found matching"), "{err}");
+    assert!(
+        err.contains(&format!(
+            "1 process has '{word}' in its command line (add --cmd to match those)"
+        )),
+        "{err}"
+    );
+
+    let (json, code) = run_json(&["by", &word, "--cmd", "--json"]);
+    assert_eq!(code, 0, "{json}");
+    assert_eq!(json["count"], 1, "{json}");
+    assert!(lists(&json, "processes", p.pid()), "{json}");
+}
+
+#[test]
+fn by_finds_a_long_name_that_linux_cuts_through_the_executable_name() {
+    // Linux reports only the first 15 characters of the name; the executable's
+    // file name has the rest
+    let p = Owned::long_named();
+    assert!(p.name.len() > 15, "{}", p.name);
+    let (json, code) = run_json(&["by", &p.name, "--json"]);
+    assert_eq!(code, 0, "{json}");
+    assert!(lists(&json, "processes", p.pid()), "{json}");
+}
+
+#[test]
+fn the_by_filters_follow_the_same_rule_as_a_name_target() {
+    let word = unused_word();
+    let p = Owned::with_args(&[&word]);
+    let part = p.name[..p.name.len() - 1].to_string();
+    let exe = p.exe();
+    let dir = p.dir();
+
+    // `for FILE --by X` and `in DIR --by X`: the whole name only
+    for by in [p.name.as_str(), &p.name.to_uppercase()] {
+        let (json, code) = run_json(&["for", &exe, "--by", by, "--json"]);
+        assert_eq!(code, 0, "{json}");
+        let (json, code) = run_json(&["in", &dir, "--by", by, "--json"]);
+        assert_eq!(code, 0, "{json}");
+        assert!(lists(&json, "processes", p.pid()), "{json}");
+    }
+    for by in [part.as_str(), word.as_str()] {
+        let (json, code) = run_json(&["for", &exe, "--by", by, "--json"]);
+        assert_eq!(code, 2, "for --by {by}: {json}");
+        let (json, code) = run_json(&["in", &dir, "--by", by, "--json"]);
+        assert_eq!(code, 2, "in --by {by}: {json}");
+    }
+
+    // with --cmd, a part of the name or a word of the command line
+    for by in [part.as_str(), word.as_str()] {
+        let (json, code) = run_json(&["for", &exe, "--by", by, "--cmd", "--json"]);
+        assert_eq!(code, 0, "for --by {by} --cmd: {json}");
+        let (json, code) = run_json(&["in", &dir, "--by", by, "--cmd", "--json"]);
+        assert_eq!(code, 0, "in --by {by} --cmd: {json}");
+        assert!(lists(&json, "processes", p.pid()), "{json}");
+    }
 }
 
 #[test]
@@ -654,6 +769,14 @@ fn stuck_leaves_an_idle_process_out() {
 fn stuck_by_name_keeps_only_that_name() {
     let busy = Owned::busy();
     let dir = busy.dir();
+    let part = &busy.name[..busy.name.len() - 1];
+    // the whole name only, until --cmd
+    let (json, _) = run_json(&["stuck", "-t", "0", "-i", &dir, "--by", part, "--json"]);
+    assert!(!lists(&json, "processes", busy.pid()), "{json}");
+    let (json, _) = run_json(&[
+        "stuck", "-t", "0", "-i", &dir, "--by", part, "--cmd", "--json",
+    ]);
+    assert!(lists(&json, "processes", busy.pid()), "{json}");
     let (json, _) = run_json(&["stuck", "-t", "0", "-i", &dir, "--by", &busy.name, "--json"]);
     assert!(lists(&json, "processes", busy.pid()), "{json}");
     let (json, _) = run_json(&[
