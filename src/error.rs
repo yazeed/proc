@@ -152,4 +152,146 @@ mod tests {
         let err = ProcError::NotSupported("freeze".to_string());
         assert_eq!(ExitCode::from(&err) as i32, 4);
     }
+
+    fn exit_code(err: ProcError) -> i32 {
+        ExitCode::from(&err) as i32
+    }
+
+    #[test]
+    fn every_error_has_its_message_and_exit_code() {
+        let confirmation = ProcError::ConfirmationRequired {
+            message: "Pass --yes".to_string(),
+            processes: Vec::new(),
+        };
+        let cases: Vec<(ProcError, &str, i32)> = vec![
+            (
+                ProcError::ProcessNotFound("node".to_string()),
+                "No process found matching 'node'\n  Try: proc list to list all processes",
+                2,
+            ),
+            (
+                ProcError::PortNotFound(3000),
+                "No process listening on port 3000\n  Try: proc ports",
+                2,
+            ),
+            (
+                ProcError::PermissionDenied(42),
+                "Permission denied for PID 42\n  Try: sudo proc <command>",
+                3,
+            ),
+            (
+                ProcError::InvalidInput("bad".to_string()),
+                "Invalid input: bad",
+                4,
+            ),
+            (confirmation, "Invalid input: Pass --yes", 4),
+            (
+                ProcError::SystemError("boom".to_string()),
+                "System error: boom",
+                1,
+            ),
+            (
+                ProcError::Timeout("10s".to_string()),
+                "Operation timed out: 10s",
+                1,
+            ),
+            (
+                ProcError::ParseError("x".to_string()),
+                "Failed to parse: x",
+                1,
+            ),
+            (
+                ProcError::NotSupported("freeze".to_string()),
+                "Not supported on this platform: freeze",
+                4,
+            ),
+            (
+                ProcError::ProcessGone(7),
+                "Process 7 is no longer running",
+                1,
+            ),
+            (
+                ProcError::SignalError("EPERM".to_string()),
+                "Signal failed: EPERM",
+                1,
+            ),
+            (
+                ProcError::reported(ExitCode::NotFound, "nothing matched"),
+                "nothing matched",
+                2,
+            ),
+        ];
+        for (err, message, code) in cases {
+            assert_eq!(err.to_string(), message);
+            assert_eq!(exit_code(err), code, "{message}");
+        }
+    }
+
+    #[test]
+    fn a_reported_error_keeps_the_exit_code_it_was_given() {
+        for code in [
+            ExitCode::Success,
+            ExitCode::GeneralError,
+            ExitCode::NotFound,
+            ExitCode::PermissionDenied,
+            ExitCode::InvalidInput,
+        ] {
+            let err = ProcError::reported(code, "done");
+            assert_eq!(ExitCode::from(&err), code);
+        }
+    }
+
+    #[test]
+    fn an_io_error_becomes_the_matching_proc_error() {
+        use std::io::{Error, ErrorKind};
+        let denied = ProcError::from(Error::from(ErrorKind::PermissionDenied));
+        assert!(
+            matches!(denied, ProcError::PermissionDenied(0)),
+            "{denied:?}"
+        );
+        let missing = ProcError::from(Error::from(ErrorKind::NotFound));
+        assert!(
+            matches!(&missing, ProcError::ProcessNotFound(t) if t == "unknown"),
+            "{missing:?}"
+        );
+        let other = ProcError::from(Error::new(ErrorKind::BrokenPipe, "pipe closed"));
+        assert!(
+            matches!(&other, ProcError::SystemError(m) if m == "pipe closed"),
+            "{other:?}"
+        );
+    }
+
+    #[test]
+    fn a_json_error_becomes_a_parse_error() {
+        let source = serde_json::from_str::<serde_json::Value>("{").unwrap_err();
+        let expected = source.to_string();
+        let err = ProcError::from(source);
+        assert!(
+            matches!(&err, ProcError::ParseError(m) if *m == expected),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn a_bad_regex_becomes_invalid_input() {
+        // Built at run time: clippy rejects a literal that is not a valid regex
+        let pattern = String::from("(");
+        let source = regex::Regex::new(&pattern).unwrap_err();
+        let err = ProcError::from(source);
+        assert!(
+            matches!(&err, ProcError::InvalidInput(m) if m.starts_with("Invalid pattern: ")),
+            "{err:?}"
+        );
+        assert_eq!(exit_code(err), 4);
+    }
+
+    #[test]
+    fn a_dialog_error_becomes_a_system_error() {
+        let source = dialoguer::Error::IO(std::io::Error::other("no terminal"));
+        let err = ProcError::from(source);
+        assert!(
+            matches!(&err, ProcError::SystemError(m) if m == "Dialog error: IO error: no terminal"),
+            "{err:?}"
+        );
+    }
 }

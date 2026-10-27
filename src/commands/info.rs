@@ -13,6 +13,7 @@ use crate::ui::{colorize_status, format_duration, format_memory, Printer};
 use clap::Args;
 use colored::*;
 use serde::Serialize;
+use std::fmt::Write;
 
 /// Show detailed process information
 #[derive(Args, Debug)]
@@ -46,27 +47,7 @@ impl InfoCommand {
         // Flatten targets - support both space-separated and comma-separated
         let all_targets: Vec<String> = self.targets.iter().flat_map(|t| parse_targets(t)).collect();
 
-        let mut found = Vec::new();
-        let mut not_found = Vec::new();
-        let mut seen_pids = std::collections::HashSet::new();
-
-        for target in &all_targets {
-            match resolve_target(target) {
-                Ok(processes) => {
-                    if processes.is_empty() {
-                        not_found.push(target.clone());
-                    } else {
-                        for proc in processes {
-                            // Deduplicate by PID
-                            if seen_pids.insert(proc.pid) {
-                                found.push(proc);
-                            }
-                        }
-                    }
-                }
-                Err(_) => not_found.push(target.clone()),
-            }
-        }
+        let (mut found, not_found) = resolve_all(&all_targets, resolve_target);
 
         // Apply --in and --by filters
         apply_filters(&mut found, &self.in_dir, &self.by_name);
@@ -104,68 +85,121 @@ impl InfoCommand {
     }
 
     fn print_process_info(&self, proc: &Process) {
-        println!(
-            "{} Process {}",
-            "✓".green().bold(),
-            proc.pid.to_string().cyan().bold()
-        );
-        println!();
-        println!("  {} {}", "Name:".bright_black(), proc.name.white().bold());
-        println!(
+        let now_secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        print!("{}", render_process_info(proc, self.verbose, now_secs));
+    }
+}
+
+/// The block `info` prints for one process: one line per fact that is known
+/// (`now_secs` is the time since the Unix epoch, for the uptime).
+fn render_process_info(proc: &Process, verbose: bool, now_secs: u64) -> String {
+    // Writing to a String can't fail
+    let mut out = String::new();
+    let _ = writeln!(
+        out,
+        "{} Process {}",
+        "✓".green().bold(),
+        proc.pid.to_string().cyan().bold()
+    );
+    let _ = writeln!(out);
+    let _ = writeln!(
+        out,
+        "  {} {}",
+        "Name:".bright_black(),
+        proc.name.white().bold()
+    );
+    let _ = writeln!(
+        out,
+        "  {} {}",
+        "PID:".bright_black(),
+        proc.pid.to_string().cyan()
+    );
+
+    if let Some(ref cwd) = proc.cwd {
+        let _ = writeln!(out, "  {} {}", "Directory:".bright_black(), cwd);
+    }
+
+    if let Some(ref path) = proc.exe_path {
+        let _ = writeln!(out, "  {} {}", "Path:".bright_black(), path);
+    }
+
+    if let Some(ref user) = proc.user {
+        let _ = writeln!(out, "  {} {}", "User:".bright_black(), user);
+    }
+
+    if let Some(ppid) = proc.parent_pid {
+        let _ = writeln!(
+            out,
             "  {} {}",
-            "PID:".bright_black(),
-            proc.pid.to_string().cyan()
+            "Parent PID:".bright_black(),
+            ppid.to_string().cyan()
         );
+    }
 
-        if let Some(ref cwd) = proc.cwd {
-            println!("  {} {}", "Directory:".bright_black(), cwd);
-        }
+    let status_str = format!("{:?}", proc.status);
+    let status_colored = colorize_status(&proc.status, &status_str);
+    let _ = writeln!(out, "  {} {}", "Status:".bright_black(), status_colored);
 
-        if let Some(ref path) = proc.exe_path {
-            println!("  {} {}", "Path:".bright_black(), path);
-        }
+    let _ = writeln!(out, "  {} {:.1}%", "CPU:".bright_black(), proc.cpu_percent);
+    let _ = writeln!(
+        out,
+        "  {} {}",
+        "Memory:".bright_black(),
+        format_memory(proc.memory_mb)
+    );
 
-        if let Some(ref user) = proc.user {
-            println!("  {} {}", "User:".bright_black(), user);
-        }
+    if let Some(start_time) = proc.start_time {
+        let uptime = format_duration(now_secs.saturating_sub(start_time));
+        let _ = writeln!(out, "  {} {}", "Uptime:".bright_black(), uptime);
+    }
 
-        if let Some(ppid) = proc.parent_pid {
-            println!(
+    if verbose {
+        if let Some(ref cmd) = proc.command {
+            let _ = writeln!(
+                out,
                 "  {} {}",
-                "Parent PID:".bright_black(),
-                ppid.to_string().cyan()
+                "Command:".bright_black(),
+                cmd.bright_black()
             );
         }
-
-        let status_str = format!("{:?}", proc.status);
-        let status_colored = colorize_status(&proc.status, &status_str);
-        println!("  {} {}", "Status:".bright_black(), status_colored);
-
-        println!("  {} {:.1}%", "CPU:".bright_black(), proc.cpu_percent);
-        println!(
-            "  {} {}",
-            "Memory:".bright_black(),
-            format_memory(proc.memory_mb)
-        );
-
-        if let Some(start_time) = proc.start_time {
-            let duration = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_secs().saturating_sub(start_time))
-                .unwrap_or(0);
-
-            let uptime = format_duration(duration);
-            println!("  {} {}", "Uptime:".bright_black(), uptime);
-        }
-
-        if self.verbose {
-            if let Some(ref cmd) = proc.command {
-                println!("  {} {}", "Command:".bright_black(), cmd.bright_black());
-            }
-        }
-
-        println!();
     }
+
+    let _ = writeln!(out);
+    out
+}
+
+/// Resolve every target. Returns the processes found, each once however many
+/// targets name it, and the targets that matched nothing.
+fn resolve_all(
+    targets: &[String],
+    resolve: impl Fn(&str) -> Result<Vec<Process>>,
+) -> (Vec<Process>, Vec<String>) {
+    let mut found = Vec::new();
+    let mut not_found = Vec::new();
+    let mut seen_pids = std::collections::HashSet::new();
+
+    for target in targets {
+        match resolve(target) {
+            Ok(processes) => {
+                if processes.is_empty() {
+                    not_found.push(target.clone());
+                } else {
+                    for proc in processes {
+                        // Deduplicate by PID
+                        if seen_pids.insert(proc.pid) {
+                            found.push(proc);
+                        }
+                    }
+                }
+            }
+            Err(_) => not_found.push(target.clone()),
+        }
+    }
+
+    (found, not_found)
 }
 
 #[derive(Serialize)]
@@ -176,4 +210,122 @@ struct InfoOutput<'a> {
     not_found_count: usize,
     processes: &'a [Process],
     not_found: &'a [String],
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::ProcessStatus;
+
+    fn process(pid: u32) -> Process {
+        Process {
+            pid,
+            name: format!("p{pid}"),
+            exe_path: None,
+            cwd: None,
+            command: None,
+            cpu_percent: 0.0,
+            memory_mb: 0.0,
+            status: ProcessStatus::Sleeping,
+            user: None,
+            parent_pid: None,
+            start_time: None,
+            uptime_secs: None,
+        }
+    }
+
+    fn targets(list: &[&str]) -> Vec<String> {
+        list.iter().map(|t| t.to_string()).collect()
+    }
+
+    #[test]
+    fn a_target_that_resolves_to_nothing_is_not_found() {
+        let (found, not_found) = resolve_all(&targets(&["ghost"]), |_| Ok(Vec::new()));
+        assert!(found.is_empty());
+        assert_eq!(not_found, vec!["ghost"]);
+    }
+
+    #[test]
+    fn a_target_that_fails_to_resolve_is_not_found() {
+        let (found, not_found) = resolve_all(&targets(&["a", "b"]), |t| match t {
+            "a" => Ok(vec![process(1)]),
+            _ => Err(ProcError::ProcessNotFound(t.to_string())),
+        });
+        assert_eq!(found.len(), 1);
+        assert_eq!(not_found, vec!["b"]);
+    }
+
+    #[test]
+    fn a_process_two_targets_name_is_found_once() {
+        let (found, not_found) = resolve_all(&targets(&["a", "b", "c"]), |t| match t {
+            "a" => Ok(vec![process(1), process(2)]),
+            "b" => Ok(vec![process(2), process(3)]),
+            _ => Ok(vec![process(1)]),
+        });
+        let pids: Vec<u32> = found.iter().map(|p| p.pid).collect();
+        assert_eq!(pids, vec![1, 2, 3]);
+        assert!(not_found.is_empty());
+    }
+
+    fn bare(pid: u32) -> Process {
+        Process {
+            name: "worker".to_string(),
+            ..process(pid)
+        }
+    }
+
+    fn render(proc: &Process, verbose: bool, now_secs: u64) -> String {
+        colored::control::set_override(false);
+        render_process_info(proc, verbose, now_secs)
+    }
+
+    #[test]
+    fn a_process_with_nothing_known_shows_only_what_always_is() {
+        let out = render(&bare(7), true, 1_000);
+        assert_eq!(
+            out,
+            "✓ Process 7\n\n  Name: worker\n  PID: 7\n  Status: Sleeping\n  CPU: 0.0%\n  Memory: 0KB\n\n"
+        );
+    }
+
+    #[test]
+    fn every_known_fact_gets_a_line() {
+        let proc = Process {
+            cwd: Some("/work".to_string()),
+            exe_path: Some("/bin/worker".to_string()),
+            user: Some("zee".to_string()),
+            parent_pid: Some(1),
+            command: Some("/bin/worker --flag".to_string()),
+            start_time: Some(940),
+            ..bare(7)
+        };
+        let out = render(&proc, false, 1_000);
+        for line in [
+            "  Directory: /work\n",
+            "  Path: /bin/worker\n",
+            "  User: zee\n",
+            "  Parent PID: 1\n",
+            "  Uptime: 1m 0s\n",
+        ] {
+            assert!(out.contains(line), "{line:?} missing from\n{out}");
+        }
+        // The command line is for --verbose
+        assert!(!out.contains("Command:"), "{out}");
+        let verbose = render(&proc, true, 1_000);
+        assert!(
+            verbose.contains("  Command: /bin/worker --flag\n"),
+            "{verbose}"
+        );
+    }
+
+    #[test]
+    fn a_start_time_in_the_future_reads_as_no_time_at_all() {
+        // A clock behind the process's start must not underflow
+        let proc = Process {
+            start_time: Some(5_000),
+            ..bare(7)
+        };
+        let out = render(&proc, false, 1_000);
+        assert!(out.contains("  Uptime: 0s\n"), "{out}");
+    }
 }

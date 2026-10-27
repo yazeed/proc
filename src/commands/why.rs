@@ -63,22 +63,14 @@ impl WhyCommand {
             };
 
             // Resolve to processes
-            let target_processes = match resolve_target(target_str) {
+            let target_processes = match found_processes(target_str, resolve_target) {
                 Ok(procs) => procs,
-                Err(e) => {
-                    if !self.json {
-                        printer.warning(&format!("{}", e));
-                    }
-                    first_error.get_or_insert(e);
+                Err((error, warning)) => {
+                    printer.warning(&warning);
+                    first_error.get_or_insert(error);
                     continue;
                 }
             };
-
-            if target_processes.is_empty() {
-                printer.warning(&format!("No process found for '{}'", target_str));
-                first_error.get_or_insert(ProcError::ProcessNotFound(target_str.clone()));
-                continue;
-            }
             found_any = true;
 
             if self.json {
@@ -157,66 +149,30 @@ impl WhyCommand {
         target: &Process,
         pid_map: &HashMap<u32, &Process>,
     ) -> Vec<AncestryEntry> {
-        let mut chain: Vec<AncestryEntry> = Vec::new();
-        let mut current_pid = Some(target.pid);
-
-        while let Some(pid) = current_pid {
-            if let Some(proc) = pid_map.get(&pid) {
-                chain.push(AncestryEntry {
-                    pid: proc.pid,
-                    name: proc.name.clone(),
-                    command: proc.command.clone(),
-                    cwd: proc.cwd.clone(),
-                    status: proc.status,
-                    uptime_secs: proc.uptime_secs,
-                    is_target: proc.pid == target.pid,
-                });
-                current_pid = proc.parent_pid;
-                if chain.len() > 100 {
-                    break;
-                }
-            } else {
-                break;
-            }
-        }
-
-        chain.reverse();
-        chain
+        ancestor_chain(target, pid_map)
+            .into_iter()
+            .map(|proc| AncestryEntry {
+                pid: proc.pid,
+                name: proc.name.clone(),
+                command: proc.command.clone(),
+                cwd: proc.cwd.clone(),
+                status: proc.status,
+                uptime_secs: proc.uptime_secs,
+                is_target: proc.pid == target.pid,
+            })
+            .collect()
     }
 
     /// Print ancestry tree with working directory and command context
     fn print_ancestry_with_context(&self, target: &Process, pid_map: &HashMap<u32, &Process>) {
-        // Build the ancestor chain (from target up to root)
-        let mut chain: Vec<&Process> = Vec::new();
-        let mut current_pid = Some(target.pid);
-
-        while let Some(pid) = current_pid {
-            if let Some(proc) = pid_map.get(&pid) {
-                chain.push(proc);
-                current_pid = proc.parent_pid;
-                if chain.len() > 100 {
-                    break;
-                }
-            } else {
-                break;
-            }
-        }
-
-        // Reverse to print from root to target
-        chain.reverse();
+        let chain = ancestor_chain(target, pid_map);
 
         for (i, proc) in chain.iter().enumerate() {
             let is_target = proc.pid == target.pid;
             let indent = "    ".repeat(i);
             let connector = if i == 0 { "" } else { "└── " };
 
-            let status_indicator = match proc.status {
-                ProcessStatus::Running => "●".green(),
-                ProcessStatus::Sleeping => "○".blue(),
-                ProcessStatus::Stopped => "◐".yellow(),
-                ProcessStatus::Zombie => "✗".red(),
-                _ => "?".white(),
-            };
+            let symbol = status_indicator(proc.status);
 
             // Build the command summary (skip exe name, show args)
             let cmd_summary = proc
@@ -242,7 +198,7 @@ impl WhyCommand {
                     "{}{}{} {} [{}]{}{}  {}",
                     indent.bright_black(),
                     connector.bright_black(),
-                    status_indicator,
+                    symbol,
                     proc.name.cyan().bold(),
                     proc.pid.to_string().cyan().bold(),
                     cmd_part,
@@ -268,7 +224,7 @@ impl WhyCommand {
                     "{}{}{} {} [{}]{}{}",
                     indent.bright_black(),
                     connector.bright_black(),
-                    status_indicator,
+                    symbol,
                     proc.name.white(),
                     proc.pid.to_string().cyan(),
                     cmd_part.bright_black(),
@@ -276,6 +232,59 @@ impl WhyCommand {
                 );
             }
         }
+    }
+}
+
+/// Resolve one target to the processes it names. An error carries the warning
+/// to show a person: the resolve error's own text, or a plain "no process found"
+/// if the target resolved to nothing.
+fn found_processes(
+    target: &str,
+    resolve: impl Fn(&str) -> Result<Vec<Process>>,
+) -> std::result::Result<Vec<Process>, (ProcError, String)> {
+    match resolve(target) {
+        Ok(processes) if processes.is_empty() => Err((
+            ProcError::ProcessNotFound(target.to_string()),
+            format!("No process found for '{}'", target),
+        )),
+        Ok(processes) => Ok(processes),
+        Err(e) => {
+            let warning = e.to_string();
+            Err((e, warning))
+        }
+    }
+}
+
+/// The target and its ancestors, from the root down to the target. Stops at a
+/// parent that isn't running any more (or isn't listed) and after 100 levels,
+/// so a loop in the parent links can't run forever.
+fn ancestor_chain<'a>(target: &Process, pid_map: &HashMap<u32, &'a Process>) -> Vec<&'a Process> {
+    let mut chain: Vec<&Process> = Vec::new();
+    let mut current_pid = Some(target.pid);
+
+    while let Some(pid) = current_pid {
+        let Some(proc) = pid_map.get(&pid) else {
+            break;
+        };
+        chain.push(proc);
+        current_pid = proc.parent_pid;
+        if chain.len() > 100 {
+            break;
+        }
+    }
+
+    chain.reverse();
+    chain
+}
+
+/// The symbol in front of a process in the ancestry tree
+fn status_indicator(status: ProcessStatus) -> ColoredString {
+    match status {
+        ProcessStatus::Running => "●".green(),
+        ProcessStatus::Sleeping => "○".blue(),
+        ProcessStatus::Stopped => "◐".yellow(),
+        ProcessStatus::Zombie => "✗".red(),
+        _ => "?".white(),
     }
 }
 
@@ -324,4 +333,98 @@ struct AncestryEntry {
     #[serde(skip_serializing_if = "Option::is_none")]
     uptime_secs: Option<u64>,
     is_target: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn process(pid: u32, parent_pid: Option<u32>) -> Process {
+        Process {
+            pid,
+            name: format!("p{pid}"),
+            exe_path: None,
+            cwd: None,
+            command: None,
+            cpu_percent: 0.0,
+            memory_mb: 0.0,
+            status: ProcessStatus::Sleeping,
+            user: None,
+            parent_pid,
+            start_time: None,
+            uptime_secs: None,
+        }
+    }
+
+    fn pids(chain: &[&Process]) -> Vec<u32> {
+        chain.iter().map(|p| p.pid).collect()
+    }
+
+    #[test]
+    fn a_chain_runs_from_the_root_down_to_the_target() {
+        let (root, mid, leaf) = (process(1, None), process(2, Some(1)), process(3, Some(2)));
+        let map: HashMap<u32, &Process> =
+            [&root, &mid, &leaf].iter().map(|p| (p.pid, *p)).collect();
+        assert_eq!(pids(&ancestor_chain(&leaf, &map)), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn a_chain_stops_at_a_parent_that_is_not_listed() {
+        // The parent exited, or belongs to another user and can't be read
+        let (mid, leaf) = (process(2, Some(1)), process(3, Some(2)));
+        let map: HashMap<u32, &Process> = [&mid, &leaf].iter().map(|p| (p.pid, *p)).collect();
+        assert_eq!(pids(&ancestor_chain(&leaf, &map)), vec![2, 3]);
+    }
+
+    #[test]
+    fn a_target_that_is_not_listed_has_no_chain() {
+        let map: HashMap<u32, &Process> = HashMap::new();
+        assert!(ancestor_chain(&process(3, Some(2)), &map).is_empty());
+    }
+
+    #[test]
+    fn a_loop_in_the_parent_links_ends_after_101_entries() {
+        let (a, b) = (process(1, Some(2)), process(2, Some(1)));
+        let map: HashMap<u32, &Process> = [&a, &b].iter().map(|p| (p.pid, *p)).collect();
+        let chain = ancestor_chain(&a, &map);
+        assert_eq!(chain.len(), 101);
+        // Walked up from the target, so the chain ends on the target
+        assert_eq!(chain.last().map(|p| p.pid), Some(1));
+    }
+
+    #[test]
+    fn each_status_has_its_own_symbol() {
+        let symbol = |status| (*status_indicator(status)).to_string();
+        assert_eq!(symbol(ProcessStatus::Running), "●");
+        assert_eq!(symbol(ProcessStatus::Sleeping), "○");
+        assert_eq!(symbol(ProcessStatus::Stopped), "◐");
+        assert_eq!(symbol(ProcessStatus::Zombie), "✗");
+        assert_eq!(symbol(ProcessStatus::Dead), "?");
+        assert_eq!(symbol(ProcessStatus::Unknown), "?");
+    }
+
+    #[test]
+    fn a_target_that_resolves_to_nothing_is_not_found() {
+        let (error, warning) = found_processes("ghost", |_| Ok(Vec::new())).unwrap_err();
+        assert!(
+            matches!(&error, ProcError::ProcessNotFound(t) if t == "ghost"),
+            "{error:?}"
+        );
+        assert_eq!(warning, "No process found for 'ghost'");
+    }
+
+    #[test]
+    fn a_target_that_fails_to_resolve_warns_with_the_error() {
+        let (error, warning) =
+            found_processes("ghost", |_| Err(ProcError::PortNotFound(1))).unwrap_err();
+        assert!(matches!(error, ProcError::PortNotFound(1)), "{error:?}");
+        assert_eq!(warning, ProcError::PortNotFound(1).to_string());
+    }
+
+    #[test]
+    fn a_target_that_resolves_gives_its_processes() {
+        let found = found_processes("p", |_| Ok(vec![process(5, None)])).unwrap();
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].pid, 5);
+    }
 }
