@@ -181,8 +181,11 @@ fn free_only_takes_ports() {
 
 #[test]
 fn free_a_port_nothing_holds_is_already_done() {
+    // --dry-run, not --yes: the port was free when picked, but another program
+    // could take it before proc runs, and this test must not kill that. A port
+    // nothing holds returns before the dry-run check, so the same lines run
     let port = format!(":{}", unused_port());
-    let (out, code) = run_text(&["free", &port, "--yes"]);
+    let (out, code) = run_text(&["free", &port, "--dry-run"]);
     assert_eq!(code, 0, "{out}");
     assert!(out.contains("No process listening on port"), "{out}");
     assert!(
@@ -190,7 +193,7 @@ fn free_a_port_nothing_holds_is_already_done() {
         "{out}"
     );
 
-    let (json, code) = run_json(&["free", &port, "--yes", "--json"]);
+    let (json, code) = run_json(&["free", &port, "--dry-run", "--json"]);
     assert_eq!(code, 0, "{json}");
     assert_eq!(json["action"], "free");
     assert_eq!(json["count"], 0, "{json}");
