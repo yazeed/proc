@@ -7,6 +7,7 @@
 //!   proc list --in /project    # Processes in /project
 //!   proc list --min-cpu 10     # Processes using >10% CPU
 
+use crate::core::filters::resolve_dir;
 use crate::core::{resolve_in_dir, sort_processes, Process, SortKey, StatusFilter};
 use crate::error::Result;
 use crate::ui::Printer;
@@ -103,16 +104,8 @@ impl ListCommand {
         let in_dir_filter = resolve_in_dir(&self.in_dir);
 
         // Resolve path filter
-        let path_filter: Option<PathBuf> = self.path.as_ref().map(|p| {
-            let path = PathBuf::from(p);
-            if path.is_relative() {
-                std::env::current_dir()
-                    .unwrap_or_else(|_| PathBuf::from("."))
-                    .join(path)
-            } else {
-                path
-            }
-        });
+        let path_filter: Option<PathBuf> =
+            self.path.as_ref().map(|p| resolve_dir(PathBuf::from(p)));
 
         // Apply filters
         processes.retain(|p| self.keeps(p, &in_dir_filter, &path_filter));

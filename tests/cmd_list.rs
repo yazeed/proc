@@ -156,6 +156,28 @@ impl Owned {
         self.dir.to_string_lossy().into_owned()
     }
 
+    /// The file name of the executable copy
+    fn file_name(&self) -> String {
+        format!("{}{}", self.name, std::env::consts::EXE_SUFFIX)
+    }
+
+    /// What proc itself reports for this process (cwd, exe_path), for a
+    /// failure message
+    fn what_proc_saw(&self) -> String {
+        let out = proc_cmd()
+            .args(["info", &self.pid().to_string(), "--json"])
+            .output()
+            .unwrap();
+        format!(
+            "proc info {} --json (raw dir {}, canonical dir {}):\n{}{}",
+            self.pid(),
+            self.raw_dir.display(),
+            self.dir.display(),
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        )
+    }
+
     /// The path of the executable copy
     fn exe(&self) -> PathBuf {
         self.dir
@@ -192,7 +214,11 @@ fn list_in_finds_a_process_by_the_uncanonicalized_temp_path() {
     let owned = Owned::listener();
     let (json, code) = run_json(&["list", "--in", &owned.raw_dir(), "--json"]);
     assert_eq!(code, 0);
-    assert!(lists(&json, owned.pid()), "{json}");
+    assert!(
+        lists(&json, owned.pid()),
+        "{json}\n{}",
+        owned.what_proc_saw()
+    );
 }
 
 #[test]
@@ -200,7 +226,11 @@ fn in_finds_a_process_by_the_uncanonicalized_temp_path() {
     let owned = Owned::listener();
     let (json, code) = run_json(&["in", &owned.raw_dir(), "--json"]);
     assert_eq!(code, 0);
-    assert!(lists(&json, owned.pid()), "{json}");
+    assert!(
+        lists(&json, owned.pid()),
+        "{json}\n{}",
+        owned.what_proc_saw()
+    );
 }
 
 #[test]
@@ -208,7 +238,11 @@ fn by_in_finds_a_process_by_the_uncanonicalized_temp_path() {
     let owned = Owned::listener();
     let (json, code) = run_json(&["by", &owned.name, "--in", &owned.raw_dir(), "--json"]);
     assert_eq!(code, 0);
-    assert!(lists(&json, owned.pid()), "{json}");
+    assert!(
+        lists(&json, owned.pid()),
+        "{json}\n{}",
+        owned.what_proc_saw()
+    );
 }
 
 #[test]
@@ -221,7 +255,8 @@ fn tree_in_finds_a_process_by_the_uncanonicalized_temp_path() {
         roots
             .iter()
             .any(|n| n["pid"].as_u64() == Some(u64::from(owned.pid()))),
-        "{json}"
+        "{json}\n{}",
+        owned.what_proc_saw()
     );
 }
 
@@ -234,7 +269,11 @@ fn list_in_follows_a_symlink_to_the_directory() {
     std::os::unix::fs::symlink(&owned.raw_dir, &link).unwrap();
     let (json, code) = run_json(&["list", "--in", link.to_str().unwrap(), "--json"]);
     assert_eq!(code, 0);
-    assert!(lists(&json, owned.pid()), "{json}");
+    assert!(
+        lists(&json, owned.pid()),
+        "{json}\n{}",
+        owned.what_proc_saw()
+    );
 }
 
 #[cfg(unix)]
@@ -246,7 +285,11 @@ fn in_follows_a_symlink_to_the_directory() {
     std::os::unix::fs::symlink(&owned.raw_dir, &link).unwrap();
     let (json, code) = run_json(&["in", link.to_str().unwrap(), "--json"]);
     assert_eq!(code, 0);
-    assert!(lists(&json, owned.pid()), "{json}");
+    assert!(
+        lists(&json, owned.pid()),
+        "{json}\n{}",
+        owned.what_proc_saw()
+    );
 }
 
 // --- `tree NAME` does not match the shell that launched it --------------------
@@ -294,7 +337,8 @@ fn list_in_prints_a_table_and_says_which_directory_it_looked_in() {
     assert_eq!(code, 0);
     assert!(
         out.contains(&format!("Found 1 process in {}", owned.dir())),
-        "{out}"
+        "{out}\n{}",
+        owned.what_proc_saw()
     );
     assert!(out.contains(&owned.name), "{out}");
     assert!(out.contains(&owned.pid().to_string()), "{out}");
@@ -318,7 +362,12 @@ fn list_path_keeps_the_processes_running_that_executable() {
     let owned = Owned::listener();
     let (json, code) = run_json(&["list", "--path", &owned.exe().to_string_lossy(), "--json"]);
     assert_eq!(code, 0);
-    assert_eq!(pids(&json), vec![u64::from(owned.pid())], "{json}");
+    assert_eq!(
+        pids(&json),
+        vec![u64::from(owned.pid())],
+        "{json}\n{}",
+        owned.what_proc_saw()
+    );
 }
 
 #[test]
@@ -326,11 +375,32 @@ fn list_path_is_taken_from_the_current_directory_when_relative() {
     let owned = Owned::listener();
     let output = proc_cmd()
         .current_dir(&owned.dir)
-        .args(["list", "--path", &owned.name, "--json"])
+        .args(["list", "--path", &owned.file_name(), "--json"])
         .output()
         .unwrap();
     let json: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(pids(&json), vec![u64::from(owned.pid())], "{json}");
+    assert_eq!(
+        pids(&json),
+        vec![u64::from(owned.pid())],
+        "{json}\n{}",
+        owned.what_proc_saw()
+    );
+}
+
+#[test]
+fn list_path_finds_a_process_by_the_uncanonicalized_temp_path() {
+    // Same as `--in`: the executable path processes report has symlinks
+    // resolved, the path the user types need not
+    let owned = Owned::listener();
+    let typed = owned.raw_dir.join(owned.file_name());
+    let (json, code) = run_json(&["list", "--path", &typed.to_string_lossy(), "--json"]);
+    assert_eq!(code, 0);
+    assert_eq!(
+        pids(&json),
+        vec![u64::from(owned.pid())],
+        "{json}\n{}",
+        owned.what_proc_saw()
+    );
 }
 
 #[test]
@@ -342,13 +412,17 @@ fn list_in_dot_is_the_current_directory() {
         .output()
         .unwrap();
     let json: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert!(lists(&json, owned.pid()), "{json}");
+    assert!(
+        lists(&json, owned.pid()),
+        "{json}\n{}",
+        owned.what_proc_saw()
+    );
 }
 
 #[test]
 fn list_a_filter_nothing_passes_says_so() {
     let owned = Owned::listener();
-    let (out, _, code) = run_text(&["list", "--in", &owned.dir(), "--min-cpu", "1000"]);
+    let (out, _, code) = run_text(&["list", "--in", &owned.dir(), "--min-cpu", "100000"]);
     assert_eq!(code, 0);
     assert!(
         out.contains(&format!("No processes found in {}", owned.dir())),
@@ -365,7 +439,8 @@ fn in_prints_a_table_and_says_which_directory_it_looked_in() {
     assert_eq!(code, 0);
     assert!(
         out.contains(&format!("Found 1 process in {}", owned.dir())),
-        "{out}"
+        "{out}\n{}",
+        owned.what_proc_saw()
     );
     assert!(out.contains(&owned.name), "{out}");
 }
@@ -379,14 +454,24 @@ fn in_dot_is_the_current_directory() {
         .output()
         .unwrap();
     let json: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(pids(&json), vec![u64::from(owned.pid())], "{json}");
+    assert_eq!(
+        pids(&json),
+        vec![u64::from(owned.pid())],
+        "{json}\n{}",
+        owned.what_proc_saw()
+    );
 }
 
 #[test]
 fn in_by_keeps_only_that_name() {
     let owned = Owned::listener();
     let (json, _) = run_json(&["in", &owned.dir(), "--by", &owned.name, "--json"]);
-    assert_eq!(pids(&json), vec![u64::from(owned.pid())], "{json}");
+    assert_eq!(
+        pids(&json),
+        vec![u64::from(owned.pid())],
+        "{json}\n{}",
+        owned.what_proc_saw()
+    );
     // A name nothing has is not found, like `by`
     let (json, code) = run_json(&["in", &owned.dir(), "--by", &nobody(), "--json"]);
     assert_eq!(code, 2);
@@ -398,7 +483,7 @@ fn in_filters_drop_what_does_not_match() {
     let owned = Owned::listener();
     let dir = owned.dir();
     for args in [
-        vec!["--min-cpu", "1000"],
+        vec!["--min-cpu", "100000"],
         vec!["--min-mem", "100000000"],
         vec!["--status", "zombie"],
         vec!["--min-uptime", "100000"],
@@ -424,7 +509,12 @@ fn in_filters_drop_what_does_not_match() {
         "5",
         "--json",
     ]);
-    assert_eq!(pids(&json), vec![u64::from(owned.pid())], "{json}");
+    assert_eq!(
+        pids(&json),
+        vec![u64::from(owned.pid())],
+        "{json}\n{}",
+        owned.what_proc_saw()
+    );
 }
 
 #[test]
@@ -443,7 +533,11 @@ fn in_tilde_is_the_home_directory() {
         .output()
         .unwrap();
     let json: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert!(lists(&json, owned.pid()), "{json}");
+    assert!(
+        lists(&json, owned.pid()),
+        "{json}\n{}",
+        owned.what_proc_saw()
+    );
 }
 
 #[test]
@@ -457,7 +551,11 @@ fn in_tilde_slash_is_taken_from_the_home_directory() {
         .output()
         .unwrap();
     let json: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert!(lists(&json, owned.pid()), "{json}");
+    assert!(
+        lists(&json, owned.pid()),
+        "{json}\n{}",
+        owned.what_proc_saw()
+    );
 }
 
 #[test]
@@ -642,7 +740,7 @@ fn tree_a_target_every_filter_drops_says_so() {
     let owned = Owned::listener();
     let pid = owned.pid().to_string();
     for args in [
-        vec!["--min-cpu", "1000"],
+        vec!["--min-cpu", "100000"],
         vec!["--min-mem", "100000000"],
         vec!["--status", "zombie"],
         vec!["--min-uptime", "100000"],
@@ -657,7 +755,7 @@ fn tree_a_target_every_filter_drops_says_so() {
             "{args:?}"
         );
     }
-    let (json, _) = run_json(&["tree", &pid, "--min-cpu", "1000", "--json"]);
+    let (json, _) = run_json(&["tree", &pid, "--min-cpu", "100000", "--json"]);
     assert!(json["tree"].as_array().unwrap().is_empty(), "{json}");
 }
 
@@ -715,7 +813,7 @@ fn tree_filters_without_a_target_list_the_processes_that_pass() {
 
 #[test]
 fn tree_filters_without_a_target_that_nothing_passes_say_so() {
-    let (out, _, code) = run_text(&["tree", "--min-cpu", "1000"]);
+    let (out, _, code) = run_text(&["tree", "--min-cpu", "100000"]);
     assert_eq!(code, 0);
     assert_eq!(out.trim(), "⚠ No processes match the specified filters");
 }
@@ -786,4 +884,26 @@ fn tree_ancestors_without_a_target_asks_for_one() {
         out.trim(),
         "⚠ --ancestors requires a target (PID, :port, or name)"
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn tree_ancestors_by_name_skips_the_shell_whose_command_line_holds_the_name() {
+    let owned = Owned::listener();
+    let proc_exe = assert_cmd::cargo::cargo_bin("proc");
+    let output = std::process::Command::new("sh")
+        .args(["-c", r#""$0" "$@"; exit $?"#])
+        .arg(&proc_exe)
+        .args(["tree", &owned.name, "--ancestors", "--json"])
+        .env("NO_COLOR", "1")
+        .output()
+        .unwrap();
+    let json: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let targets: Vec<u64> = json["ancestry"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|n| n["target_pid"].as_u64().unwrap())
+        .collect();
+    assert_eq!(targets, vec![u64::from(owned.pid())], "{json}");
 }
