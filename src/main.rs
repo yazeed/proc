@@ -8,8 +8,9 @@ use colored::Colorize;
 use proc_cli::cli::{Cli, Commands};
 use proc_cli::core::{comma_notice, Process};
 use proc_cli::error::{ExitCode, ProcError, REASON_INVALID_INPUT};
+use proc_cli::ui::out;
 use proc_cli::ui::print_note;
-use std::io;
+use proc_cli::{err_print, err_println, out_println};
 use std::process;
 
 /// What a bare `proc` prints.
@@ -19,37 +20,37 @@ use std::process;
 /// learning first is that a target is the same everywhere, so that is what
 /// this leads with — and every line here is a command that runs as shown.
 fn print_orientation() {
-    println!(
+    out_println!(
         "{} {}",
         "proc".bold(),
         "— semantic process management".bright_black()
     );
-    println!();
-    println!(
+    out_println!();
+    out_println!(
         "  {}",
         "A target is the same everywhere: :port, PID, or name.".bright_black()
     );
-    println!();
+    out_println!();
     for (cmd, what) in [
         ("proc on :3000", "what's on port 3000"),
         ("proc in .", "what's running in this directory"),
         ("proc by node", "processes named node"),
         ("proc kill :3000", "stop whatever holds the port"),
     ] {
-        println!(
+        out_println!(
             "    {} {}",
             format!("{:<20}", cmd).cyan(),
             what.bright_black()
         );
     }
-    println!();
-    println!(
+    out_println!();
+    out_println!(
         "  {} {}",
         format!("{:<8}", "Common:").bright_black(),
         "on · in · by · ports · info · kill · stop · free · why".white()
     );
-    println!();
-    println!(
+    out_println!();
+    out_println!(
         "  {} {}  {}",
         format!("{:<20}", "proc --help").cyan(),
         "all 19 commands".bright_black(),
@@ -125,6 +126,12 @@ fn suggest_flag(unknown: &str, subcmd_name: &str) -> Option<String> {
 }
 
 fn main() -> process::ExitCode {
+    process::ExitCode::from(out::finish(run()))
+}
+
+/// Run the command and return its exit code. Writing goes through `out`, which
+/// records a failed write instead of panicking; `main` folds that into the code.
+fn run() -> u8 {
     let cli = match Cli::try_parse() {
         Ok(cli) => cli,
         Err(e) => {
@@ -132,8 +139,10 @@ fn main() -> process::ExitCode {
 
             // Let help/version pass through as-is
             if matches!(e.kind(), ErrorKind::DisplayHelp | ErrorKind::DisplayVersion) {
-                let _ = e.print();
-                return process::ExitCode::SUCCESS;
+                // clap draws it, with its own colour rules; a write that fails
+                // is recorded by `out`, never a panic
+                out::through_stdout(|| e.print());
+                return 0;
             }
 
             // Strip clap's misleading "tip:" lines
@@ -174,13 +183,13 @@ fn main() -> process::ExitCode {
                 }
                 print_json_error(&error, exit_code, Some(REASON_INVALID_INPUT), None);
             } else {
-                eprint!("{}", cleaned);
+                err_print!("{}", cleaned);
                 if let Some(suggestion) = suggestion {
-                    eprintln!("\n  tip: did you mean '{}'?", suggestion);
+                    err_println!("\n  tip: did you mean '{}'?", suggestion);
                 }
             }
 
-            return process::ExitCode::from(exit_code as u8);
+            return exit_code as u8;
         }
     };
 
@@ -199,7 +208,7 @@ fn main() -> process::ExitCode {
 
     let Some(command) = cli.command else {
         print_orientation();
-        return process::ExitCode::SUCCESS;
+        return 0;
     };
 
     let result = match command {
@@ -222,16 +231,19 @@ fn main() -> process::ExitCode {
         Commands::Why(cmd) => cmd.execute(),
         Commands::Free(cmd) => cmd.execute(),
         Commands::Wait(cmd) => cmd.execute(),
+        // Generated into a buffer first: the generators panic on a write error
         Commands::Completions { shell } => {
-            generate(shell, &mut Cli::command(), "proc", &mut io::stdout());
+            let mut script = Vec::new();
+            generate(shell, &mut Cli::command(), "proc", &mut script);
+            out::write_stdout(&script);
             Ok(())
         }
         Commands::Manpage => {
-            let cmd = Cli::command();
-            let man = clap_mangen::Man::new(cmd);
-            man.render(&mut io::stdout())
-                .expect("Failed to generate man page");
-            Ok(())
+            let mut page = Vec::new();
+            clap_mangen::Man::new(Cli::command())
+                .render(&mut page)
+                .map(|()| out::write_stdout(&page))
+                .map_err(ProcError::from)
         }
     };
 
@@ -240,7 +252,7 @@ fn main() -> process::ExitCode {
 
         // The command already printed its result; only the exit code is left
         if matches!(e, ProcError::Reported { .. }) {
-            return process::ExitCode::from(exit_code as u8);
+            return exit_code as u8;
         }
 
         // If --json was requested, output error as JSON to stdout
@@ -255,13 +267,13 @@ fn main() -> process::ExitCode {
             };
             print_json_error(&e.to_string(), exit_code as i32, e.reason(), confirmation);
         } else {
-            eprintln!("{}", e);
+            err_println!("{}", e);
         }
 
-        return process::ExitCode::from(exit_code as u8);
+        return exit_code as u8;
     }
 
-    process::ExitCode::SUCCESS
+    0
 }
 
 /// Print an error as the standard JSON error object on stdout.
@@ -293,7 +305,7 @@ fn print_json_error(
             error_json["not_found"] = serde_json::json!(not_found);
         }
     }
-    println!("{}", serde_json::to_string_pretty(&error_json).unwrap());
+    out_println!("{}", serde_json::to_string_pretty(&error_json).unwrap());
 }
 
 /// Canonical command name for the JSON `action` field, resolving aliases

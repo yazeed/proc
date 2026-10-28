@@ -1,5 +1,8 @@
 //! A process that owns a listening port, for tests to aim proc at.
 //!
+//! Not proc's own output: this prints to the test that spawned it, over a pipe,
+//! so it may use the std print macros that `clippy.toml` bans in proc itself.
+//!
 //! Binds `127.0.0.1:0`, prints `PORT <n>` on stdout and flushes, then sleeps
 //! until it is killed, or for two minutes at most. Flags, for tests that need a process that behaves
 //! differently:
@@ -29,6 +32,8 @@
 //! Whatever the flags, the process (and a forked copy) exits by itself after
 //! two minutes: long enough for any test, short enough that a test binary
 //! killed with SIGKILL, which runs no cleanup, cannot leave a spinner behind.
+
+#![allow(clippy::disallowed_macros, clippy::disallowed_methods)]
 
 use std::io::Write;
 use std::net::TcpListener;

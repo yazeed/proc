@@ -14,6 +14,7 @@ use crate::core::{
     Hit, NameMatch, Process, ProcessStatus, StatusFilter, TargetType,
 };
 use crate::error::Result;
+use crate::out_println;
 use crate::ui::{format_memory, plural, uptime_label, Printer};
 use clap::Args;
 use colored::*;
@@ -265,7 +266,7 @@ impl TreeCommand {
                 return Ok(());
             }
 
-            println!(
+            out_println!(
                 "{} Process tree for '{}':\n",
                 "✓".green().bold(),
                 self.target.as_ref().unwrap().cyan()
@@ -273,7 +274,7 @@ impl TreeCommand {
 
             for proc in &filtered {
                 self.print_tree(proc, &children_map, "", true, 0);
-                println!();
+                out_println!();
             }
         } else if has_filters {
             let filtered: Vec<_> = all_processes
@@ -285,7 +286,7 @@ impl TreeCommand {
                 return Ok(());
             }
 
-            println!(
+            out_println!(
                 "{} {} process{} matching filters:\n",
                 "✓".green().bold(),
                 filtered.len().to_string().cyan().bold(),
@@ -297,7 +298,7 @@ impl TreeCommand {
                 self.print_tree(proc, &children_map, "", is_last, 0);
             }
         } else {
-            println!("{} Process tree:\n", "✓".green().bold());
+            out_println!("{} Process tree:\n", "✓".green().bold());
 
             // Find processes with PID 1 or no parent as roots
             let display_roots: Vec<&Process> = all_processes
@@ -362,7 +363,7 @@ impl TreeCommand {
         let connector = if is_last { "└── " } else { "├── " };
 
         if self.compact {
-            println!(
+            out_println!(
                 "{}{}{}",
                 prefix.bright_black(),
                 connector.bright_black(),
@@ -371,7 +372,7 @@ impl TreeCommand {
         } else {
             let status_indicator = status_indicator(proc.status);
 
-            println!(
+            out_println!(
                 "{}{}{} {} [{}] {:.1}% {}{}",
                 prefix.bright_black(),
                 connector.bright_black(),
@@ -482,11 +483,11 @@ impl TreeCommand {
                 ancestry: ancestry_output,
             });
         } else {
-            println!("{} Ancestry for '{}':\n", "✓".green().bold(), target.cyan());
+            out_println!("{} Ancestry for '{}':\n", "✓".green().bold(), target.cyan());
 
             for proc in &target_processes {
                 self.print_ancestry(proc, pid_map);
-                println!();
+                out_println!();
             }
         }
 
@@ -508,7 +509,7 @@ impl TreeCommand {
 
             if is_target {
                 // Highlight the target
-                println!(
+                out_println!(
                     "{}{}{} {} [{}] {:.1}% {}{}  {}",
                     indent.bright_black(),
                     connector.bright_black(),
@@ -521,7 +522,7 @@ impl TreeCommand {
                     "← target".yellow()
                 );
             } else {
-                println!(
+                out_println!(
                     "{}{}{} {} [{}] {:.1}% {}{}",
                     indent.bright_black(),
                     connector.bright_black(),

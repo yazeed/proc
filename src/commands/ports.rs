@@ -12,7 +12,7 @@ use crate::core::{
     matches_name, resolve_in_dir, sort_ports, NameMatch, Names, PortInfo, PortSortKey, Process,
 };
 use crate::error::Result;
-use crate::ui::{truncate_string, Printer};
+use crate::ui::{out, truncate_string, Printer};
 use clap::Args;
 use colored::*;
 use serde::Serialize;
@@ -169,8 +169,8 @@ impl PortsCommand {
         if self.json {
             self.print_json(&ports, &process_map);
         } else {
-            self.print_human(&mut std::io::stdout(), &ports, &process_map)
-                .expect("failed printing to stdout");
+            // A failed write is recorded by `out`, which decides the exit code
+            out::recorded(self.print_human(&mut out::stdout(), &ports, &process_map));
         }
 
         Ok(())

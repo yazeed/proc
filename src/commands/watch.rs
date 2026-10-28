@@ -21,6 +21,7 @@ use crate::error::Result;
 use crate::ui::format::{
     format_duration, format_memory, process_table_budget, truncate_path, truncate_string,
 };
+use crate::ui::out;
 use clap::{Args, ValueEnum};
 use comfy_table::presets::NOTHING;
 use comfy_table::{Attribute, Cell, CellAlignment, Color, ContentArrangement, Table};
@@ -31,7 +32,7 @@ use crossterm::{
 };
 use serde::Serialize;
 use std::collections::HashSet;
-use std::io::{self, IsTerminal, Write};
+use std::io::Write;
 use std::time::{Duration, Instant};
 use sysinfo::{Pid, System};
 
@@ -152,7 +153,7 @@ fn restore_terminal(out: &mut impl Write) {
 fn install_panic_hook() {
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |panic_info| {
-        restore_terminal(&mut io::stdout());
+        restore_terminal(&mut out::stdout());
         original_hook(panic_info);
     }));
 }
@@ -183,7 +184,7 @@ fn write_json_frame(out: &mut impl Write, err: &mut impl Write, frame: &impl Ser
 impl WatchCommand {
     /// Execute the watch command — real-time process monitoring.
     pub fn execute(&self) -> Result<()> {
-        let is_tty = io::stdout().is_terminal();
+        let is_tty = out::stdout_is_terminal();
 
         if self.json {
             self.run_json_loop()
@@ -306,7 +307,7 @@ impl WatchCommand {
 
     /// TUI loop: alternate screen + raw mode
     fn run_tui_loop(&self) -> Result<()> {
-        let mut stdout = io::stdout();
+        let mut stdout = out::stdout();
 
         install_panic_hook();
 
@@ -333,7 +334,7 @@ impl WatchCommand {
     fn tui_event_loop(
         &self,
         sys: &mut System,
-        stdout: &mut io::Stdout,
+        stdout: &mut out::Out,
         interval: Duration,
     ) -> Result<()> {
         loop {
@@ -658,7 +659,7 @@ impl WatchCommand {
                 processes,
             };
 
-            if !write_json_frame(&mut io::stdout(), &mut io::stderr(), &output) {
+            if !write_json_frame(&mut out::stdout(), &mut out::stderr(), &output) {
                 return Ok(()); // Broken pipe — exit cleanly
             }
 
@@ -687,6 +688,7 @@ mod tests {
     use super::*;
     use crate::test_support::FailsAfter;
     use serde::ser::Error as _;
+    use std::io;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
 

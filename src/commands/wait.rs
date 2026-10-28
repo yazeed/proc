@@ -13,6 +13,7 @@
 
 use crate::core::{apply_filters, flatten_targets, resolve_targets, NameMatch, Process};
 use crate::error::{ExitCode, ProcError, Result};
+use crate::out_println;
 use crate::ui::{format_duration, plural, Printer};
 use clap::Args;
 use colored::*;
@@ -96,7 +97,7 @@ impl WaitCommand {
 
         // Print initial status
         if !self.json {
-            println!(
+            out_println!(
                 "{} Waiting for {} process{} to exit...",
                 "~".cyan().bold(),
                 initial_count.to_string().cyan().bold(),
@@ -104,7 +105,7 @@ impl WaitCommand {
             );
             if self.verbose {
                 for proc in &processes {
-                    println!(
+                    out_println!(
                         "  {} {} [PID {}] - {:.1}% CPU, {}",
                         "->".bright_black(),
                         proc.name.white().bold(),
@@ -144,7 +145,7 @@ impl WaitCommand {
                 if exited_at.is_none() && !proc.is_running() {
                     *exited_at = Some(elapsed);
                     if !self.json {
-                        println!(
+                        out_println!(
                             "{} {} [PID {}] exited after {}",
                             "✓".green().bold(),
                             proc.name.white(),
@@ -233,7 +234,7 @@ impl WaitCommand {
                 } else {
                     String::new()
                 };
-                println!(
+                out_println!(
                     "{} {} elapsed — {} still running: {}{}",
                     "~".cyan(),
                     format_duration(elapsed),
@@ -269,7 +270,7 @@ impl WaitCommand {
                 still_running: vec![],
             });
         } else {
-            println!(
+            out_println!(
                 "{} All {} process{} exited after {}",
                 "✓".green().bold(),
                 initial_count.to_string().cyan().bold(),

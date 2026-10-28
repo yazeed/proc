@@ -22,6 +22,12 @@ Cover the full workflow, nothing more. proc handles process and port management 
 ### Fast
 Speed isn't a nice-to-have; a slow CLI trains users to avoid it. proc answers right away, with no daemon and no index to keep warm.
 
+### Lightweight
+One static binary, no runtime to install and nothing left running. proc works the same on a laptop, a server, a CI runner or inside a container, on the processes of the machine it runs on.
+
+### Reproducible
+Behavior comes from the command line alone: no config file, no state kept between runs, no hidden mode. The same command lists the same processes in the same order, so a preview, a retry and a script all see one answer.
+
 ### Obvious
 If you have to read the docs, we failed. The command structure should be discoverable through tab completion, `--help` and the man page. Examples should cover real use cases, not contrived demos.
 
@@ -51,6 +57,8 @@ You don't "run ports"—you look at ports. You don't "observe kill"—you kill.
 
 ### One Contract for People, Scripts and Agents
 Every process and port command speaks JSON with `--json`: one document (`watch` streams one per refresh), with `action` and `success`, and exit codes that always mean the same thing (0 success, 1 error, 2 not found, 3 permission denied, 4 nothing was done: invalid input, a confirmation is needed, or the OS doesn't support it). A shell script, a CI job and an AI agent read proc the same way a person does, without parsing tables.
+
+proc composes like any Unix tool: its output pipes into `jq`, `head` or the next command, and a reader that stops early ends proc quietly. Nothing needs a terminal except a question for a person, so the same command runs in a script, a cron job or CI, where a command that changes processes needs `--yes` and automation never acts by accident.
 
 ### Practical Simplicity
 Every feature solves a real, repeated problem. We don't add features because they're technically interesting or because a competitor has them. We add features when users hit the same friction repeatedly.

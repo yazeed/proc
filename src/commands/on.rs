@@ -15,14 +15,12 @@ use crate::core::{
     PortInfo, Process, TargetType,
 };
 use crate::error::{ExitCode, ProcError, Result};
-use crate::ui::{format_duration, format_memory, Printer};
+use crate::out_println;
+use crate::ui::{format_duration, format_memory, out, Printer};
 use clap::Args;
 use colored::*;
 use serde::Serialize;
 use std::io::Write;
-
-/// What println! would say if stdout were closed
-const WRITE_FAILED: &str = "failed printing to stdout";
 
 /// Show what's on a port, or what ports a process is on
 #[derive(Args, Debug)]
@@ -78,19 +76,19 @@ impl OnCommand {
             match parse_target(target) {
                 TargetType::Port(port) => {
                     if let Err(e) = self.show_process_on_port(port) {
-                        println!("{} Port {}: {}", "⚠".yellow(), port, e);
+                        out_println!("{} Port {}: {}", "⚠".yellow(), port, e);
                         not_found.push(target.clone());
                     }
                 }
                 TargetType::Pid(pid) => {
                     if let Err(e) = self.show_ports_for_pid(pid) {
-                        println!("{} PID {}: {}", "⚠".yellow(), pid, e);
+                        out_println!("{} PID {}: {}", "⚠".yellow(), pid, e);
                         not_found.push(target.clone());
                     }
                 }
                 TargetType::Name(ref name) => {
                     if let Err(e) = self.show_ports_for_name(name) {
-                        println!("{} '{}': {}", "⚠".yellow(), name, e);
+                        out_println!("{} '{}': {}", "⚠".yellow(), name, e);
                         not_found.push(target.clone());
                     }
                 }
@@ -243,8 +241,8 @@ impl OnCommand {
             };
             printer.print_json(&output);
         } else {
-            self.print_process_on_port(&mut std::io::stdout(), port, &holders)
-                .expect(WRITE_FAILED);
+            // A failed write is recorded by `out`, which decides the exit code
+            out::recorded(self.print_process_on_port(&mut out::stdout(), port, &holders));
         }
 
         Ok(())
@@ -288,8 +286,7 @@ impl OnCommand {
             };
             printer.print_json(&output);
         } else {
-            self.print_ports_for_process(&mut std::io::stdout(), &process, &ports)
-                .expect(WRITE_FAILED);
+            out::recorded(self.print_ports_for_process(&mut out::stdout(), &process, &ports));
         }
 
         Ok(())
@@ -346,8 +343,7 @@ impl OnCommand {
             printer.print_json(&output);
         } else {
             for (proc, ports) in &all_results {
-                self.print_ports_for_process(&mut std::io::stdout(), proc, ports)
-                    .expect(WRITE_FAILED);
+                out::recorded(self.print_ports_for_process(&mut out::stdout(), proc, ports));
             }
         }
 

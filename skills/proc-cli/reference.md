@@ -31,6 +31,8 @@ A signal the OS refuses, such as `kill` on another user's process, is not exit 3
 
 `"success": false` always comes with a non-zero exit code. Every command prints exactly one JSON document with `--json`, except `watch`, which streams one per refresh.
 
+If the reader of proc's output goes away (`proc ... | head -n1`), proc stops writing and exits with the code the command's result calls for: a `kill --yes` that worked is still 0 and a not-found is still 2, and nothing is said about the pipe. The action is done either way, so when stdout may be cut short, read the exit code, not the document. A write that fails for another reason (a full disk) is exit 1 with `proc: cannot write to stdout: ...` on stderr.
+
 ## Errors and needs_confirmation
 
 On failure with `--json`, stdout carries the four fields below. `action` is the canonical command name even when an alias was used (`proc k` gives `"kill"`). Unknown flags and arguments produce the same document with exit 4, plus `reason` (see below). Without `--json` the message goes to stderr.

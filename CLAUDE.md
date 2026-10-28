@@ -211,7 +211,7 @@ Work is committed and pushed to `main` without a tag, and every change goes unde
 
 See `PHILOSOPHY.md` for the full manifesto.
 
-**Principles:** Semantic, Explicit, Complete, Fast, Obvious
+**Principles:** Semantic, Explicit, Complete, Fast, Lightweight, Reproducible, Obvious
 
 **The Feature Test** — every feature must pass:
 1. Does it fit "process and port management"?

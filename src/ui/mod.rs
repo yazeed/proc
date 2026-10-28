@@ -3,6 +3,7 @@
 //! Handles output formatting, colors, and interactive prompts.
 
 pub mod format;
+pub mod out;
 pub mod output;
 
 pub use format::{

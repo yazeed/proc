@@ -217,7 +217,7 @@ fn free_lists_the_ports_that_were_not_found() {
     // does hold it on this machine, skip rather than act on it.
     let (probe, code) = run_json(&["on", &free, "--json"]);
     if code != 2 {
-        eprintln!("skipped: something holds {free}: {probe}");
+        proc_cli::err_println!("skipped: something holds {free}: {probe}");
         return;
     }
     let (json, code) = run_json(&["free", &held, &free, "--yes", "--json"]);

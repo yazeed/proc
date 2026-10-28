@@ -11,6 +11,7 @@
 use crate::core::port::PortInfo;
 use crate::core::{flatten_targets, parse_target, Process, TargetType};
 use crate::error::{ExitCode, ProcError, Result};
+use crate::out_println;
 use crate::ui::{must_confirm, plural, Printer};
 use clap::Args;
 use colored::*;
@@ -234,14 +235,14 @@ impl FreeCommand {
             });
         } else {
             for port in &freed {
-                println!(
+                out_println!(
                     "{} Freed port {}",
                     "✓".green().bold(),
                     port.to_string().cyan().bold()
                 );
             }
             for port in &still_busy {
-                println!(
+                out_println!(
                     "{} Port {} still in use (may be in TIME_WAIT)",
                     "✗".red().bold(),
                     port.to_string().cyan()

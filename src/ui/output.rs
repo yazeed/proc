@@ -4,10 +4,12 @@
 
 use crate::core::Process;
 use crate::error::{ExitCode, ProcError, Result};
+use crate::out_println;
 use crate::ui::format::{
     colorize_status, format_duration, format_memory, plural, process_table_budget, truncate_path,
     truncate_string,
 };
+use crate::ui::out;
 use colored::*;
 use comfy_table::presets::NOTHING;
 use comfy_table::{Attribute, Cell, CellAlignment, Color, ContentArrangement, Table};
@@ -15,10 +17,10 @@ use dialoguer::Confirm;
 use serde::Serialize;
 use std::io::Write;
 
-/// Run a writer-based print against stdout. A failed write panics, as
-/// `println!` does.
-fn to_stdout(write: impl FnOnce(&mut std::io::Stdout) -> std::io::Result<()>) {
-    write(&mut std::io::stdout()).expect("failed printing to stdout");
+/// Run a writer-based print against stdout. A failed write is recorded by
+/// [`out`], which decides what it means for the exit code; it never panics.
+fn to_stdout(write: impl FnOnce(&mut out::Out) -> std::io::Result<()>) {
+    out::recorded(write(&mut out::stdout()));
 }
 
 /// Whether a command that changes processes should ask before acting.
@@ -55,7 +57,7 @@ pub fn must_confirm(
             not_found: not_found.map(<[String]>::to_vec),
         });
     }
-    if !std::io::stdin().is_terminal() || !std::io::stderr().is_terminal() {
+    if !std::io::stdin().is_terminal() || !out::stderr_is_terminal() {
         return Err(ProcError::ConfirmationRequired {
             message: format!(
                 "{action} asks before changing processes, and there's no terminal \
@@ -87,13 +89,9 @@ fn write_note(out: &mut impl Write, message: &str, colour: bool) -> std::io::Res
 /// stay as they are. Coloured only when stderr is a terminal and `NO_COLOR` is
 /// not set.
 pub fn print_note(message: &str) {
-    use std::io::IsTerminal;
-    let colour = note_in_colour(
-        std::io::stderr().is_terminal(),
-        std::env::var_os("NO_COLOR"),
-    );
+    let colour = note_in_colour(out::stderr_is_terminal(), std::env::var_os("NO_COLOR"));
     // A closed stderr has nobody to tell, and the command goes on
-    let _ = write_note(&mut std::io::stderr(), message, colour);
+    out::recorded(write_note(&mut out::stderr(), message, colour));
 }
 
 /// Output format selection
@@ -505,7 +503,7 @@ impl Printer {
 
     /// Print JSON output for any serializable type
     pub fn print_json<T: Serialize>(&self, data: &T) {
-        to_stdout(|out| self.write_json(out, &mut std::io::stderr(), data));
+        to_stdout(|out| self.write_json(out, &mut out::stderr(), data));
     }
 
     /// The JSON goes to `out`; a value that can't be serialized is reported on `err`.
@@ -546,7 +544,7 @@ impl Printer {
         succeeded: &[Process],
         failed: &[(Process, String)],
     ) -> Result<()> {
-        self.write_action_result_as(&mut std::io::stdout(), action, verb, succeeded, failed)
+        self.write_action_result_as(&mut out::stdout(), action, verb, succeeded, failed)
     }
 
     fn write_action_result_as(
@@ -566,14 +564,13 @@ impl Printer {
             _ => format!("{}{}ed", verb[..1].to_uppercase(), &verb[1..]),
         };
 
-        // A failed write panics, as `println!` does
         let printed = match self.format {
             OutputFormat::Human => {
                 Self::write_action_lines(out, &past_tense, verb, succeeded, failed)
             }
             OutputFormat::Json => self.write_json(
                 out,
-                &mut std::io::stderr(),
+                &mut out::stderr(),
                 &ActionOutput {
                     action,
                     success: failed.is_empty(),
@@ -591,7 +588,9 @@ impl Printer {
                 },
             ),
         };
-        printed.expect("failed printing to stdout");
+        // The action has been done; a result nobody can read (a closed pipe, a
+        // full disk) is recorded by `out` and does not change what it was
+        out::recorded(printed);
 
         if failed.is_empty() {
             Ok(())
@@ -727,7 +726,7 @@ impl Printer {
 
     /// Print a confirmation prompt showing processes about to be acted on
     pub fn print_confirmation(&self, action: &str, processes: &[Process]) {
-        println!(
+        out_println!(
             "\n{} Found {} process{} to {}:\n",
             "⚠".yellow().bold(),
             processes.len().to_string().cyan().bold(),
@@ -736,7 +735,7 @@ impl Printer {
         );
 
         for proc in processes {
-            println!(
+            out_println!(
                 "  {} {} [PID {}] - CPU: {:.1}%, MEM: {}",
                 "→".bright_black(),
                 proc.name.white().bold(),
@@ -745,7 +744,7 @@ impl Printer {
                 format_memory(proc.memory_mb)
             );
         }
-        println!();
+        out_println!();
     }
 }
 

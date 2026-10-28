@@ -719,7 +719,9 @@ fn has_lsof() -> bool {
         .output()
         .is_ok();
     if !found {
-        eprintln!("lsof is not installed here, so there is no open-file lookup to test");
+        proc_cli::err_println!(
+            "lsof is not installed here, so there is no open-file lookup to test"
+        );
     }
     found
 }

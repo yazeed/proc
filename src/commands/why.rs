@@ -15,6 +15,7 @@ use crate::core::{
     Process, ProcessStatus, Protocol, TargetType,
 };
 use crate::error::{ExitCode, ProcError, Result};
+use crate::out_println;
 use crate::ui::{uptime_label, Printer};
 use clap::Args;
 use colored::*;
@@ -60,7 +61,7 @@ impl WhyCommand {
 
         for (i, target_str) in targets.iter().enumerate() {
             if i > 0 && !self.json {
-                println!();
+                out_println!();
             }
 
             let parsed = parse_target(target_str);
@@ -110,24 +111,24 @@ impl WhyCommand {
             } else {
                 // Print port header if applicable
                 if let Some(ref port_info) = port_context {
-                    println!(
+                    out_println!(
                         "{} Port {} ({}):",
                         "✓".green().bold(),
                         port_info.port.to_string().cyan().bold(),
                         format!("{:?}", port_info.protocol).to_uppercase()
                     );
                 } else {
-                    println!(
+                    out_println!(
                         "{} Ancestry for '{}':",
                         "✓".green().bold(),
                         target_str.cyan()
                     );
                 }
-                println!();
+                out_println!();
 
                 for proc in &target_processes {
                     self.print_ancestry_with_context(proc, &pid_map);
-                    println!();
+                    out_println!();
                 }
             }
         }
@@ -209,7 +210,7 @@ impl WhyCommand {
                 } else {
                     format!(" {}", cmd_summary)
                 };
-                println!(
+                out_println!(
                     "{}{}{} {} [{}]{}{}  {}",
                     indent.bright_black(),
                     connector.bright_black(),
@@ -223,7 +224,7 @@ impl WhyCommand {
                 // Show working directory for the target
                 if let Some(ref cwd) = proc.cwd {
                     let dir_indent = "    ".repeat(i + 1);
-                    println!(
+                    out_println!(
                         "{}{}",
                         dir_indent.bright_black(),
                         format!("dir: {}", cwd).bright_black()
@@ -235,7 +236,7 @@ impl WhyCommand {
                 } else {
                     format!(" {}", cmd_summary)
                 };
-                println!(
+                out_println!(
                     "{}{}{} {} [{}]{}{}",
                     indent.bright_black(),
                     connector.bright_black(),

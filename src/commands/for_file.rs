@@ -12,6 +12,7 @@ use crate::core::{
     StatusFilter,
 };
 use crate::error::{ProcError, Result};
+use crate::out_println;
 use crate::ui::{format_duration, format_memory, Printer};
 use clap::Args;
 use colored::*;
@@ -238,29 +239,29 @@ impl ForCommand {
             // Single process - detailed view (like `on` command)
             let (proc, ports) = &results[0];
 
-            println!(
+            out_println!(
                 "{} Found 1 process for {}",
                 "✓".green().bold(),
                 file_display.cyan().bold()
             );
-            println!();
+            out_println!();
 
             // Same labels and order as `proc on :port`
-            println!(
+            out_println!(
                 "  {} {} (PID {})",
                 "Process:".bright_black(),
                 proc.name.white().bold(),
                 proc.pid.to_string().cyan()
             );
             if let Some(ref cwd) = proc.cwd {
-                println!("  {} {}", "Directory:".bright_black(), cwd);
+                out_println!("  {} {}", "Directory:".bright_black(), cwd);
             }
             if let Some(ref path) = proc.exe_path {
-                println!("  {} {}", "Path:".bright_black(), path.bright_black());
+                out_println!("  {} {}", "Path:".bright_black(), path.bright_black());
             }
             for port_info in ports {
                 let addr = port_info.address.as_deref().unwrap_or("*");
-                println!(
+                out_println!(
                     "  {} :{} ({} on {})",
                     "Listening:".bright_black(),
                     port_info.port.to_string().cyan(),
@@ -268,21 +269,21 @@ impl ForCommand {
                     addr
                 );
             }
-            println!(
+            out_println!(
                 "  {} {:.1}% CPU, {}",
                 "Resources:".bright_black(),
                 proc.cpu_percent,
                 format_memory(proc.memory_mb)
             );
             if let Some(uptime) = proc.uptime_secs {
-                println!("  {} {}", "Uptime:".bright_black(), format_duration(uptime));
+                out_println!("  {} {}", "Uptime:".bright_black(), format_duration(uptime));
             }
             if self.verbose {
                 if let Some(ref cmd) = proc.command {
-                    println!("  {} {}", "Command:".bright_black(), cmd.bright_black());
+                    out_println!("  {} {}", "Command:".bright_black(), cmd.bright_black());
                 }
             }
-            println!();
+            out_println!();
         } else {
             // Multiple processes: the standard process table, then who listens where
             let processes: Vec<Process> = results.iter().map(|(p, _)| p.clone()).collect();
@@ -295,10 +296,10 @@ impl ForCommand {
                 .flat_map(|(proc, ports)| ports.iter().map(move |p| (proc, p)))
                 .collect();
             if !listening.is_empty() {
-                println!("  {}", "Listening:".bright_black());
+                out_println!("  {}", "Listening:".bright_black());
                 for (proc, port_info) in listening {
                     let addr = port_info.address.as_deref().unwrap_or("*");
-                    println!(
+                    out_println!(
                         "    {} :{} ({} on {})  {} [PID {}]",
                         "→".bright_black(),
                         port_info.port.to_string().cyan(),
@@ -308,7 +309,7 @@ impl ForCommand {
                         proc.pid.to_string().cyan()
                     );
                 }
-                println!();
+                out_println!();
             }
         }
     }

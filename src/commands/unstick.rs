@@ -27,6 +27,7 @@ use crate::core::{
 };
 use crate::error::{ExitCode, ProcError, Result};
 use crate::ui::{format_duration, must_confirm, plural, Printer};
+use crate::{out_print, out_println};
 use clap::Args;
 use colored::*;
 use dialoguer::Confirm;
@@ -180,18 +181,18 @@ impl UnstickCommand {
                         .collect(),
                 });
             } else {
-                println!(
+                out_println!(
                     "\n{} Dry run: Would attempt to unstick {} process{}",
                     "ℹ".blue().bold(),
                     stuck.len().to_string().cyan().bold(),
                     plural(stuck.len())
                 );
                 if self.force {
-                    println!("  With --force: will terminate if recovery fails");
+                    out_println!("  With --force: will terminate if recovery fails");
                 } else {
-                    println!("  Without --force: will only attempt recovery");
+                    out_println!("  Without --force: will only attempt recovery");
                 }
-                println!();
+                out_println!();
             }
             return Ok(());
         }
@@ -199,12 +200,12 @@ impl UnstickCommand {
         // Confirm. Same rule everywhere: --yes, or ask; --json never skips it
         if must_confirm("unstick", self.yes, self.json, &stuck, Some(&not_found))? {
             if self.force {
-                println!(
+                out_println!(
                     "\n{} With --force: processes will be terminated if recovery fails.\n",
                     "!".yellow().bold()
                 );
             } else {
-                println!(
+                out_println!(
                     "\n{} Will attempt recovery only. Use --force to terminate if needed.\n",
                     "ℹ".blue().bold()
                 );
@@ -227,7 +228,7 @@ impl UnstickCommand {
 
         for proc in &stuck {
             if !self.json {
-                print!(
+                out_print!(
                     "  {} {} [PID {}]... ",
                     "→".bright_black(),
                     proc.name.white(),
@@ -238,7 +239,7 @@ impl UnstickCommand {
             let outcome = self.attempt_unstick(proc);
 
             if !self.json {
-                println!("{}", outcome_text(&outcome));
+                out_println!("{}", outcome_text(&outcome));
             }
 
             outcomes.push((proc.clone(), outcome));
@@ -291,9 +292,9 @@ impl UnstickCommand {
                     .collect(),
             });
         } else {
-            println!();
+            out_println!();
             for line in summary_lines(recovered, not_stuck, terminated, still_stuck, failed) {
-                println!("{line}");
+                out_println!("{line}");
             }
         }
 
@@ -351,7 +352,7 @@ impl UnstickCommand {
             "Found stuck"
         };
 
-        println!(
+        out_println!(
             "\n{} {} {} process{}:\n",
             "!".yellow().bold(),
             label,
@@ -371,7 +372,7 @@ impl UnstickCommand {
                 })
                 .unwrap_or_else(|| "unknown".to_string());
 
-            println!(
+            out_println!(
                 "  {} {} [PID {}] - {:.1}% CPU, running for {}",
                 "→".bright_black(),
                 proc.name.white().bold(),

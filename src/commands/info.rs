@@ -12,6 +12,7 @@
 
 use crate::core::{apply_filters, flatten_targets, resolve_target, NameMatch, Process, Resolved};
 use crate::error::{ExitCode, ProcError, Result};
+use crate::out_print;
 use crate::ui::{colorize_status, format_duration, format_memory, Printer};
 use clap::Args;
 use colored::*;
@@ -104,7 +105,7 @@ impl InfoCommand {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
-        print!("{}", render_process_info(proc, self.verbose, now_secs));
+        out_print!("{}", render_process_info(proc, self.verbose, now_secs));
     }
 }
 

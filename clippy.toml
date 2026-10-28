@@ -1,0 +1,15 @@
+# Every write to stdout or stderr goes through src/ui/out.rs, which decides what a
+# reader that stops early (a broken pipe) or a failing write means. The std print
+# macros panic on a write error, so a direct print would bring back exit 101.
+# src/ui/out.rs is the one file that allows these.
+disallowed-macros = [
+    { path = "std::print", reason = "use proc_cli::out_print! (stdout) so a closed pipe cannot panic" },
+    { path = "std::println", reason = "use proc_cli::out_println! (stdout) so a closed pipe cannot panic" },
+    { path = "std::eprint", reason = "use proc_cli::err_print! (stderr) so a closed pipe cannot panic" },
+    { path = "std::eprintln", reason = "use proc_cli::err_println! (stderr) so a closed pipe cannot panic" },
+    { path = "std::dbg", reason = "dbg! writes to stderr and panics on a write error" },
+]
+disallowed-methods = [
+    { path = "std::io::stdout", reason = "use proc_cli::ui::out::stdout() (or stdout_is_terminal())" },
+    { path = "std::io::stderr", reason = "use proc_cli::ui::out::stderr() (or stderr_is_terminal())" },
+]

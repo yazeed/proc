@@ -239,6 +239,7 @@ proc on :8080 --json | jq '.process | {pid, cwd, uptime_secs}'
 - **Exit 4 means nothing was done**, and the error adds `"reason"`: `"invalid_input"` (a wrong flag, value or argument), `"needs_confirmation"` or `"not_supported"` (this OS cannot do it).
 - **Preview, then confirm.** A command that changes processes, run with `--json` but without `--yes`, exits 4 with `"needs_confirmation": true` and `"processes"` (the ones it would have changed), so a script can show them before running it again with `--yes`.
 - **`not_found`** lists the targets that matched nothing (empty when all were found). It is in the JSON of `on`, `why`, `info`, `kill`, `stop`, `freeze`, `thaw`, `unstick`, `free` and `wait`, and in the exit 4 output above. `list` and `watch` do not have it.
+- **A reader that stops early ends proc quietly.** `proc list | head -n1` exits 0 without an error, and `proc kill 1234 --yes | head -n1` still kills the process and exits with the code of the kill (0 if it worked, 2 if there was nothing to kill): a closed pipe never changes the result, on stdout or stderr. A write that fails for another reason (a full disk) is exit 1, with one line on stderr.
 
 | Exit code | Meaning |
 |-----------|---------|

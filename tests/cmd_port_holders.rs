@@ -115,7 +115,7 @@ impl Pair {
     /// `None`, with the reason printed, when this machine can't bind `[::1]`
     fn start() -> Option<Self> {
         if let Err(e) = std::net::TcpListener::bind("[::1]:0") {
-            eprintln!("skipped: no IPv6 loopback on this machine ({e})");
+            proc_cli::err_println!("skipped: no IPv6 loopback on this machine ({e})");
             return None;
         }
         let v4 = Holder::start(&[]);
