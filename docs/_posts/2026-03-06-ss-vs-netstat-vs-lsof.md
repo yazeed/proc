@@ -32,7 +32,7 @@ A few things to note:
 
 - **`-P` and `-n` are almost always what you want.** Without them, `lsof` resolves port numbers to service names (3000 becomes "hbci") and IP addresses to hostnames. This triggers DNS lookups that can add seconds of latency, or hang entirely if DNS is misconfigured. If your `lsof` call is slow, add `-P -n` first.
 - **`-t` is for scripting.** It outputs bare PIDs, one per line, which you can pipe directly to `kill` or `xargs`.
-- **`-sTCP:LISTEN` filters by socket state.** Without it, you'll see all TCP states — ESTABLISHED, CLOSE_WAIT, TIME_WAIT — not just the listening socket.
+- **`-sTCP:LISTEN` filters by socket state.** Without it, you'll see all TCP states — ESTABLISHED, CLOSE_WAIT and so on — not just the listening socket. TIME_WAIT never appears, because no process owns those sockets.
 
 **Platform support:** macOS and Linux. This is lsof's biggest practical advantage. It's the one network diagnostic tool that works the same way on both platforms. On macOS, it's the primary tool since `ss` doesn't exist.
 
@@ -49,9 +49,9 @@ Nine columns. The PID is column 2. The process name is column 1. The socket stat
 
 `ss` stands for "socket statistics." It's part of the `iproute2` package on Linux and was designed specifically to replace `netstat`.
 
-**How it works:** `ss` uses netlink sockets to query the kernel's socket tables directly. It calls `SOCK_DIAG` netlink messages, which return structured data about active sockets without needing to walk the process table. This is fundamentally different from `lsof` — instead of asking "what files does each process have open?", `ss` asks "what sockets exist?" The kernel answers from its own internal hash tables, which is fast.
+**How it works:** `ss` uses netlink sockets to query the kernel's socket tables directly. It calls `SOCK_DIAG` netlink messages, which return structured data about active sockets without needing to walk the process table. (With `-p`, `ss` does also scan `/proc/<pid>/fd` to find each socket's owner, as `netstat -p` does.) This is fundamentally different from `lsof` — instead of asking "what files does each process have open?", `ss` asks "what sockets exist?" The kernel answers from its own internal hash tables, which is fast.
 
-On modern Linux kernels (3.3+), `ss` uses `INET_DIAG` for TCP/UDP sockets. The kernel responds with binary-encoded socket data that `ss` decodes directly. No text parsing of `/proc` files. No per-process iteration.
+On modern Linux kernels (3.3+), `ss` uses `INET_DIAG` for TCP/UDP sockets. The kernel responds with binary-encoded socket data that `ss` decodes directly. No text parsing of `/proc` files for the socket data itself. Without `-p`, no per-process iteration.
 
 **Key flags:**
 
@@ -126,16 +126,16 @@ Proto Recv-Q Send-Q  Local Address      Foreign Address    (state)
 tcp4       0      0  *.3000             *.*                LISTEN
 ```
 
-Note: macOS `netstat` doesn't show PIDs at all without additional effort. This is why most macOS users end up using `lsof` instead.
+Note: plain macOS `netstat` doesn't show PIDs. Add `-v` to get `pid` and `epid` columns, but the output is wide, and most macOS users end up using `lsof` instead.
 
 ## Comparison
 
 | | lsof | ss | netstat |
 |---|---|---|---|
 | **OS support** | macOS + Linux | Linux only | macOS + Linux |
-| **Speed** | Slow (walks fd table) | Fast (kernel netlink) | Medium (parses /proc text) |
+| **Speed** | Slow (walks fd table) | Fast (kernel netlink; slower with `-p`) | Medium (parses /proc text) |
 | **What it reads** | Per-process fd table | Kernel socket tables via netlink | /proc/net/* (Linux), sysctl (macOS) |
-| **Shows PIDs** | Yes | Yes (with `-p`) | Yes on Linux; not easily on macOS |
+| **Shows PIDs** | Yes | Yes (with `-p`) | Yes on Linux (`-p`); on macOS with `-v` |
 | **Filter syntax** | Flag-based | Built-in expressions | Flag-based |
 | **Best for** | macOS; fd-level detail | Linux; speed; scripted checks | Legacy scripts; macOS (limited) |
 | **Install** | Usually preinstalled | `iproute2` package | `net-tools` (Linux); preinstalled (macOS) |
@@ -155,10 +155,10 @@ Skip the header row (`NR>1`), print column 2 (PID), deduplicate. This is the cle
 ### Extracting PIDs from ss
 
 ```bash
-ss -tlnp 'sport = :3000' | awk 'NR>1 {print $7}' | grep -oP 'pid=\K[0-9]+'
+ss -tlnp 'sport = :3000' | awk 'NR>1 {print $6}' | grep -oP 'pid=\K[0-9]+'
 ```
 
-Column 7 contains the `users:(("node",pid=12345,fd=22))` blob. The `grep -oP` extracts just the number after `pid=`. The `-P` flag enables Perl-compatible regex (`\K` resets the match start). If you're on a system without `grep -P`, use `sed` instead:
+Column 6 contains the `users:(("node",pid=12345,fd=22))` blob. The `grep -oP` extracts just the number after `pid=`. The `-P` flag enables Perl-compatible regex (`\K` resets the match start). If you're on a system without `grep -P`, use `sed` instead:
 
 ```bash
 ss -tlnp 'sport = :3000' | sed -n 's/.*pid=\([0-9]*\).*/\1/p'
@@ -174,26 +174,29 @@ Column 7 has the `PID/program` format. `split` on `/` gives you the PID in `a[1]
 
 ### Extracting PIDs from netstat (macOS)
 
-This is the painful one. macOS `netstat` doesn't show PIDs. You need to cross-reference with `lsof`:
+This is the awkward one. Plain macOS `netstat` doesn't show PIDs, but `netstat -v` adds `pid` and `epid` columns:
 
 ```bash
-# Just use lsof on macOS
+# macOS: the pid column is field 11 on current macOS (check the header on your version)
+netstat -vanp tcp | awk '/\.3000 / && /LISTEN/ {print $11}'
+
+# Simpler: just use lsof on macOS
 lsof -i :3000 -P -n -t
 ```
 
-There's no reasonable way to get PIDs from macOS `netstat` alone. This is one of the reasons `lsof` dominates on macOS.
+The column position depends on the macOS version, which is one of the reasons `lsof` dominates on macOS.
 
 ## Which should you use?
 
 The decision is mostly made for you by your platform and use case:
 
-**On macOS?** Use `lsof`. You have no other real option. `ss` doesn't exist, and macOS `netstat` doesn't show PIDs. `lsof -i -P -n` is your go-to.
+**On macOS?** Use `lsof`. You have no other real option. `ss` doesn't exist, and macOS `netstat` only shows PIDs with `-v`. `lsof -i -P -n` is your go-to.
 
-**On Linux and need speed?** Use `ss`. If you're writing a monitoring script that checks port status every few seconds, the netlink path is measurably faster. On a busy server with thousands of connections, `ss` can be 10-50x faster than `lsof`.
+**On Linux and need speed?** Use `ss`. If you're writing a monitoring script that checks port status every few seconds, the netlink path is measurably faster. On a busy server with thousands of connections, `ss` is the lighter query.
 
 **On Linux and need file descriptor detail?** Use `lsof`. If you need to know which specific file descriptor a socket is on, or you need to correlate network sockets with other open files in the same process, `lsof` gives you that level of detail.
 
-**In a minimal container?** Use `ss`. Alpine and most minimal base images include `iproute2` (or you can add it easily). `lsof` and `net-tools` are often missing. If `ss` isn't available either, you can read `/proc/net/tcp` directly — it's always there on Linux.
+**In a minimal container?** Use `ss` if you can add it. Alpine's busybox has `netstat` but not `ss` (install the `iproute2-ss` package), and slim Debian images often omit `iproute2` too. `lsof` and `net-tools` are often missing as well. If none is available, you can read `/proc/net/tcp` directly — it's always there on Linux.
 
 **Writing cross-platform scripts?** This is where it gets awkward. You either need platform detection and separate code paths, or you use `lsof` everywhere (it works on both, just slower on Linux). Neither option is great.
 

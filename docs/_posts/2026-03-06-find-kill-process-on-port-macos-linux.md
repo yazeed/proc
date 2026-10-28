@@ -24,7 +24,7 @@ This is one of the most common tasks in day-to-day development, and the commands
 lsof -i :3000
 ```
 
-This lists all processes with any connection involving port 3000 — listening, established, TIME_WAIT, everything. On a busy server, this can return a lot of rows.
+This lists all processes with any connection involving port 3000 — listening, established, CLOSE_WAIT and so on. It never shows TIME_WAIT, because no process owns those sockets. On a busy server, this can return a lot of rows.
 
 The output looks like this:
 
@@ -66,7 +66,7 @@ On macOS, `lsof` is always available — it ships with the OS.
 
 On Linux, lsof may or may not be installed. Most distributions include it, but minimal Docker images and Alpine-based containers often don't. You can install it with `apt install lsof` or `yum install lsof`.
 
-One subtle difference: on macOS, `lsof -i :3000` may show both IPv4 and IPv6 entries separately. On Linux, a single socket can listen on both protocols (dual-stack), so you might see only one entry.
+One subtle difference: a dual-stack socket appears once (as IPv6, `*:3000`), while an app that opens separate IPv4 and IPv6 sockets appears twice. This depends on the app, not the OS.
 
 ## ss -tlnp (Linux only)
 
@@ -146,30 +146,30 @@ tcp   0      0      0.0.0.0:3000      0.0.0.0:*         LISTEN   12345/node
 
 ### macOS
 
-macOS has `netstat` but it does not support the `-p` flag. It cannot show which process owns a socket.
+macOS has `netstat` but its `-p` flag selects a protocol, not a process. Plain `netstat -an` does not show which process owns a socket, but `netstat -anv` adds `pid` and `epid` columns.
 
 ```bash
 # macOS: shows listening TCP sockets, but no PID
 netstat -an | grep LISTEN | grep '\.3000 '
 
-# macOS: more verbose, includes some process info
+# macOS: -v adds pid and epid columns
 netstat -anv | grep LISTEN | grep '\.3000 '
 ```
 
-On macOS, `netstat -anv` adds a few more columns but still doesn't reliably show the PID for all sockets. Use `lsof` on macOS instead — it's the right tool there.
+On macOS, `netstat -anv` adds `pid` and `epid` columns, but the output is wide and hard to read. `lsof` is still easier on macOS.
 
 ### Key difference summary
 
 | Feature | Linux `netstat -tlnp` | macOS `netstat -an` |
 |---------|----------------------|---------------------|
-| Shows PID | Yes | No |
+| Shows PID | Yes | Only with `-v` |
 | `-p` flag | Shows PID/name | Protocol filter (different meaning) |
 | Port format | `0.0.0.0:3000` | `*.3000` or `127.0.0.1.3000` |
 | Status | Deprecated (use `ss`) | Still the system netstat |
 
 ## fuser PORT/tcp
 
-`fuser` identifies processes using files or sockets. It's available on most Linux systems and some macOS setups (via `brew install psmisc`), though it's primarily a Linux tool.
+`fuser` identifies processes using files or sockets. The `fuser PORT/tcp` syntax is a Linux (psmisc) feature. macOS ships a `fuser`, but it only takes file names, so `fuser 3000/tcp` fails there.
 
 ### Basic usage
 
@@ -193,7 +193,7 @@ That's it — just the port and PID. Quick, but minimal.
 # This captures the PID only
 pid=$(fuser 3000/tcp 2>/dev/null)
 
-# This shows nothing (stderr was swallowed, stdout has just the PID)
+# This prints only the PID (the label went to stderr and was dropped)
 fuser 3000/tcp 2>/dev/null
 # Output: 12345
 
@@ -282,7 +282,7 @@ fuser 3000/tcp 2>/dev/null | xargs -n1 echo
 | lsof | macOS, Linux | `lsof -i :3000 -t` | PID only, one per line |
 | ss | Linux | `ss -tlnp 'sport = :3000'` | Table with process info in parens |
 | netstat | Linux | `netstat -tlnp \| grep :3000` | Table with PID/name column |
-| netstat | macOS | `netstat -anv \| grep '\.3000 '` | Table, no PID |
+| netstat | macOS | `netstat -anv \| grep '\.3000 '` | Table with a pid column |
 | fuser | Linux | `fuser 3000/tcp` | PID to stdout, label to stderr |
 
 ## Killing the process
@@ -372,7 +372,7 @@ sudo lsof -i :80 -t | sudo xargs kill
 sudo fuser -k 80/tcp
 ```
 
-Ports below 1024 typically require root to bind, so processes on ports like 80 or 443 are often root-owned.
+On Linux, ports below 1024 require root to bind, so processes on ports like 80 or 443 are often root-owned. (macOS 10.14 and later lets any user bind them.)
 
 ### IPv4 vs IPv6
 
@@ -413,7 +413,7 @@ You can't kill a TIME_WAIT socket — there's no process to kill. You have two o
 1. **Wait.** It will clear on its own (usually 30-60 seconds).
 2. **Set SO_REUSEADDR** in your application, which most frameworks do by default. This lets a new process bind to the port even if TIME_WAIT sockets exist.
 
-If you see an entry in `lsof` or `netstat` with no PID and a state of TIME_WAIT, that's what's happening.
+If `netstat` or `ss` shows an entry with no PID in TIME_WAIT, that's what's happening. `lsof` never lists these sockets.
 
 ## The one-liner way
 
@@ -432,8 +432,10 @@ proc kill :3000
 proc kill :3000 --yes
 
 # Kill multiple ports at once
-proc kill :3000,:8080,:4200
+proc kill :3000 :8080 :4200
 ```
+
+`proc kill :3000` signals every process holding the port, including workers that share the socket.
 
 Same commands on macOS and Linux. No flags to remember, no awk pipelines to construct.
 

@@ -178,9 +178,9 @@ If this returns results, you have processes stuck in I/O waits.
 
 ### Can you kill a D-state process?
 
-No. Not with `kill -9`. Not with anything. SIGKILL is delivered by the kernel, and the kernel will not deliver signals to a process in uninterruptible sleep. The signal is queued, and it will be delivered *when the I/O completes*. If the I/O never completes, the signal is never delivered.
+Usually not. A process in uninterruptible sleep ignores most signals until its I/O finishes. The signal is queued, and it will be delivered *when the I/O completes*. If the I/O never completes, the signal is never delivered. Some waits are marked killable on Linux (since kernel 2.6.25, an NFS hard mount is one example): `ps` still shows D, but SIGKILL works. Truly uninterruptible waits do not respond to anything.
 
-This is the one case where Unix process management genuinely cannot help you.
+This is the one case where Unix process management often cannot help you.
 
 ### Common causes
 
@@ -258,24 +258,24 @@ On macOS, the equivalent is `sudo sample <pid>` or `sudo spindump <pid>`.
 | State | Action |
 |-------|--------|
 | Z (zombie) | Signal or kill the parent. The zombie itself is already dead. |
-| D (uninterruptible) | Fix the I/O issue. Cannot be killed. May require reboot. |
+| D (uninterruptible) | Fix the I/O issue. Usually cannot be killed. May require reboot. |
 | T (stopped) | `kill -CONT <pid>` to resume, or kill it if unwanted. |
 
 ## proc's approach
 
-[proc](https://github.com/yazeed/proc-cli) has two built-in commands for this: `proc stuck` finds problem processes, and `proc unstick` attempts to recover them.
+[proc](https://github.com/yazeed/proc-cli) has two built-in commands for this: `proc stuck` finds processes that have run for over five minutes and are using more than 50% CPU or are blocked in uninterruptible sleep (D), and `proc unstick` attempts to recover them.
 
-Find all stuck processes (default threshold is 5 minutes):
+Find all stuck processes (default threshold is 5 minutes). It does not list zombies or stopped processes; use `proc by NAME --status zombie` or `--status stopped` for those:
 
 ```bash
 proc stuck
 ```
 
 ```
-! Found 2 potentially stuck processes:
+⚠ Found 1 potentially stuck process
 
-  -> node [PID 4821] - 98.2% CPU, running for 2h 15m
-  -> webpack [PID 4830] - 87.5% CPU, running for 2h 15m
+ PID     DIR       NAME  ARGS            CPU%        MEM      STATUS 
+ 4821    …y-agent  node  ts-node ind…   475.7      5.9GB     Running 
 ```
 
 Attempt recovery with escalating signals (SIGCONT, then SIGINT):

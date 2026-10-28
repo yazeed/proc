@@ -89,7 +89,7 @@ The `-t` flag makes lsof output only PIDs, which you pipe to `kill`.
 
 ## the phantom port: nothing shows up
 
-Sometimes `lsof` shows nothing on the port, but you still get EADDRINUSE. This is almost always TIME_WAIT.
+Sometimes `lsof` shows nothing on the port, but you still get EADDRINUSE. Check for a listener on another address (`lsof -i :3000` shows all of them), a process owned by another user (`sudo lsof -i :3000`), or, if your code does not set `SO_REUSEADDR`, TIME_WAIT.
 
 ### what is TIME_WAIT?
 
@@ -110,14 +110,7 @@ If you see lines with `TIME_WAIT` but nothing in `LISTEN`, that's your answer. W
 
 If waiting isn't an option — like during development where you're constantly restarting — the fix is `SO_REUSEADDR`. This socket option tells the kernel "let me bind to this port even if there are TIME_WAIT sockets on it."
 
-In Node:
-
-```javascript
-const server = net.createServer();
-server.listen({ port: 3000, reuseAddr: true });
-```
-
-Most frameworks set this by default. Express, for example, uses `SO_REUSEADDR` automatically. If you're hitting TIME_WAIT issues, you may be using a lower-level API that doesn't.
+In Node, there is nothing to set: Node's `net` module sets `SO_REUSEADDR` for you on Unix, so an EADDRINUSE from Node is a real listener, not TIME_WAIT. Go's `net.Listen` does the same. If you're hitting TIME_WAIT issues, you may be using a lower-level API that doesn't.
 
 In Python:
 
@@ -168,7 +161,7 @@ If you have [proc](https://github.com/yazeed/proc-cli) installed, `proc on :3000
 ```bash
 proc on :3000             # what's using this port?
 proc kill :3000 --yes     # kill it
-proc on :3000,:8080,:5432 # check multiple ports at once
+proc on :3000 :8080 :5432 # check multiple ports at once
 ```
 
 ## Install

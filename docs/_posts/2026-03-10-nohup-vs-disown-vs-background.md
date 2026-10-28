@@ -129,7 +129,9 @@ disown
 
 Use both. `nohup` ignores the signal, `disown` prevents it from being sent. Covers all bases.
 
-## setsid: full detachment
+## setsid: full detachment (Linux)
+
+macOS has no `setsid` command; there, use `nohup` plus `disown`, or tmux.
 
 ```bash
 setsid ./long-task.sh > task.log 2>&1
@@ -167,7 +169,7 @@ For one-off commands where you don't need to reconnect, `nohup` is simpler. For 
 
 ## with proc
 
-If you've lost track of background processes, `proc list` shows everything running under your user. `proc by node --in .` narrows it to a specific project directory. And `proc tree` shows parent-child relationships to find orphaned background processes.
+If you've lost track of background processes, `proc list` shows every process on the machine. `proc by node --in .` narrows it to a specific project directory. And `proc tree` shows parent-child relationships to find orphaned background processes.
 
 ```bash
 proc list --sort cpu           # what's running?

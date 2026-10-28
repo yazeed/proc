@@ -250,9 +250,7 @@ These patterns work in interactive use. They become liabilities in scripts that 
 
 **Column positions shift between OS versions.** macOS `ps` and Linux `ps` use the same flags but produce subtly different output. Column widths change. Extra columns appear in some configurations.
 
-**Truncated process names.** `ps` truncates the COMMAND column based on terminal width. In a non-interactive context (like cron or CI), the terminal width might be undefined, causing truncation at 80 characters or less.
-
-**Locale differences.** Number formatting can change with locale settings. A decimal separator might be `.` or `,`. If awk is comparing `$3 > 80` and the CPU percentage is `80,5`, the comparison silently does the wrong thing.
+**Truncated process names.** On Linux, procps `ps` can cap the width of piped output (its man page calls the width undefined when output is not a terminal), so a long COMMAND may be cut off in cron or CI. Use `ps -ww` or `ps -o pid=,args=` in scripts. macOS `ps` does not truncate piped output.
 
 **lsof's output is especially fragile.** Column alignment depends on the length of values in other rows. A long username or filename shifts everything.
 
@@ -407,10 +405,10 @@ stop_old() {
         if kill -0 "$pid" 2>/dev/null; then
             echo "Stopping PID $pid..."
             kill "$pid"
-            tail --pid="$pid" -f /dev/null 2>/dev/null &
-            local tail_pid=$!
-            ( sleep 10; kill -9 "$pid" 2>/dev/null ) &
-            wait "$tail_pid" 2>/dev/null || true
+            proc wait "$pid" --timeout 10 --quiet >/dev/null 2>&1 || true
+            if kill -0 "$pid" 2>/dev/null; then
+                kill -9 "$pid"
+            fi
         fi
         rm -f "$PIDFILE"
     fi
@@ -472,7 +470,7 @@ fi
 Kill what's on a port in a CI cleanup step:
 
 ```bash
-proc kill :3000,:8080,:5432 --yes 2>/dev/null || true
+proc kill :3000 :8080 :5432 --yes 2>/dev/null || true
 ```
 
 The `--json` flag gives you named fields instead of positional columns. No awk, no column counting, no cross-platform differences in output format. And destructive commands like `kill` and `stop` support `--yes` for non-interactive use and `--dry-run` for testing.

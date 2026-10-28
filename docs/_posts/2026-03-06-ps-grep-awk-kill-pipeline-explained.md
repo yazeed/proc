@@ -176,11 +176,11 @@ The `ps | grep | awk` pipeline is so common that dedicated tools exist to replac
 ### pgrep -- find PIDs by name
 
 ```bash
-pgrep node           # PIDs of processes named "node"
+pgrep node           # PIDs of processes whose name contains "node" (add -x for exactly "node")
 pgrep -f "node.*server"  # Match against full command line
 pgrep -u zee node    # Only processes owned by user zee
 pgrep -l node        # Show PID and process name
-pgrep -a node        # Show PID and full command line
+pgrep -lf node       # Show PID and full command line (macOS and Linux; on Linux `pgrep -a` also works)
 ```
 
 `pgrep` matches against the process name by default, not the full command line. This avoids the "matching too broadly" problem. Use `-f` to match against the full command if you need it.
@@ -188,7 +188,7 @@ pgrep -a node        # Show PID and full command line
 ### pkill -- find and kill in one step
 
 ```bash
-pkill node           # Send SIGTERM to processes named "node"
+pkill node           # Send SIGTERM to processes whose name contains "node" (add -x for exactly "node")
 pkill -9 node        # Send SIGKILL
 pkill -f "node server.js"  # Match full command line
 ```

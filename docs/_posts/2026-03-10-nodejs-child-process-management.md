@@ -174,7 +174,7 @@ const child = spawn('node', ['server.js'], {
 child.unref();  // let parent exit without waiting for child
 ```
 
-`detached: true` puts the child in a new process group. `unref()` tells the parent's event loop not to wait for this child. The parent can exit and the child keeps running.
+`detached: true` puts the child in a new session and process group (on Windows it gets its own console window instead). `unref()` tells the parent's event loop not to wait for this child. The parent can exit and the child keeps running.
 
 Without `unref()`, the parent's event loop stays alive waiting for the detached child to exit.
 
@@ -221,7 +221,7 @@ child.on('error', (err) => {
 
 ## with proc
 
-When Node child processes escape cleanup, `proc tree <pid>` shows the full process tree. `proc by node --in .` finds all Node processes in your project. And `proc stop :3000 --yes` handles the "port still in use after crash" scenario.
+When Node child processes escape cleanup, `proc tree <pid>` shows that process and everything it spawned (add `-a` to see its ancestors). `proc by node --in .` finds all Node processes in your project. And `proc stop :3000 --yes` handles the "port still in use after crash" scenario.
 
 ```bash
 proc tree 12345            # see process tree from a PID

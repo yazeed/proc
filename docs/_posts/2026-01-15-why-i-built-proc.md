@@ -49,7 +49,7 @@ So the commands should just be those words:
 ```bash
 proc on :3000
 proc by node --in .
-proc kill :3000,:8080,node
+proc kill :3000 :8080 node
 proc ports
 proc info 1234
 ```
@@ -60,9 +60,9 @@ This is the entire design. There's no DSL, no config file, no learning curve bey
 
 ## Why Rust
 
-I wanted it to be fast — sub-100ms for everything — and I wanted a single binary with no runtime dependencies. No "install Node.js first" or "make sure Python 3.8+ is available." Just download and run.
+I wanted it to be fast, and I wanted a single binary with no runtime dependencies. No "install Node.js first" or "make sure Python 3.8+ is available." Just download and run.
 
-Rust gave me that, plus cross-platform compilation. The same codebase builds for macOS, Linux, and Windows, and the platform-specific parts (lsof on macOS, ss on Linux) are abstracted behind a common interface.
+Rust gave me that, plus cross-platform compilation. The same codebase builds for macOS, Linux, and Windows, and the platform-specific parts (lsof on macOS, /proc on Linux, netstat on Windows) are abstracted behind a common interface.
 
 ## What I chose not to build
 

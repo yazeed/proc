@@ -26,7 +26,7 @@ This post compares proc with the tools you're probably already using.
 | Kill it | `proc kill :3000` | `lsof -i :3000 -t \| xargs kill -9` |
 | What ports is node using? | `proc on node` | `lsof -i -P -n \| grep node` |
 | Find by name + directory | `proc by node --in .` | `ps aux \| grep node` + manual cwd check |
-| Kill multiple targets | `proc kill :3000,:8080,node` | Three separate pipelines |
+| Kill multiple targets | `proc kill :3000 :8080 node` | Three separate pipelines |
 | Process tree | `proc tree node` | `pstree -p $(pgrep node)` |
 | What's running this file? | `proc for ./app.js` | `lsof ./app.js` or `fuser ./app.js` |
 | Real-time monitoring | `proc watch node` | `watch -n2 'ps aux \| grep node'` |
@@ -75,7 +75,7 @@ fuser -k 3000/tcp        # Kill (no confirmation!)
 fuser -n tcp 3000-9000   # Range... but output is hard to parse
 ```
 
-fuser's output format is notoriously hard to parse — PIDs are printed to stderr, not stdout. And `fuser -k` kills without asking.
+fuser's output format is notoriously hard to parse — the label (`3000/tcp:`) goes to stderr and the PIDs to stdout, with leading padding. And `fuser -k` kills without asking.
 
 **With proc:**
 
@@ -106,7 +106,7 @@ killport does one thing: kill by port. It doesn't support:
 - Directory-based filtering (`--in .`)
 - Process info without killing (`proc on :3000`)
 - Process trees, monitoring, stuck process recovery
-- PID targeting, JSON output, dry-run
+- PID targeting, JSON output
 
 **With proc:**
 
@@ -114,7 +114,7 @@ killport does one thing: kill by port. It doesn't support:
 proc kill :3000          # Same thing, with confirmation
 proc kill :3000 --yes    # Skip confirmation (like killport)
 proc on :3000            # But also: just look without killing
-proc kill :3000,node     # And: mixed targets
+proc kill :3000 node     # And: mixed targets
 ```
 
 **Verdict:** If all you ever do is kill ports, killport is fine. proc does ports *and* everything else.
@@ -138,13 +138,12 @@ fkill :3000              # Kill by port
 - No filtering by directory, CPU, memory
 - No process trees, monitoring, or info commands
 - No JSON output
-- No multi-target in one command
 
 **With proc:**
 
 ```bash
 proc kill node           # Kill by name (with confirmation table)
-proc kill :3000,node     # Multi-target
+proc kill :3000 node     # Multi-target
 proc kill node --in .    # Only in current directory
 proc kill node --dry-run # Preview first
 ```
@@ -164,11 +163,11 @@ procs --watch node       # Watch mode exists
 procs node               # Filter by name
 
 # But no:
-# Port operations (what's on :3000?)
+# A port lookup (ports are only columns)
 # Kill/stop commands
 # Directory filtering (--in .)
 # Multi-target operations
-# Process trees with ancestry
+# Ancestry tracing (proc why) or a tree rooted at a name (proc tree node)
 # Stuck process detection
 # File-based lookup
 ```
@@ -193,7 +192,7 @@ proc's design principle is that process management shouldn't require remembering
 - `proc on :3000` — What's **on** port 3000?
 - `proc by node --in .` — Processes **by** name "node" **in** current directory
 - `proc for ./script.py` — Processes **for** this file
-- `proc kill :3000,:8080,node` — **Kill** these targets
+- `proc kill :3000 :8080 node` — **Kill** these targets
 - `proc watch node` — **Watch** node processes
 
 One syntax. One tool. All of process management.

@@ -18,7 +18,7 @@ kill -STOP 12345    # freeze the process
 kill -CONT 12345    # resume it
 ```
 
-The common signals:
+The common signals (numbers differ by OS, so use the names in scripts):
 
 | signal | number | catchable? | use case |
 |--------|--------|------------|----------|
@@ -26,8 +26,8 @@ The common signals:
 | SIGKILL | 9 | no | force kill, no cleanup |
 | SIGINT | 2 | yes | same as Ctrl+C |
 | SIGHUP | 1 | yes | reload config / terminal hangup |
-| SIGSTOP | 19 | no | freeze process |
-| SIGCONT | 18 | no | resume frozen process |
+| SIGSTOP | 17 (macOS) / 19 (Linux) | no | freeze process |
+| SIGCONT | 19 (macOS) / 18 (Linux) | yes (it resumes the process anyway) | resume frozen process |
 
 `kill` is the safest option because you're explicit about which PID gets the signal. No pattern matching, no ambiguity. The downside: you need the PID first.
 
@@ -88,15 +88,15 @@ The `-f` flag is powerful but dangerous. `pkill -f "server"` matches any process
 `pgrep` uses the same matching logic as `pkill` but only prints PIDs. Use it to preview what `pkill` would hit:
 
 ```bash
-pgrep -la node       # list PIDs and names
-pgrep -fa "npm start" # list PIDs and full commands
+pgrep -l node        # list PIDs and names
+pgrep -lf "npm start" # list PIDs and full commands
 ```
 
 Always run `pgrep` before `pkill` if you're unsure what will match.
 
 ## killall: signal by exact name
 
-`killall` matches by process name — but unlike `pkill`, it matches the **exact process name** (on Linux), not a regex substring.
+`killall` matches by process name — but unlike `pkill`, it matches the **exact process name** (on Linux and macOS), not a regex substring.
 
 ```bash
 killall node         # all processes exactly named "node"
@@ -107,27 +107,27 @@ Useful flags:
 
 | flag | description |
 |------|-------------|
-| `-w` | wait for processes to die before returning |
-| `-I` | case-insensitive matching (Linux) |
+| `-w` | wait for processes to die before returning (Linux only) |
+| `-I` | case-insensitive matching (Linux); on macOS, ask for confirmation before each signal |
 | `-v` | report whether the signal was sent successfully |
-| `-r` | use regex matching (Linux, makes it behave more like pkill) |
+| `-r` | use regex matching (Linux, makes it behave more like pkill; macOS uses `-m`) |
 
 ### the macOS warning
 
-On older macOS systems (and other BSDs), `killall` without arguments kills **all processes you own**. This is not a theoretical risk — it will log you out or worse. Modern macOS requires a process name argument, but the reputation sticks.
+On Solaris and some System V systems, `killall` without arguments kills **all processes**. This is not a theoretical risk — it will log you out or worse. macOS and Linux both require a process name, but the reputation sticks.
 
-More importantly, `killall` on macOS matches differently than on Linux. On macOS, it does substring matching by default. On Linux, it's exact. This means:
+More importantly, the flags differ between Linux and macOS, even though matching is exact on both by default:
 
 ```bash
 killall node    # Linux: only "node", not "nodemon"
-killall node    # macOS: could match "nodemon" too
+killall node    # macOS: also only "node"; -m switches to a regex
 ```
 
-If you write scripts that run on both platforms, `pkill -x` is more predictable.
+Linux has `-r`, `-I` (case-insensitive) and `-w`; macOS has `-m`, `-I` (confirm each signal) and no `-w`. If you write scripts that run on both platforms, `pkill -x` is more predictable.
 
-### the -w flag
+### the -w flag (Linux)
 
-One genuinely useful `killall` feature: the `-w` (wait) flag blocks until all matched processes have exited. Useful in scripts where you need to know the process is truly gone before continuing:
+One genuinely useful `killall` feature on Linux: the `-w` (wait) flag blocks until all matched processes have exited. Useful in scripts where you need to know the process is truly gone before continuing. macOS `killall` has no `-w`; use `proc wait node` there.
 
 ```bash
 killall -w node && echo "all node processes stopped"
@@ -141,16 +141,16 @@ Neither `kill` nor `pkill` has this built in.
 
 **Use `pkill`** when you want to match by name, command line, user, or parent. Best for scripts and automation. Always preview with `pgrep` first.
 
-**Use `killall`** when you want exact name matching and the `-w` (wait) flag. Be aware of macOS/Linux differences. Avoid in cross-platform scripts.
+**Use `killall`** when you want exact name matching and, on Linux, the `-w` (wait) flag. Be aware of macOS/Linux differences. Avoid in cross-platform scripts.
 
 ## with proc
 
 [proc](https://github.com/yazeed/proc-cli) handles name matching, port targeting, and multi-target resolution with deduplication and confirmation prompts:
 
 ```bash
-proc kill node            # kill all node processes (with confirmation)
+proc kill node            # processes named exactly node (add --cmd to match node anywhere in the command line), with confirmation
 proc stop :3000           # graceful stop by port
-proc kill :3000,webpack   # multiple targets, deduplicated
+proc kill :3000 webpack   # multiple targets, deduplicated
 proc kill node --dry-run  # preview what would be killed
 ```
 
