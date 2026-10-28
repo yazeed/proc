@@ -779,7 +779,14 @@ impl Process {
 
     /// `kill_and_wait` with the time to wait for the process to be gone
     fn kill_and_wait_within(&self, wait: Duration) -> Result<()> {
-        match self.kill() {
+        self.kill_then_wait(wait, Process::kill)
+    }
+
+    /// `kill_and_wait_within` with the kill to send, so a test can send one that
+    /// leaves the process running (a real kill is over before it returns on
+    /// Windows, so the wait would never be needed)
+    fn kill_then_wait(&self, wait: Duration, kill: impl Fn(&Process) -> Result<()>) -> Result<()> {
+        match kill(self) {
             // it exited on its own just before the kill
             Err(ProcError::ProcessNotFound(_)) => return Ok(()),
             other => other?,
@@ -1248,19 +1255,14 @@ mod tests {
             .spawn()
             .unwrap();
         let pid = child.id();
-        let deadline = std::time::Instant::now() + Duration::from_secs(10);
-        let record = loop {
-            if let Some(record) = Process::find_by_pid(pid).unwrap() {
-                if record.command.is_some() {
-                    break record;
-                }
-            }
-            assert!(
-                std::time::Instant::now() < deadline,
-                "the child's command line never appeared"
-            );
+        let record = std::iter::repeat_with(|| {
             std::thread::sleep(Duration::from_millis(20));
-        };
+            Process::find_by_pid(pid).unwrap()
+        })
+        .take(500)
+        .flatten()
+        .find(|record| record.command.is_some())
+        .expect("the child's command line never appeared");
         let found = Process::find_by_name(&part, NameMatch::Command)
             .map(|found| found.iter().any(|p| p.pid == pid))
             .unwrap_or(false);
@@ -1301,14 +1303,8 @@ mod tests {
         let mut sys = System::new();
         sys.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[me]), true);
         let parent = sys.process(me).and_then(|p| p.parent());
-        let found = self_and_ancestors(&sys);
-        assert!(found.contains(&me));
-        if let Some(parent) = parent {
-            assert!(found.contains(&parent));
-            assert_eq!(found.len(), 2, "{found:?}");
-        } else {
-            assert_eq!(found.len(), 1, "{found:?}");
-        }
+        let expected: std::collections::HashSet<Pid> = std::iter::once(me).chain(parent).collect();
+        assert_eq!(self_and_ancestors(&sys), expected);
     }
 
     #[test]
@@ -1645,6 +1641,25 @@ mod tests {
     fn a_missing_lsof_finds_no_open_file_owners() {
         let found = Process::find_by_open_file_with("proc-no-such-lsof", std::path::Path::new("/"));
         assert!(found.unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_wait_for_a_process_that_stays_is_a_wait_and_then_an_error() {
+        let mut child = crate::test_support::idle_child();
+        let record = crate::test_support::record_of(&child);
+        let started = std::time::Instant::now();
+        // a kill that does nothing: the process is still there, however long
+        // it is looked at
+        let result = record.kill_then_wait(Duration::from_millis(300), |_| Ok(()));
+        let waited = started.elapsed();
+        let still_there = child.try_wait().unwrap().is_none();
+        crate::test_support::end(&mut child);
+        assert!(
+            matches!(&result, Err(ProcError::SignalError(_))),
+            "{result:?}"
+        );
+        assert!(waited >= Duration::from_millis(300), "{waited:?}");
+        assert!(still_there);
     }
 
     #[test]

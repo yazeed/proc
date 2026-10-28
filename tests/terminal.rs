@@ -37,6 +37,11 @@ enum Step {
     /// Resize the terminal to this many columns and rows, as dragging the window does
     #[cfg_attr(not(unix), allow(dead_code))]
     Resize(u16, u16),
+    /// Do nothing for this long. For a session that must go through some
+    /// intervals with no key pressed; nothing is asserted about what happened
+    /// in the meantime, so a slow machine only makes the wait longer than needed.
+    #[cfg_attr(unix, allow(dead_code))]
+    Pause(Duration),
 }
 
 /// What a session printed, and how the child ended
@@ -196,6 +201,7 @@ fn run_in_pty(args: &[&str], script: &[Step]) -> PtyRun {
                     .expect("type into the pty");
                 writer.flush().expect("flush the pty");
             }
+            Step::Pause(span) => std::thread::sleep(span),
             Step::Resize(cols, rows) => {
                 pair.master
                     .resize(PtySize {
@@ -913,6 +919,24 @@ fn watch_ignores_other_keys_and_quits_on_q() {
     let run = run_in_pty(
         &["watch", &pid, "--interval", "0.2"],
         &[Step::Expect("Watching"), Step::Send("x"), Step::Send("q")],
+    );
+    assert_ok(&run);
+}
+
+/// With no key pressed the loop waits out each interval and draws again; a few
+/// intervals go by here (on Windows, where a repeated frame is not waited for)
+#[cfg(windows)]
+#[test]
+fn watch_goes_on_when_no_key_is_pressed() {
+    let p = Owned::listener();
+    let pid = p.pid();
+    let run = run_in_pty(
+        &["watch", &pid, "--interval", "0.2"],
+        &[
+            Step::Expect("Watching"),
+            Step::Pause(Duration::from_millis(900)),
+            Step::Send("q"),
+        ],
     );
     assert_ok(&run);
 }

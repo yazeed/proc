@@ -159,18 +159,6 @@ mod tests {
         }
     }
 
-    /// Whether the child has ended; it is ours, so this also reaps it
-    fn ended(child: &mut std::process::Child) -> bool {
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-        while std::time::Instant::now() < deadline {
-            if child.try_wait().unwrap().is_some() {
-                return true;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(20));
-        }
-        false
-    }
-
     #[test]
     fn no_orphans_is_not_an_error() {
         command().run(Vec::new()).unwrap();
@@ -265,10 +253,15 @@ mod tests {
                 json,
                 ..command()
             };
+            // `run` returns Ok only once the kill was seen to have worked, so
+            // waiting for the child returns at once, with a failure status:
+            // it did not exit by itself (a sleep of five minutes)
             kill.run(vec![orphan]).unwrap();
-            let gone = ended(&mut child);
-            end(&mut child);
-            assert!(gone, "--kill --yes left the orphan running (json: {json})");
+            let status = child.wait().unwrap();
+            assert!(
+                !status.success(),
+                "--kill --yes did not end the orphan (json: {json})"
+            );
         }
     }
 }

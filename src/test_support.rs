@@ -77,17 +77,14 @@ pub(crate) fn idle_child() -> std::process::Child {
 
 /// A record of `child`, once its process shows in the process list
 pub(crate) fn record_of(child: &std::process::Child) -> crate::core::Process {
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-    loop {
-        if let Some(record) = crate::core::Process::find_by_pid(child.id()).unwrap() {
-            return record;
-        }
-        assert!(
-            std::time::Instant::now() < deadline,
-            "the child never showed in the process list"
-        );
+    std::iter::repeat_with(|| {
         std::thread::sleep(std::time::Duration::from_millis(20));
-    }
+        crate::core::Process::find_by_pid(child.id()).unwrap()
+    })
+    .take(500)
+    .flatten()
+    .next()
+    .expect("the child never showed in the process list")
 }
 
 /// Kill `child` and wait for it, so a record of it is of a process that is gone

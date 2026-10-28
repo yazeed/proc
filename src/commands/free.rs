@@ -364,11 +364,8 @@ mod tests {
         );
         // It still counts as running, so the SIGKILL is tried after the polite
         // request; on Windows that request being refused is expected
-        if cfg!(unix) {
-            assert_eq!(failed, vec![me.pid, me.pid]);
-        } else {
-            assert_eq!(failed, vec![me.pid]);
-        }
+        let refusals = if cfg!(unix) { 2 } else { 1 };
+        assert_eq!(failed, vec![me.pid; refusals]);
     }
 
     #[test]
@@ -386,7 +383,8 @@ mod tests {
             std::time::Duration::from_secs(30),
             &printer,
             refuse,
-            |_| panic!("a process that is gone is not killed"),
+            // were the kill tried, it would fail too and be listed twice
+            refuse,
         );
         assert_eq!(failed, vec![gone.pid]);
         assert!(start.elapsed() < std::time::Duration::from_secs(10));
