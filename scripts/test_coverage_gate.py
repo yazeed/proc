@@ -85,7 +85,7 @@ class GateTest(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         # mac.info hits lines 1, 2 of 6; win.info only line 3
         self.assertRegex(r.stdout, r"mac\.info\s+2/6\s+33\.3%")
-        self.assertRegex(r.stdout, r"win\.info\s+1/6\s+16\.7%")
+        self.assertRegex(r.stdout, r"win\.info\s+1/6\s+16\.6%")
         self.assertRegex(r.stdout, r"TOTAL\s+3/6\s+50\.0%")
         # a per-platform shortfall is not a failure: only the merged result is
         r = self.run_gate(self.mac, self.win, "--enforce", *REQUIRE_BOTH)
@@ -93,7 +93,14 @@ class GateTest(unittest.TestCase):
         ex = self.write("ex.txt", "src/a.rs:5-7  fixture\n")
         r = self.run_gate(self.mac, self.win, "--exclusions", ex, "--enforce", *REQUIRE_BOTH)
         self.assertEqual(r.returncode, 0, r.stdout)
-        self.assertRegex(r.stdout, r"mac\.info\s+2/3\s+66\.7%")
+        self.assertRegex(r.stdout, r"mac\.info\s+2/3\s+66\.6%")
+
+    def test_one_missed_line_never_reads_as_a_full_hundred(self):
+        # 3999 of 4000 lines is 99.975%: cut to 99.9, not rounded to 100.0
+        rows = "".join(f"DA:{n},{0 if n == 4000 else 1}\n" for n in range(1, 4001))
+        big = self.write("big.info", f"SF:/x/proc/src/a.rs\n{rows}end_of_record\n")
+        r = self.run_gate(big, self.mac)
+        self.assertRegex(r.stdout, r"big\.info\s+3999/4000\s+99\.9%")
 
     def test_single_file_leaves_line_three_uncovered(self):
         r = self.run_gate(self.mac)

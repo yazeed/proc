@@ -42,12 +42,18 @@ enum Step {
     /// in the meantime, so a slow machine only makes the wait longer than needed.
     #[cfg_attr(unix, allow(dead_code))]
     Pause(Duration),
+    /// The child has not exited by now
+    #[cfg_attr(unix, allow(dead_code))]
+    StillRunning,
 }
 
 /// What a session printed, and how the child ended
 #[derive(Debug)]
 struct PtyRun {
     output: String,
+    /// The bytes as the terminal received them, escape sequences and all
+    #[cfg_attr(unix, allow(dead_code))]
+    raw: Vec<u8>,
     exit_code: u32,
 }
 
@@ -202,6 +208,11 @@ fn run_in_pty(args: &[&str], script: &[Step]) -> PtyRun {
                 writer.flush().expect("flush the pty");
             }
             Step::Pause(span) => std::thread::sleep(span),
+            Step::StillRunning => assert!(
+                guard.0.try_wait().expect("poll the child").is_none(),
+                "proc exited early; it printed:\n{:?}",
+                text()
+            ),
             Step::Resize(cols, rows) => {
                 pair.master
                     .resize(PtySize {
@@ -216,7 +227,7 @@ fn run_in_pty(args: &[&str], script: &[Step]) -> PtyRun {
                 #[cfg(windows)]
                 answer(&mut writer);
                 let seen = text();
-                if let Some(at) = seen[cursor..].find(wanted) {
+                if let Some(at) = seen.get(cursor..).and_then(|rest| rest.find(wanted)) {
                     cursor += at + wanted.len();
                     break;
                 }
@@ -244,24 +255,20 @@ fn run_in_pty(args: &[&str], script: &[Step]) -> PtyRun {
             }
         }
     };
-    // Whatever it printed last is still in the pipe: let the reader reach the end
-    let drained = Instant::now() + Duration::from_secs(2);
-    // ConPTY keeps the pipe open until the terminal is closed, so on Windows
-    // the end of the output is a quiet spell, not an end of file
-    let mut length = captured.lock().unwrap().len();
-    let mut quiet_since = Instant::now();
+    // Whatever it printed last is still in the pipe: let the reader reach the end.
+    // ConPTY keeps the pipe open until the terminal is closed, so on Windows the
+    // terminal is closed here (the reader keeps draining while it closes); the
+    // end of file is then the end of the output, not a guess at a quiet spell.
+    #[cfg(windows)]
+    drop(pair.master);
+    let drained = Instant::now() + Duration::from_secs(5);
     while !reading.is_finished() && Instant::now() < drained {
         std::thread::sleep(Duration::from_millis(5));
-        let now = captured.lock().unwrap().len();
-        if now != length {
-            length = now;
-            quiet_since = Instant::now();
-        } else if cfg!(windows) && quiet_since.elapsed() > Duration::from_millis(400) {
-            break;
-        }
     }
+    let raw = captured.lock().unwrap().clone();
     PtyRun {
         output: text(),
+        raw,
         exit_code: status.exit_code(),
     }
 }
@@ -606,7 +613,12 @@ fn answers_y(args: &[&str], prompt: &'static str) -> PtyRun {
 fn answers_n(args: &[&str], prompt: &'static str, declined: &'static str) -> PtyRun {
     let run = run_in_pty(
         args,
-        &[Step::Expect(prompt), Step::Send("n"), Step::Send("\r")],
+        &[
+            Step::Expect(prompt),
+            Step::Send("n"),
+            Step::Send("\r"),
+            Step::Expect(declined),
+        ],
     );
     assert!(run.output.contains(declined), "{}", run.output);
     run
@@ -614,7 +626,14 @@ fn answers_n(args: &[&str], prompt: &'static str, declined: &'static str) -> Pty
 
 /// Ask, press Enter alone: the default is no
 fn answers_enter(args: &[&str], prompt: &'static str, declined: &'static str) -> PtyRun {
-    let run = run_in_pty(args, &[Step::Expect(prompt), Step::Send("\r")]);
+    let run = run_in_pty(
+        args,
+        &[
+            Step::Expect(prompt),
+            Step::Send("\r"),
+            Step::Expect(declined),
+        ],
+    );
     assert!(run.output.contains(declined), "{}", run.output);
     run
 }
@@ -828,6 +847,18 @@ fn watch_quits_on(keys: &'static str) {
         "the screen is left last: {:?}",
         &run.output[run.output.len().saturating_sub(60)..]
     );
+    // ConPTY adds its own sequences after it, so on Windows the screen is left
+    // somewhere, not last; both switches still reach the terminal
+    #[cfg(windows)]
+    {
+        let raw = String::from_utf8_lossy(&run.raw);
+        let entered = raw.find("\x1b[?1049h");
+        let left = raw.rfind("\x1b[?1049l");
+        assert!(
+            matches!((entered, left), (Some(e), Some(l)) if e < l),
+            "the alternate screen is entered, then left: {raw:?}"
+        );
+    }
 }
 
 #[test]
@@ -909,8 +940,10 @@ fn watch_keeps_running_when_another_key_is_pressed() {
     assert_ok(&run);
 }
 
-/// The same on Windows, where a second frame is not waited for: a key that is
-/// not a quit key is read first, then `q` ends the session
+/// The same on Windows, where a second frame is not waited for (ConPTY leaves
+/// what did not change out of a redraw, so there is no text that proves one):
+/// a key that is not a quit key is sent, several intervals go by, and `watch` is
+/// still there; only `q` ends it, and what it drew is the target
 #[cfg(windows)]
 #[test]
 fn watch_ignores_other_keys_and_quits_on_q() {
@@ -918,13 +951,20 @@ fn watch_ignores_other_keys_and_quits_on_q() {
     let pid = p.pid();
     let run = run_in_pty(
         &["watch", &pid, "--interval", "0.2"],
-        &[Step::Expect("Watching"), Step::Send("x"), Step::Send("q")],
+        &[
+            Step::Expect("Watching"),
+            Step::Send("x"),
+            Step::Pause(Duration::from_millis(1000)),
+            Step::StillRunning,
+            Step::Send("q"),
+        ],
     );
     assert_ok(&run);
+    assert!(run.output.contains(&pid), "{}", run.output);
 }
 
-/// With no key pressed the loop waits out each interval and draws again; a few
-/// intervals go by here (on Windows, where a repeated frame is not waited for)
+/// With no key pressed the loop waits out each interval and goes on; a few
+/// intervals go by here, and `watch` is still running at the end of them
 #[cfg(windows)]
 #[test]
 fn watch_goes_on_when_no_key_is_pressed() {
@@ -934,11 +974,13 @@ fn watch_goes_on_when_no_key_is_pressed() {
         &["watch", &pid, "--interval", "0.2"],
         &[
             Step::Expect("Watching"),
-            Step::Pause(Duration::from_millis(900)),
+            Step::Pause(Duration::from_millis(1000)),
+            Step::StillRunning,
             Step::Send("q"),
         ],
     );
     assert_ok(&run);
+    assert!(run.output.contains("Refresh: 0.2s"), "{}", run.output);
 }
 
 #[cfg(unix)]
@@ -1005,14 +1047,33 @@ fn watch_verbose_lists_the_details() {
         ],
     );
     assert_ok(&run);
-    // Windows may report the directory in its 8.3 short form
     #[cfg(unix)]
     assert!(
         run.output.contains(&format!("cwd: {dir}")),
         "{}",
         run.output
     );
+    // Windows may report the directory in its 8.3 short form, in any case: the
+    // path shown and the one the test made must be the same directory
     #[cfg(windows)]
-    let _ = dir;
+    {
+        let same_dir = |shown: &str| {
+            let resolve = |path: &str| {
+                std::fs::canonicalize(path)
+                    .map(|p| strip_verbatim_prefix(&p.to_string_lossy()).to_lowercase())
+            };
+            matches!((resolve(shown), resolve(&dir)), (Ok(a), Ok(b)) if a == b)
+        };
+        let shown: Vec<&str> = run
+            .output
+            .split("cwd: ")
+            .skip(1)
+            .map(|rest| rest.lines().next().unwrap_or("").trim())
+            .collect();
+        assert!(
+            shown.iter().any(|path| same_dir(path)),
+            "no cwd line names {dir}: {shown:?}"
+        );
+    }
     assert!(run.output.contains("cmd: "), "{}", run.output);
 }

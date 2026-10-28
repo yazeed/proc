@@ -13,9 +13,11 @@ Line hits are merged across all lcov files (covered if hit in any). Lines in
 the exclusions file (`src/path.rs:START-END  reason`, reason required, `#` comments) are dropped;
 an exclusion that hides no uncovered line is reported as stale (a failure under
 --enforce).
-Prints per-file covered/total and every uncovered `src/path.rs:LINE`, then each
-input lcov's own TOTAL line, labelled by its file name (for information only:
-the merged result is the only rule); with --enforce, exits 1 if any line is uncovered or a stale exclusion remains.
+Prints per-file covered/total and every uncovered `src/path.rs:LINE`. Right after
+the merged TOTAL, when several lcov files are given, it prints each input lcov's
+own total, labelled by its file name (for information only: the merged result is
+the only rule; the percentage is cut, not rounded, so one missed line never
+reads as 100.0%). With --enforce, exits 1 if any line is uncovered or a stale exclusion remains.
 --enforce without any --require is an error. Also under --enforce: each --require NAME must match (as a substring of the
 file name) exactly one lcov file and every lcov file must match one, so a
 failed OS job cannot slip through as a partial merge; and a src file with no
@@ -25,6 +27,7 @@ compiled does).
 """
 
 import argparse
+import math
 import re
 import sys
 from pathlib import Path
@@ -182,7 +185,10 @@ def main():
                 kept = [c for n, c in lines.items() if n not in excluded.get(rel, ())]
                 own_total += len(kept)
                 own_covered += sum(1 for c in kept if c > 0)
-            own_pct = 100.0 * own_covered / own_total if own_total else 100.0
+            # cut to one decimal, never rounded up: 8347/8348 must not read 100.0%
+            own_pct = (
+                math.floor(1000.0 * own_covered / own_total) / 10 if own_total else 100.0
+            )
             label = Path(path).name
             print(f"{label:<32} {f'{own_covered}/{own_total}':>14}  {own_pct:5.1f}%")
     if hidden:

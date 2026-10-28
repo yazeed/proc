@@ -197,7 +197,7 @@ CI fails a change that lowers line coverage or leaves a flag without a test. The
 - All three lcov files are present. If one OS's coverage job fails, the gate fails instead of judging a partial merge
 - No file in `src/` that contains code has no coverage data, which would mean it was never compiled or linked
 
-The gate's report ends with each OS's own total, labelled by its lcov file (`lcov-windows-latest.info  7329/7578  96.7%`). Those totals are for information only and decide nothing: the merged 100% is the only rule. A low one shows that an OS runs far fewer lines than the others, which is worth a test on that OS, not an exclusion.
+When the gate is given several lcov files (as in CI), it prints each file's own total right after the merged `TOTAL` line, labelled by file name (`lcov-windows-latest.info`, `lcov-macos-latest.info`, ...). With one file it prints no extra lines. Those totals are for information only and decide nothing: the merged 100% is the only rule. The percentage is cut to one decimal, not rounded, so an OS that misses a single line never reads as 100.0%. A low total shows that an OS runs far fewer lines than the others, which is worth a test on that OS, not an exclusion.
 
 To measure locally:
 
