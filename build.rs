@@ -67,7 +67,13 @@ fn main() {
     println!("cargo:rerun-if-changed=src");
     println!("cargo:rerun-if-changed=Cargo.toml");
     println!("cargo:rerun-if-changed=build.rs");
-    let facts = gather(&dir);
+    println!("cargo:rerun-if-env-changed=GITHUB_REF_TYPE");
+    println!("cargo:rerun-if-env-changed=GITHUB_REF_NAME");
+    // A GitHub Actions build of this version's release tag is a release, whatever
+    // its shallow checkout lets `git describe` see
+    let release_tag = std::env::var("GITHUB_REF_TYPE").as_deref() == Ok("tag")
+        && std::env::var("GITHUB_REF_NAME").ok() == Some(format!("v{package}"));
+    let facts = if release_tag { None } else { gather(&dir) };
     println!(
         "cargo:rustc-env=PROC_VERSION={}",
         version::format_version(&package, facts.as_ref())
