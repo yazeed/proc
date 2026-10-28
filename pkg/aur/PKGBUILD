@@ -10,9 +10,7 @@ license=('MIT')
 depends=('gcc-libs')
 makedepends=('rust' 'cargo')
 source=("$pkgname-$pkgver.tar.gz::https://github.com/yazeed/proc-cli/archive/v$pkgver.tar.gz")
-# Replace with the sha256 of the v$pkgver release tarball once the tag exists
-# (see RELEASE.md); makepkg fails on a mismatch until then.
-sha256sums=('a912bf9b2f8d4efbb217c619609fd155220dbbd7ffa898f7f897f07ead79e97c')
+sha256sums=('a88b28e19be812447a3c850e27e5e502a10a0ae0492d04ea8a68ab94bd8020f5')
 
 build() {
   cd "$_repo-$pkgver"
