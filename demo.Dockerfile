@@ -11,6 +11,7 @@ FROM rust:1-bookworm AS builder
 ENV CARGO_BUILD_JOBS=4
 WORKDIR /build
 COPY Cargo.toml Cargo.lock ./
+COPY build.rs ./
 COPY src/ src/
 RUN cargo build --release
 

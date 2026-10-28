@@ -17,7 +17,7 @@ When creating a bug report, please include:
 1. **Environment details**:
    - Operating system and version
    - Rust version (`rustc --version`)
-   - proc version (`proc --version`)
+   - proc version (`proc --version`). A build from `main` prints `-dev (branch@commit, N commits after vX.Y.Z)` after the number, so include the whole line
 
 2. **Steps to reproduce**:
    - What commands did you run?

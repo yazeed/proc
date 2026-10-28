@@ -93,11 +93,13 @@ pub mod commands;
 pub mod core;
 pub mod error;
 pub mod ui;
+pub mod version;
 
 #[cfg(test)]
 mod test_support;
 
 pub use error::{ProcError, Result};
 
-/// Library version
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+/// Library version: the Cargo version for a release, and for any other build
+/// from git the version with the commit named (see [`version`])
+pub const VERSION: &str = env!("PROC_VERSION");

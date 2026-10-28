@@ -17,7 +17,9 @@ RUN mkdir src && echo "fn main() {}" > src/main.rs
 # Build dependencies only (for caching)
 RUN cargo build --release && rm -rf src
 
-# Copy actual source code
+# Copy actual source code (build.rs sets the version; the context has no .git,
+# so the image reports the plain Cargo version)
+COPY build.rs ./
 COPY src ./src
 
 # Build the actual binary

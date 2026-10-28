@@ -40,7 +40,7 @@ body:
     id: version
     attributes:
       label: proc version
-      description: Output of `proc --version`
+      description: The first line of `proc --version`, in full. A build from source or `main` shows the commit, for example `proc 2.0.0-dev (main@5e94647, 3 commits after v2.0.0)`
       placeholder: proc 2.0.0
     validations:
       required: true

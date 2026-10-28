@@ -1069,10 +1069,16 @@ fn help_and_version_print_and_exit_cleanly() {
 
     let (out, _, code) = run_text(&["--version"]);
     assert_eq!(code, 0);
+    // A build from the release tag prints the plain version; any other build
+    // adds `-dev (branch@commit, ...)` after it.
+    let line = out.lines().next().unwrap_or("");
+    let version = line.strip_prefix("proc ").unwrap_or(line);
     assert!(
-        out.starts_with(&format!("proc {}\n", env!("CARGO_PKG_VERSION"))),
+        version == env!("CARGO_PKG_VERSION")
+            || version.starts_with(&format!("{}-dev (", env!("CARGO_PKG_VERSION"))),
         "{out}"
     );
+    assert_eq!(version, proc_cli::VERSION);
 }
 
 #[test]

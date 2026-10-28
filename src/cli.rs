@@ -12,7 +12,7 @@ use clap::{Parser, Subcommand};
 use clap_complete::Shell;
 
 const VERSION_INFO: &str = concat!(
-    env!("CARGO_PKG_VERSION"),
+    env!("PROC_VERSION"),
     "\nhttps://github.com/yazeed/proc-cli",
     "\nLicense: MIT"
 );
