@@ -78,6 +78,16 @@ fn cpu_percent_between(used_before_ms: u64, used_after_ms: u64, wall: Duration) 
     (used_after_ms.saturating_sub(used_before_ms) as f64 / wall_ms * 100.0) as f32
 }
 
+/// The error for finding orphans on Windows (shared by the library call and the command)
+#[cfg(not(unix))]
+pub(crate) fn orphans_not_supported() -> ProcError {
+    ProcError::NotSupported(
+        "orphans is not supported on Windows: Windows doesn't re-parent processes, \
+         so there is no reliable way to tell an orphan"
+            .to_string(),
+    )
+}
+
 /// Why a command such as `taskkill` failed, in its own words: what it wrote to
 /// stderr, else to stdout, else its exit status
 /// (compiled on Unix for the tests only)
@@ -847,11 +857,23 @@ impl Process {
     // (freeze, thaw) have their own #[cfg(not(unix))] stubs that return NotSupported.
 
     /// Find orphaned processes (parent is PID 1 / init / launchd, excluding system daemons)
+    ///
+    /// Unix only: on Windows this returns `ProcError::NotSupported`, because
+    /// Windows has no PID 1 and does not re-parent a process whose parent exited,
+    /// so an empty list would claim "no orphans" where nothing could be checked.
+    #[cfg(unix)]
     pub fn find_orphans() -> Result<Vec<Process>> {
         Ok(Self::orphans_among(Self::find_all()?))
     }
 
+    /// Windows: orphans cannot be told, so this is an error, not an empty list
+    #[cfg(not(unix))]
+    pub fn find_orphans() -> Result<Vec<Process>> {
+        Err(orphans_not_supported())
+    }
+
     /// The orphans among `all`
+    #[cfg(unix)]
     fn orphans_among(all: Vec<Process>) -> Vec<Process> {
         all.into_iter()
             .filter(|p| {
@@ -869,6 +891,7 @@ impl Process {
     /// Filters out processes that legitimately have PPID 1 — system daemons,
     /// kernel threads, and services managed by init/systemd/launchd.
     /// Heuristic: no cwd or cwd is "/" with exe in system paths.
+    #[cfg(unix)]
     fn is_system_process(p: &Process) -> bool {
         if p.cwd.is_none() || p.cwd.as_deref() == Some("/") {
             if let Some(ref exe) = p.exe_path {
@@ -1372,6 +1395,7 @@ mod tests {
         assert_eq!(found.iter().map(|p| p.pid).collect::<Vec<_>>(), vec![pid]);
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_find_orphans_returns_ok() {
         // Should not error — may or may not find orphans depending on system state
@@ -1379,6 +1403,17 @@ mod tests {
         assert!(result.is_ok());
     }
 
+    #[cfg(not(unix))]
+    #[test]
+    fn find_orphans_is_not_supported_on_windows() {
+        let result = Process::find_orphans();
+        assert!(
+            matches!(&result, Err(ProcError::NotSupported(m)) if m.starts_with("orphans is not supported on Windows")),
+            "{result:?}"
+        );
+    }
+
+    #[cfg(unix)]
     #[test]
     fn test_is_system_process_system_paths() {
         let make_proc = |exe: Option<&str>, cwd: Option<&str>| Process {
@@ -1611,6 +1646,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn orphans_are_the_children_of_init_that_are_not_system_daemons() {
         let proc = |pid: u32, ppid: Option<u32>, exe: Option<&str>, cwd: Option<&str>| Process {

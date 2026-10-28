@@ -7,10 +7,9 @@
 //!   proc orphans --kill       # Find and kill orphans
 //!   proc orphans --kill --yes # Kill orphans without confirmation
 
+use crate::core::Process;
 #[cfg(unix)]
-use crate::core::{apply_filters, apply_to_each, NameMatch, Process};
-#[cfg(not(unix))]
-use crate::error::ProcError;
+use crate::core::{apply_filters, apply_to_each, NameMatch};
 use crate::error::Result;
 #[cfg(unix)]
 use crate::ui::{must_confirm, plural, Printer};
@@ -19,7 +18,6 @@ use clap::Args;
 use dialoguer::Confirm;
 
 /// Find orphaned processes (re-parented to PID 1: init/launchd; includes processes launchd started itself). Not available on Windows
-
 #[derive(Args, Debug)]
 pub struct OrphansCommand {
     /// Kill found orphaned processes
@@ -143,10 +141,6 @@ impl OrphansCommand {
     /// so there is no reliable orphan to find (or to kill)
     #[cfg(not(unix))]
     pub fn execute(&self) -> Result<()> {
-        Err(ProcError::NotSupported(
-            "orphans is not supported on Windows: Windows doesn't re-parent processes, \
-             so there is no reliable way to tell an orphan"
-                .to_string(),
-        ))
+        Process::find_orphans().map(|_| ())
     }
 }
