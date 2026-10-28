@@ -11,7 +11,7 @@
   "plugins": [
     {
       "name": "proc-cli",
-      "description": "Process and port management skill — find, kill, stop, freeze, thaw, free, wait, and trace processes by port, PID, or name",
+      "description": "Safe process and port management for agents: find, inspect, stop and free processes by port, PID or name. Previews with a dry run and asks before touching anything it did not start. Not for containers or system services",
       "source": "./",
       "strict": false,
       "skills": [
