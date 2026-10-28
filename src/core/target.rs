@@ -134,6 +134,64 @@ pub fn flatten_targets(values: &[String]) -> Vec<String> {
     values.iter().flat_map(|v| parse_targets(v)).collect()
 }
 
+/// The commands whose positional arguments are targets that [`flatten_targets`]
+/// splits on commas, with the clap id of that argument. `by`, `tree`, `in` and
+/// `for` take one value that commas never split, so they are not here.
+const COMMA_SPLIT_ARGS: &[(&str, &str)] = &[
+    ("on", "target"),
+    ("info", "targets"),
+    ("list", "name"),
+    ("kill", "target"),
+    ("stop", "target"),
+    ("watch", "target"),
+    ("unstick", "target"),
+    ("freeze", "target"),
+    ("thaw", "target"),
+    ("why", "target"),
+    ("free", "target"),
+    ("wait", "target"),
+];
+
+/// A word as a shell would need it typed: quoted when it holds anything but
+/// plain characters, so the notice's example can be pasted as it stands.
+fn shell_word(word: &str) -> String {
+    let plain = |c: char| c.is_ascii_alphanumeric() || ":._-/@%+=".contains(c);
+    if !word.is_empty() && word.chars().all(plain) {
+        word.to_string()
+    } else {
+        format!("'{}'", word.replace('\'', "'\\''"))
+    }
+}
+
+/// The deprecation notice for comma-separated targets, if the command line
+/// used any, or `None`.
+///
+/// Only the target arguments count (see `COMMA_SPLIT_ARGS`): a comma in a
+/// `--by` or `--in` value, or in the one value of `by`, `in` or `for`, is just
+/// text. Nothing is returned under `--json`, whose output must not change.
+/// The notice is one string however many commas there are, and its example is
+/// the user's own targets, split and joined by spaces.
+pub fn comma_notice(matches: &clap::ArgMatches) -> Option<String> {
+    let (command, sub) = matches.subcommand()?;
+    let (_, id) = COMMA_SPLIT_ARGS.iter().find(|(name, _)| *name == command)?;
+    if sub.get_flag("json") {
+        return None;
+    }
+    let typed: Vec<String> = sub.get_many::<String>(id)?.cloned().collect();
+    if !typed.iter().any(|value| value.contains(',')) {
+        return None;
+    }
+    let targets: Vec<String> = flatten_targets(&typed)
+        .iter()
+        .map(|target| shell_word(target))
+        .collect();
+    Some(format!(
+        "comma-separated targets are deprecated and will be removed in a future major \
+         release; pass them as separate arguments: proc {command} {}",
+        targets.join(" ")
+    ))
+}
+
 /// What resolving several targets came to
 #[derive(Debug, Default)]
 pub struct Resolved {
@@ -248,6 +306,35 @@ mod tests {
         // a repeated target stays repeated: the PID dedupe happens when resolving
         assert_eq!(typed(&["1", "1,1"]), vec!["1", "1", "1"]);
         assert!(typed(&[]).is_empty());
+    }
+
+    #[test]
+    fn the_commands_that_split_on_commas_are_the_ones_with_a_target_list() {
+        use clap::CommandFactory;
+        let cli = crate::cli::Cli::command();
+        for sub in cli.get_subcommands() {
+            let name = sub.get_name();
+            let listed = COMMA_SPLIT_ARGS.iter().find(|(n, _)| *n == name);
+            // a list of targets: a positional that takes any number of values
+            let lists: Vec<&str> = sub
+                .get_positionals()
+                .filter(|a| a.get_num_args().is_some_and(|n| n.max_values() > 1))
+                .map(|a| a.get_id().as_str())
+                .collect();
+            match listed {
+                Some((_, id)) => assert_eq!(lists, vec![*id], "{name}"),
+                None => assert!(lists.is_empty(), "{name} takes a list but isn't listed"),
+            }
+        }
+    }
+
+    #[test]
+    fn shell_words_are_quoted_only_when_they_need_to_be() {
+        assert_eq!(shell_word(":3000"), ":3000");
+        assert_eq!(shell_word("node"), "node");
+        assert_eq!(shell_word("my app"), "'my app'");
+        assert_eq!(shell_word("it's"), r"'it'\''s'");
+        assert_eq!(shell_word(""), "''");
     }
 
     #[test]

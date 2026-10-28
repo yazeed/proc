@@ -164,6 +164,19 @@ fn harness_runs_a_script() {
     assert!(run.output.contains("proc"), "{}", run.output);
 }
 
+#[test]
+fn the_comma_notice_is_coloured_on_a_terminal() {
+    // PIDs above every OS maximum: a dry run that finds nothing, exit 2
+    let run = run_in_pty(&["kill", "99999999,99999998", "--dry-run"], &[]);
+    assert_eq!(run.exit_code, 2, "{}", run.output);
+    assert!(
+        run.output
+            .contains("\x1b[1;36mnote:\x1b[0m comma-separated targets are deprecated"),
+        "{:?}",
+        run.output
+    );
+}
+
 // ---- fixtures ----
 
 /// Held for as long as a busy process runs, so no more than one spins at a time

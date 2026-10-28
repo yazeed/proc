@@ -616,7 +616,9 @@ fn why_warns_about_a_target_that_is_gone_and_still_answers_for_the_rest() {
     let targets = format!("{MISSING_PID},{}", owned.pid());
     let (out, stderr, code) = run_text(&["why", &targets]);
     assert_eq!(code, 0, "{stderr}");
-    assert_eq!(stderr, "");
+    // the comma list is the one thing stderr says
+    assert_eq!(stderr.lines().count(), 1, "{stderr}");
+    assert!(stderr.starts_with("note: comma-separated targets are deprecated"));
     assert!(
         out.contains(&format!("⚠ No process found matching '{MISSING_PID}'")),
         "{out}"
@@ -827,7 +829,9 @@ fn info_warns_about_the_targets_it_did_not_find_and_still_shows_the_rest() {
     let targets = format!("{},{MISSING_PID},:{gone}", owned.pid());
     let (out, stderr, code) = run_text(&["info", &targets]);
     assert_eq!(code, 0, "{stderr}");
-    assert_eq!(stderr, "");
+    // the comma list is the one thing stderr says
+    assert_eq!(stderr.lines().count(), 1, "{stderr}");
+    assert!(stderr.starts_with("note: comma-separated targets are deprecated"));
     assert_eq!(out.matches("✓ Process").count(), 1, "{out}");
     assert!(
         out.trim_end()

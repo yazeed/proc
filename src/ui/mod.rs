@@ -9,4 +9,4 @@ pub use format::{
     colorize_status, format_duration, format_memory, plural, process_table_budget, truncate_path,
     truncate_string, uptime_label, ProcessTableBudget,
 };
-pub use output::{must_confirm, OutputFormat, Printer};
+pub use output::{must_confirm, print_note, OutputFormat, Printer};

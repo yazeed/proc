@@ -163,7 +163,7 @@ The core commands are complete, with process lifecycle control, diagnostics, rea
 
 ### v1.3.x Highlights
 
-_Commas are deprecated in 2.0; use separate arguments (`proc kill :3000 :8080 node`)._
+_Commas are deprecated in 2.0 and print a note on stderr (human output only); use separate arguments (`proc kill :3000 :8080 node`)._
 
 - **Proc Query Language**: Composable process discovery
   - `proc by node --in .` — Filter by name with directory

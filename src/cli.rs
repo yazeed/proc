@@ -103,7 +103,7 @@ or the full command line instead (like pkill -f). A path is not a name: use
 an unquoted node* is expanded by your shell into file names; use --cmd for
 partial matches.
 Comma-separated targets (:3000,:8080) still work but are deprecated and will be
-removed in a future major release.
+removed in a future major release; they print a note on stderr (not with --json).
 --in takes the next word as its directory unless that word starts with '-':
 put it after the targets, or write --in=DIR.
 For more information, visit: https://github.com/yazeed/proc-cli")]

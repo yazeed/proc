@@ -47,7 +47,7 @@ Never do these: `--yes` with a name; `orphans --kill` or `stuck --kill`; `kill` 
 | `node` | processes whose whole name is `node` (case-insensitive), or whose executable or argv[0] file name is | Search only, with `--dry-run` and `--in=<dir>`. |
 | `node --cmd` | a substring of the name or full command line, like `pkill -f` | Only after the exact-name search found nothing or too little. Preview it read-only (`proc by <name> --cmd --json`, or `--dry-run` on the action). Never with `--yes`. Matches far more. |
 
-Give several targets as separate arguments: `proc stop <pid> <pid> :<port> --dry-run --json`. Commas still work but are deprecated. A path is not a name: `proc kill ./server` finds nothing.
+Give several targets as separate arguments: `proc stop <pid> <pid> :<port> --dry-run --json`. Commas (`:3000,:8080`) still work but are deprecated, and print a `note:` on stderr in human mode only, so `--json` is unaffected. A path is not a name: `proc kill ./server` finds nothing.
 
 `--in` filters by working directory. It takes the next word as its value unless that starts with `-`, so put it after the targets or write `--in=<dir>`. It narrows a search; it does not prove ownership. Use a directory only you use, such as a temp dir or worktree you created.
 

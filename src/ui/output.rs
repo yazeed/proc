@@ -68,6 +68,34 @@ pub fn must_confirm(
     Ok(true)
 }
 
+/// Whether a note on stderr is coloured: only on a terminal, and never when
+/// `NO_COLOR` is set to something (https://no-color.org).
+fn note_in_colour(stderr_is_terminal: bool, no_color: Option<std::ffi::OsString>) -> bool {
+    stderr_is_terminal && no_color.is_none_or(|value| value.is_empty())
+}
+
+fn write_note(out: &mut impl Write, message: &str, colour: bool) -> std::io::Result<()> {
+    if colour {
+        writeln!(out, "\x1b[1;36mnote:\x1b[0m {message}")
+    } else {
+        writeln!(out, "note: {message}")
+    }
+}
+
+/// Print a `note:` line on stderr, for something the user should change that
+/// does not stop the command. It is for human output only: stdout and `--json`
+/// stay as they are. Coloured only when stderr is a terminal and `NO_COLOR` is
+/// not set.
+pub fn print_note(message: &str) {
+    use std::io::IsTerminal;
+    let colour = note_in_colour(
+        std::io::stderr().is_terminal(),
+        std::env::var_os("NO_COLOR"),
+    );
+    // A closed stderr has nobody to tell, and the command goes on
+    let _ = write_note(&mut std::io::stderr(), message, colour);
+}
+
 /// Output format selection
 #[derive(Debug, Clone, Copy, Default)]
 pub enum OutputFormat {
@@ -779,6 +807,23 @@ impl Default for Printer {
 mod tests {
     use super::*;
     use crate::test_support::assert_stops_at_a_failed_write;
+
+    #[test]
+    fn a_note_is_plain_unless_stderr_is_a_terminal_and_no_color_is_unset() {
+        let note = |colour| {
+            let mut out = Vec::new();
+            write_note(&mut out, "pass them apart", colour).unwrap();
+            String::from_utf8(out).unwrap()
+        };
+        assert_eq!(note(false), "note: pass them apart\n");
+        assert_eq!(note(true), "\x1b[1;36mnote:\x1b[0m pass them apart\n");
+
+        let set = |v: &str| Some(std::ffi::OsString::from(v));
+        assert!(note_in_colour(true, None));
+        assert!(note_in_colour(true, set("")));
+        assert!(!note_in_colour(true, set("1")));
+        assert!(!note_in_colour(false, None));
+    }
 
     #[test]
     fn json_never_stands_in_for_yes() {

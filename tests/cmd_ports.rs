@@ -543,7 +543,9 @@ fn on_several_targets_all_missing_exits_not_found() {
     assert!(out.contains("No process listening on port"), "{out}");
     assert!(out.contains("PID 4294967:"), "{out}");
     assert!(out.contains(&format!("'{nobody}':")), "{out}");
-    assert!(err.is_empty(), "{err}");
+    // the comma list is the one thing stderr says
+    assert_eq!(err.lines().count(), 1, "{err}");
+    assert!(err.starts_with("note: comma-separated targets are deprecated"));
 }
 
 #[test]

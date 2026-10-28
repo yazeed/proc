@@ -6,8 +6,9 @@ use clap::{CommandFactory, Parser};
 use clap_complete::generate;
 use colored::Colorize;
 use proc_cli::cli::{Cli, Commands};
-use proc_cli::core::Process;
+use proc_cli::core::{comma_notice, Process};
 use proc_cli::error::{ExitCode, ProcError};
+use proc_cli::ui::print_note;
 use std::io;
 use std::process;
 
@@ -182,6 +183,19 @@ fn main() -> process::ExitCode {
             return process::ExitCode::from(exit_code as u8);
         }
     };
+
+    // Commas in targets still work but are deprecated: say so once, on stderr, in
+    // human output only. Every command that splits targets on commas is covered
+    // here, in one place, because the matches know which arguments are targets
+    // and whether `--json` was given. The command line parsed above, so parsing
+    // it again for its matches cannot fail.
+    if let Some(notice) = Cli::command()
+        .try_get_matches()
+        .ok()
+        .and_then(|matches| comma_notice(&matches))
+    {
+        print_note(&notice);
+    }
 
     let Some(command) = cli.command else {
         print_orientation();

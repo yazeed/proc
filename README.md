@@ -152,7 +152,7 @@ All commands accept the same target syntax:
 | Name | `node` | Processes named "node" (the whole name, ignoring case) |
 | Multi | `:3000 :8080 node` | Separate arguments |
 
-Give several targets as separate arguments, and mix the three kinds freely: `proc kill 1234 :3000 node`. A process named twice is handled once, except by the read-only `on` and `why`, which answer each target under its own header. Comma-separated targets (`:3000,:8080,node`) still work but are deprecated, and will be removed in a future major release.
+Give several targets as separate arguments, and mix the three kinds freely: `proc kill 1234 :3000 node`. A process named twice is handled once, except by the read-only `on` and `why`, which answer each target under its own header. Comma-separated targets (`:3000,:8080,node`) still work but are deprecated, and will be removed in a future major release: a command that gets one prints a `note:` on stderr with the separate-argument form (human output only; `--json` is unchanged).
 
 A name matches the whole process name, ignoring case, the way `killall` and `pkill` read it. `proc kill node` stops the processes named `node` and leaves `Claude Helper` alone, and `--by` follows the same rule. The file name of the executable and of the first argument count as names too, so a long name that Linux cuts to 15 characters still matches, and on Windows a trailing `.exe` is optional. Add `--cmd` to match any part of the name or the full command line instead, like `pkill -f`: `proc kill serve --cmd`. A path is not a name: `proc kill ./server` finds nothing, so use `--cmd`, or `proc for <file>` for an executable. proc doesn't expand wildcards; an unquoted `node*` is expanded by your shell into file names; use `--cmd` for partial matches.
 
