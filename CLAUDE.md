@@ -28,7 +28,9 @@ proc is a semantic CLI tool for process management written in Rust. It provides 
 
 ```
 src/
-├── main.rs           # CLI entry point, clap setup, command routing
+├── main.rs           # CLI entry point, routing, JSON errors, exit codes
+├── cli.rs            # clap definitions (Cli, Commands)
+├── test_support.rs   # Helpers shared by tests
 ├── lib.rs            # Library exports
 ├── error.rs          # Error types and exit codes
 ├── commands/         # One file per command
@@ -38,6 +40,7 @@ src/
 │   ├── on.rs         # proc on (bidirectional port/process lookup)
 │   ├── by.rs         # proc by (filter by name)
 │   ├── find_in.rs    # proc in (filter by directory, named find_in to avoid Rust keyword)
+│   ├── for_file.rs   # proc for (what has a file open)
 │   ├── list.rs       # proc list
 │   ├── info.rs       # proc info
 │   ├── ports.rs      # proc ports
@@ -49,9 +52,11 @@ src/
 │   ├── orphans.rs    # proc orphans
 │   ├── why.rs        # proc why (ancestry tracing)
 │   ├── free.rs       # proc free (kill + verify port freed)
-│   └── wait.rs       # proc wait (block until exit)
+│   ├── wait.rs       # proc wait (block until exit)
+│   └── watch.rs      # proc watch (real-time monitoring)
 ├── core/             # Shared logic
 │   ├── mod.rs        # Exports
+│   ├── apply.rs      # apply_to_each (run an action on each process)
 │   ├── filters.rs    # Shared filter utilities (resolve_in_dir)
 │   ├── name_match.rs # How a name target and --by match a process (exact by default, --cmd for substring)
 │   ├── target.rs     # Target parsing (:port, PID, name) and resolution
@@ -77,16 +82,17 @@ Each command follows this structure:
 //!   proc cmd :3000           # Port example
 //!   proc cmd --flag          # Flag example
 
-use crate::core::{...};
+use crate::core::{flatten_targets, resolve_targets_excluding_self, NameMatch, ...};
 use crate::error::{ProcError, Result};
-use crate::ui::{OutputFormat, Printer};
+use crate::ui::Printer;
 use clap::Args;
 
 /// Brief doc for --help
 #[derive(Args, Debug)]
 pub struct CmdCommand {
-    /// Target description
-    pub target: String,
+    /// Target(s): process name, PID, or :port (separate arguments for several)
+    #[arg(required = true, num_args = 1.., value_parser = crate::core::validate_target_arg)]
+    pub target: Vec<String>,
 
     /// Skip confirmation prompt
     #[arg(long, short = 'y')]
@@ -99,25 +105,31 @@ pub struct CmdCommand {
     /// Show verbose output
     #[arg(long, short = 'v')]
     pub verbose: bool,
+
+    /// Match names as a part of the name or command line
+    #[arg(long)]
+    pub cmd: bool,
 }
 
 impl CmdCommand {
     pub fn execute(&self) -> Result<()> {
         // 1. Setup printer
-        let format = if self.json { OutputFormat::Json } else { OutputFormat::Human };
-        let printer = Printer::new(format, self.verbose);
+        let printer = Printer::from_flags(self.json, self.verbose);
 
-        // 2. Parse and resolve targets
-        let targets = parse_targets(&self.target);
-        let (processes, not_found) = resolve_targets(&targets);
+        // 2. Flatten and resolve targets (see src/commands/kill.rs for the full version)
+        let targets = flatten_targets(&self.target);
+        let mode = NameMatch::from_flag(self.cmd);
+        let resolved = resolve_targets_excluding_self(&targets, mode);
 
-        // 3. Warn about not-found targets
-        for target in &not_found {
-            printer.warning(&format!("Target not found: {}", target));
+        // 3. Warn about not-found targets, and put them in the JSON results
+        if let Some(warning) = resolved.warning() {
+            printer.warning(&warning);
         }
+        let printer = printer.with_not_found(&resolved.not_found);
+        let processes = resolved.processes;
 
         // 4. Handle dry-run if applicable
-        // 5. Confirm destructive actions (unless --yes)
+        // 5. Confirm destructive actions: `if !printer.ask_confirm("cmd", &processes, self.yes)? { return Ok(()); }`
         // 6. Execute operation
         // 7. Print results
 
@@ -129,8 +141,8 @@ impl CmdCommand {
 ### Conventions
 
 - **Unified targets**: `:port`, `PID`, `name` work everywhere
-- **Multi-target**: Comma-separated, deduplicated by PID
-- **Confirmation**: Destructive commands require `--yes` or interactive confirmation
+- **Multi-target**: Separate arguments (`:3000 :8080 node`); comma lists still work but are deprecated. Deduplicated by PID
+- **Confirmation**: Destructive commands need `--yes` or an interactive yes. `--json` and a missing terminal are not consent: they exit 4 (`needs_confirmation`). `--dry-run` previews without `--yes`
 - **Dry-run**: Destructive commands support `--dry-run`
 - **JSON output**: All commands support `--json` for scripting
 - **Short flags**: `-y` (yes), `-j` (json), `-v` (verbose)
@@ -143,7 +155,12 @@ Use the shared modules instead of writing local helpers:
 - **`crate::ui::format_duration`** — formats seconds as human-readable duration
 - **`crate::ui::truncate_string`** / **`truncate_path`** — truncates with `…`
 - **`crate::ui::colorize_status`** — colors process status strings
-- **`printer.print_confirmation(action, &processes)`** — unified `⚠` confirmation prompt
+- **`printer.ask_confirm(action, &processes, yes)`** — the confirmation prompt; errors with `ConfirmationRequired` where nobody can answer (`--json`, no terminal). It builds on `crate::ui::must_confirm`
+- **`printer.print_confirmation(action, &processes)`** — only the display half (the `⚠` list), called by `ask_confirm`
+- **`printer.with_not_found(&resolved.not_found)`** — makes the printer put `not_found` in the JSON it writes
+- **`crate::core::flatten_targets`** — splits target arguments (and deprecated comma lists) into one list
+- **`crate::core::NameMatch`** — exact name by default, `--cmd` for a part of the name or command line
+- **`crate::core::apply_to_each`** — runs an action on each process and returns `(succeeded, failed)`
 - **`printer.print_action_result(action, &succeeded, &failed)`** — unified result summary for destructive commands
 
 ### Error Handling
@@ -172,8 +189,8 @@ Work is committed and pushed to `main` without a tag, and every change goes unde
 
 1. Pre-release checks: `cargo fmt --check`, `cargo clippy`, `cargo test`, `cargo build --release`, `cargo update`, `cargo audit`, `cargo check --target x86_64-pc-windows-msvc`
 2. Manual testing with the release binary (`./target/release/proc --version`, `--help`, new features)
-3. Version bump in ALL files: `Cargo.toml`, `pkg/npm/package.json`, `flake.nix`, `.claude-plugin/marketplace.json`
-4. Documentation: `CHANGELOG.md`, `README.md`, `ROADMAP.md`, `src/lib.rs` — verify all reflect new changes
+3. Version bump in ALL files: `Cargo.toml`, `pkg/npm/package.json`, `flake.nix`, `.claude-plugin/marketplace.json`, `docs/_data/release.yml`
+4. Documentation: `CHANGELOG.md`, `docs/changelog.md`, `README.md`, `ROADMAP.md`, `src/lib.rs`, `skills/proc-cli/*.md`, `docs/commands/` — verify all reflect new changes
 5. Commit, tag, push (tag push triggers CI for all package managers)
 6. Verify CI completes successfully
 

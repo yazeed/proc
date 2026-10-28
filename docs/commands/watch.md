@@ -25,7 +25,7 @@ The table has the same columns as `proc list`, including uptime on terminals at 
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--interval <secs>` | `-n` | Refresh interval (default: 2) |
+| `--interval <secs>` | `-n` | Refresh interval, at least 0.1 (default: 2) |
 | `--sort <key>` | `-s` | Sort by: cpu, mem, pid, name (default: cpu) |
 | `--limit <n>` | `-l` | Limit results shown |
 | `--in [<dir>]` | `-i` | Filter by directory. Takes the next word as its directory unless it starts with `-` (bare `--in` is the current directory, `--in=DIR` is explicit) |

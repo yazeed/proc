@@ -14,8 +14,16 @@ The core commands are complete, with process lifecycle control, diagnostics, rea
 |------|----------|--------|
 | Discovery | `on`, `for`, `by`, `in`, `ports`, `list`, `info`, `tree`, `stuck`, `why`, `orphans` | ✅ |
 | Monitoring | `watch` (alias: `top`) — real-time process monitoring; `wait` — block until exit | ✅ |
-| Lifecycle | `kill`, `stop`, `unstick`, `freeze`, `thaw`, `free` (all support multi-target + filters) | ✅ |
+| Lifecycle | `kill`, `stop`, `unstick`, `freeze`, `thaw`, `free` (all support multi-target; all but `free` also take `--in` and `--by`) | ✅ |
 | Tooling | `completions`, `manpage`, agent skill (`npx skills add yazeed/proc-cli`) | ✅ |
+
+### v2.0.0 Highlights
+
+- **Exact names**: a name matches the whole process name; `--cmd` matches any part of the name or command line (BREAKING, add `--cmd` to keep the old matching)
+- **Separate-argument targets**: `proc kill :3000 :8080 node` (commas are deprecated)
+- **`--json` is not consent**: commands that change processes need `--yes`; without it they exit 4 with `needs_confirmation`
+- **`not_found` in every action's JSON**, and `:port` means every process listening on the port
+- **Agent skill rewritten** around a safety model for agents
 
 ### v1.14.5 Highlights
 
@@ -51,7 +59,7 @@ The core commands are complete, with process lifecycle control, diagnostics, rea
 ### v1.13.4 Highlights
 
 - **Static Linux binaries**: musl builds that also run on older distributions (Debian 10, Ubuntu 20.04, Amazon Linux 2) and on Alpine
-- **Docker port lookups**: the image includes `ss`, so `on :port`, `ports` and `free` work (run with `--net=host`)
+- **Docker port lookups**: the image includes `ss`, so `on :port`, `ports` and `free` work (run with `--net=host`); 2.0 reads `/proc` itself, so the image no longer needs `ss`
 - **User names**: `user` shows the user name instead of the numeric ID
 
 ### v1.13.0 Highlights
@@ -130,7 +138,7 @@ The core commands are complete, with process lifecycle control, diagnostics, rea
 
 - **`--in` and `--by` everywhere**: All commands now support `--in` (directory) and `--by` (name) filters
   - `proc kill node --in .` — Only kill node processes in current directory
-  - `proc stop node --by worker` — Only stop "worker" node processes
+  - `proc stop node --by worker --cmd` — Only stop "worker" node processes (since 2.0, `--by` is an exact name; `--cmd` matches a part)
   - `proc ports --by node --in .` — Ports from node processes in cwd
   - `proc stuck --by node` — Only stuck node processes
 - **`proc ports`**: Renamed `--filter` to `--by` for consistency
@@ -151,6 +159,8 @@ The core commands are complete, with process lifecycle control, diagnostics, rea
 - **Dry-run for stop**: `proc stop node --dry-run`
 
 ### v1.3.x Highlights
+
+_Commas are deprecated in 2.0; use separate arguments (`proc kill :3000 :8080 node`)._
 
 - **Proc Query Language**: Composable process discovery
   - `proc by node --in .` — Filter by name with directory

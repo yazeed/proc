@@ -6,7 +6,7 @@ rules:
   port: "A leading colon means a port: proc acts on whatever is listening on it."
   pid: "A number is a PID: that one process and nothing else."
   name: "Anything else is a name, matched against the whole process name, so <code>node</code> finds <code>node</code> and not <code>nodemon</code> or an editor with node in its command line. Add <code>--cmd</code> to match any part of the name or the full command line."
-  list: "Commas combine targets. A process matched twice is only acted on once."
+  list: "Several targets are separate arguments. A process matched twice is only acted on once."
   scope: "<code>--in</code> keeps any target inside a folder and the folders below it. Most commands take it."
   path: "With <code>proc for</code>, the target is a file: relative, absolute or starting with <code>~</code>."
   dir: "With <code>proc in</code>, the target is a folder. <code>.</code> is the one you're in."
@@ -26,7 +26,7 @@ groups:
           - t: "node"
             kind: name
             text: "Shows each <code>node</code> process and the ports it listens on."
-          - t: ":3000,:8080,node"
+          - t: ":3000 :8080 node"
             kind: list
             text: "Answers all three at once: what's on ports 3000 and 8080, and which ports the <code>node</code> processes hold."
           - t: "node --in ."
@@ -43,7 +43,7 @@ groups:
           - t: "node"
             kind: name
             text: "Traces every <code>node</code> process back to whatever started it."
-          - t: ":3000,:8080"
+          - t: ":3000 :8080"
             kind: list
             text: "Traces what holds ports 3000 and 8080, one chain each."
       - verb: for
@@ -148,7 +148,7 @@ groups:
           - t: "node"
             kind: name
             text: "Ends every <code>node</code> process, after listing them and asking."
-          - t: ":3000,:8080,node"
+          - t: ":3000 :8080 node"
             kind: list
             text: "Ends all of them in one go, after one confirmation."
           - t: "node --in ."
@@ -176,8 +176,8 @@ groups:
           - t: ":3000"
             kind: port
             text: "Ends whatever holds port 3000, politely and then by force, and waits until the port is really free before saying so."
-          - t: ":3000,:8080"
-            rule: "<code>proc free</code> only takes ports. Commas combine them."
+          - t: ":3000 :8080"
+            rule: "<code>proc free</code> only takes ports. Give several as separate arguments."
             text: "Frees both ports in one go."
       - verb: freeze
         examples:

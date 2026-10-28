@@ -4,10 +4,9 @@
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 1.2.x   | :white_check_mark: |
-| 1.1.x   | :white_check_mark: |
-| 1.0.x   | :white_check_mark: |
-| < 1.0   | :x:                |
+| 2.0.x   | :white_check_mark: |
+| 1.14.x  | :white_check_mark: |
+| < 1.14  | :x:                |
 
 ## Reporting a Vulnerability
 
@@ -50,23 +49,24 @@ Include the following information:
 
 proc is designed with security in mind:
 
-1. **No Network Access**: proc only accesses local system information. It does not make network requests or phone home.
+1. **No Network Access**: proc only accesses local system information. It does not make network requests or phone home. (The npm package downloads the proc binary the first time you run it and verifies its checksum; the binary itself never does.)
 
 2. **No Data Collection**: proc does not collect, store, or transmit any user data or telemetry.
 
 3. **Minimal Privileges**: proc runs with the privileges of the invoking user. It does not require or request elevated privileges except when explicitly needed (e.g., killing processes owned by other users).
 
-4. **Safe Defaults**: Destructive operations (like `kill`) require confirmation by default.
+4. **Safe Defaults**: Destructive operations (like `kill`) require `--yes` or an interactive confirmation. `--json` does not count as confirmation: without `--yes` it exits 4 and changes nothing.
 
-5. **Input Validation**: All user inputs are validated to prevent injection attacks.
+5. **Input Validation**: Inputs are validated (ports, ranges, signals, intervals), and proc starts helper programs with fixed argument lists, never through a shell.
 
 6. **Memory Safety**: Written in Rust, which provides memory safety guarantees.
+
+7. **Process data cannot control your terminal**: control characters in process names, command lines and paths are shown as visible escapes. Signals check that the PID still belongs to the same process before they are sent.
 
 ### Dependencies
 
 We carefully vet all dependencies:
 
-- Minimal dependency tree
 - Only well-maintained, widely-used crates
 - Regular dependency audits with `cargo audit`
 - Pinned versions via `Cargo.lock`
@@ -81,7 +81,7 @@ We carefully vet all dependencies:
 
 ## Security Best Practices for Users
 
-1. **Review before killing**: Always verify the processes you're about to kill, especially when using wildcards or patterns.
+1. **Review before killing**: Always verify the processes you're about to kill, especially with `--cmd`, which matches any part of a command line.
 
 2. **Use dry-run mode**: When uncertain, use `--dry-run` to see what would happen without making changes.
 

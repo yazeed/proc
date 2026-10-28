@@ -20,6 +20,8 @@
 - [ ] I have updated documentation if needed
 - [ ] I have added tests for new functionality
 - [ ] All tests pass (`cargo test`)
+- [ ] Every new line and long flag is covered by a test (CI "Coverage gate")
+- [ ] `CHANGELOG.md` `[Unreleased]` is updated
 - [ ] Code follows project style (`cargo fmt && cargo clippy`)
 - [ ] Commit messages follow [conventional commits](https://www.conventionalcommits.org/)
 

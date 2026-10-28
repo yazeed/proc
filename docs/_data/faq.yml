@@ -59,7 +59,7 @@
 - q: How do I kill a process on a port on Windows?
   id: kill-port-windows
   a: |
-    proc works on Windows too (`scoop install proc`, `npm install -g proc-cli` or `cargo install proc-cli`), with the same command: `proc free :3000`. Without proc, run `netstat -ano | findstr :3000` to get the PID in the last column, then `taskkill /PID <pid> /F`.
+    proc works on Windows too (`scoop bucket add proc https://github.com/yazeed/scoop-bucket-proc` then `scoop install proc`, `npm install -g proc-cli` or `cargo install proc-cli`), with the same command: `proc free :3000`. Without proc, run `netstat -ano | findstr :3000` to get the PID in the last column, then `taskkill /PID <pid> /F`.
 
 - q: How do I list all open or listening ports?
   id: list-listening-ports
@@ -76,13 +76,13 @@
 - q: How do I find a process by name?
   id: find-process-by-name
   a: |
-    `proc by` matches the name and the full command line, so `proc by node` also finds `nodemon` and `node server.js`. Add `--in .` to keep only processes started in the current folder.
+    `proc by` matches the whole process name, ignoring case, so `proc by node` finds `node` and not `nodemon` or an editor with node in its command line. Add `--cmd` to match any part of the name or the full command line instead, and `--in .` to keep only processes started in the current folder.
 
     ```bash
     proc by node --in .
     ```
 
-    The classic equivalents are `pgrep -fl node` and `ps aux | grep node`.
+    The classic equivalents are `pgrep -l node` (the name) and `ps aux | grep node`; `pgrep -fl node` matches the command line, like `--cmd`.
 
 - q: How do I kill all Node processes?
   id: kill-all-node-processes

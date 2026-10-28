@@ -16,7 +16,7 @@ NC='\033[0m' # No Color
 
 info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
-error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
+error() { echo -e "${RED}[ERROR]${NC} $1" >&2; exit 1; }
 
 # Detect OS and architecture
 detect_platform() {

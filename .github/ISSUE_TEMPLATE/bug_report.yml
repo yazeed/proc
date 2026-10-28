@@ -13,7 +13,7 @@ body:
     attributes:
       label: Bug Description
       description: A clear description of what the bug is
-      placeholder: When I run `proc find node`, it shows...
+      placeholder: When I run `proc by node`, it shows...
     validations:
       required: true
 
@@ -31,7 +31,7 @@ body:
       label: Steps to Reproduce
       description: Steps to reproduce the behavior
       placeholder: |
-        1. Run `proc find node`
+        1. Run `proc by node`
         2. See error...
     validations:
       required: true
@@ -41,7 +41,7 @@ body:
     attributes:
       label: proc version
       description: Output of `proc --version`
-      placeholder: proc 0.2.0
+      placeholder: proc 2.0.0
     validations:
       required: true
 
@@ -54,6 +54,7 @@ body:
         - macOS (Intel)
         - Linux (x86_64)
         - Linux (ARM64)
+        - Windows (x86_64)
         - Windows (WSL)
         - Other
     validations:

@@ -23,7 +23,7 @@ body:
       label: Proposed Solution
       description: How would you like this to work?
       placeholder: |
-        A new command like `proc watch node` that would...
+        A new flag like `--foo` on `proc list` that would...
     validations:
       required: true
 

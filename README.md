@@ -16,7 +16,7 @@
 [![Socket](https://badge.socket.dev/npm/package/proc-cli)](https://socket.dev/npm/package/proc-cli)
 [![Website](https://img.shields.io/website?url=https%3A%2F%2Fproc-cli.com%2F&label=website)](https://proc-cli.com/)
 
-Semantic CLI tool for process management. Target by port, process id (PID), name or path.
+Semantic CLI tool for process management. Target by port, PID, name or path.
 
 ```bash
 proc on :3000                   # what's on port 3000?
@@ -147,7 +147,7 @@ All commands accept the same target syntax:
 
 | Target | Example | Description |
 |--------|---------|-------------|
-| Port | `:3000` | Process listening on port 3000 |
+| Port | `:3000` | Every process listening on port 3000 |
 | PID | `1234` | Process with ID 1234 |
 | Name | `node` | Processes named "node" (the whole name, ignoring case) |
 | Multi | `:3000 :8080 node` | Separate arguments |
@@ -208,7 +208,7 @@ Filters can be combined with discovery and lifecycle commands:
 | `--local` | Only localhost ports (`ports`) |
 | `--range <s-e>` | Filter ports by range (e.g., `3000-9000`) |
 | `--sort/-s <key>` | Sort by: cpu, mem, pid, name |
-| `--limit/-n <n>` | Limit number of results |
+| `--limit/-n <n>` | Limit number of results (`-l` on `watch`, where `-n` is `--interval`) |
 | `--ancestors/-a` | Show ancestry path to root (`tree`) |
 | `--depth/-d <n>` | Maximum tree depth (default: 10) |
 | `--compact/-C` | Show PIDs only in compact view (`tree`) |
@@ -234,14 +234,14 @@ Filters can be combined with discovery and lifecycle commands:
 
 ### Scripting
 
-With `--json`, every command prints one JSON document with `action` (the command name) and `success`. `proc watch --json` streams one per refresh. Errors, including invalid flags, are JSON too: `{"action", "success": false, "error", "exit_code"}`. A command that changes processes run with `--json` but without `--yes` exits 4 and adds `"needs_confirmation": true` and `"processes"` (the ones it would have changed), so a script can show them before running it again with `--yes`.
+With `--json`, every command prints one JSON document with `action` (the command name) and `success`. `proc watch --json` streams one per refresh. Errors, including invalid flags, are JSON too: `{"action", "success": false, "error", "exit_code"}`. A command that changes processes run with `--json` but without `--yes` exits 4 and adds `"needs_confirmation": true` and `"processes"` (the ones it would have changed), so a script can show them before running it again with `--yes`. Every command that takes targets also has a `"not_found"` array in its JSON (the targets that matched nothing, empty when all were found), and it appears in that exit 4 output too.
 
 | Exit code | Meaning |
 |-----------|---------|
 | `0` | Success |
 | `1` | Error, or not fully successful: a process failed, a port stayed busy, `wait` timed out |
 | `2` | Process or port not found |
-| `3` | Permission denied |
+| `3` | Permission denied: proc itself got an I/O permission error. A signal the OS refuses (another user's process) is a `failed` entry and exit 1 |
 | `4` | Invalid input (unknown flag, bad argument, invalid signal), an action this OS doesn't support (`freeze`, `thaw` and `stop --signal` on Windows), or a command that changes processes run without `--yes` where nobody can confirm (`--json`, or no terminal): nothing was changed |
 
 `"success": false` always comes with a non-zero exit code. Full schemas: [`skills/proc-cli/reference.md`](skills/proc-cli/reference.md).

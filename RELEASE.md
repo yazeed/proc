@@ -13,6 +13,8 @@ cargo update             # Update dependencies
 cargo audit              # No security vulnerabilities
 ```
 
+- [ ] CI is green on main, including "Coverage gate" (100% lines across Linux, macOS and Windows; see CONTRIBUTING.md "Coverage"). A tag release does not wait for it. Locally: `scripts/coverage-local.sh`
+
 ### Cross-Platform Check
 
 `freeze` and `thaw` use `#[cfg(unix)]` — imports gated behind `cfg(unix)` cause unused-import errors on Windows with `-D warnings`. Always verify:
@@ -32,6 +34,8 @@ Test new features manually with the release binary:
 ```
 
 Test new commands/flags work as expected before releasing.
+
+For a breaking release also run the migration cases from `[Unreleased]`: `proc by <part-of-name>` exits 2 and adding `--cmd` matches; `proc kill <pid> --json` exits 4 with `needs_confirmation`; `proc kill <pid> <pid> --dry-run` previews both.
 
 ### Install path check (before tagging)
 
@@ -53,18 +57,22 @@ Update version in ALL of these files:
 - [ ] `flake.nix` — version field
 - [ ] `.claude-plugin/marketplace.json` — `metadata.version` field
 - [ ] `docs/_data/release.yml` — `version` field (the website's header, footer, install page and structured data read it)
+- [ ] `Cargo.lock` — rebuild after the bump so its `proc-cli` entry changes, and commit it
+
+(`pkg/aur/PKGBUILD` is not maintained; the README marks AUR as pending.)
 
 ## 4. Documentation
 
 Update and verify all docs are complete:
 
-- [ ] `CHANGELOG.md` — Rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and add a new empty `## [Unreleased]` above it. Everything worked on since the last release is already listed there (see "Unreleased Work" in CLAUDE.md); check that it is complete
+- [ ] `CHANGELOG.md` — Rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and add a new empty `## [Unreleased]` above it. Everything worked on since the last release is already listed there (see "Unreleased Work" in CLAUDE.md); check that it is complete. Update the links at the bottom: `[Unreleased]` compares `vX.Y.Z...HEAD`, and add `[X.Y.Z]` comparing the previous tag. Merge duplicate headings (`### Added` appears twice in the 2.0.0 entries)
 - [ ] `docs/changelog.md` — Add the same section (GitHub Pages)
 - [ ] `README.md` — Review thoroughly: hero examples, Quick Start, Commands table, Filters table, Examples section all reflect new features
 - [ ] `ROADMAP.md` — Mark completed items, update current release section
 - [ ] `src/lib.rs` — Review Rust docs: Features list, Quick Start examples, Commands list all reflect new features. Run `cargo doc --no-deps --open` to preview. This is what shows on docs.rs.
-- [ ] `skills/proc-cli/SKILL.md` — Agent Skills: new commands, flags, schemas, playbooks; bump the "This skill describes proc X.Y" line in "Before You Start"
+- [ ] `skills/proc-cli/SKILL.md` — Agent Skills: new commands, flags, schemas, playbooks (the "proc 2.0 or later" floor stays unless the skill needs a newer proc)
 - [ ] `skills/proc-cli/reference.md` — JSON output schemas match actual output
+- [ ] `SECURITY.md` — supported versions table (new major or minor line)
 - [ ] `docs/commands/` — GitHub Pages: new command pages, index.md updated
 - [ ] Verify `proc manpage` output includes new commands
 - [ ] Verify `proc completions` includes new commands
@@ -129,7 +137,7 @@ Also verify:
 - [ ] `proc --version` — Shows new version
 - [ ] `proc manpage` — Includes new commands
 - [ ] `proc completions bash` — Includes new commands
-- [ ] skills.sh is current: the check above prints `current`, and https://www.skills.sh/yazeed/proc-cli/proc-cli says "This skill describes proc X.Y.Z" (the page is cached for up to 5 minutes). If it's stale, run the install again the next day. If that doesn't help either, ask for a refresh with an issue on [vercel-labs/skills](https://github.com/vercel-labs/skills/issues), which runs skills.sh; many such requests there are unanswered. Agents installing the skill are unaffected either way: `skills add` reads the current SKILL.md from GitHub
+- [ ] skills.sh is current: the check above prints `current` (the page at https://www.skills.sh/yazeed/proc-cli/proc-cli is cached for up to 5 minutes). If it's stale, run the install again the next day. If that doesn't help either, ask for a refresh with an issue on [vercel-labs/skills](https://github.com/vercel-labs/skills/issues), which runs skills.sh; many such requests there are unanswered. Agents installing the skill are unaffected either way: `skills add` reads the current SKILL.md from GitHub
 
 ## 8. Cleanup
 

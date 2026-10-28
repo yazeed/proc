@@ -67,7 +67,7 @@ Feature suggestions are welcome! Please create an issue with:
 
 ### Prerequisites
 
-- Rust 1.70 or later
+- Rust 1.88 or later (the sysinfo dependency requires it)
 - Git
 
 ### Building
@@ -106,24 +106,30 @@ cargo clippy -- -D warnings
 ```
 proc/
 ├── src/
-│   ├── main.rs           # CLI entry point
+│   ├── main.rs           # CLI entry point, routing, JSON errors, exit codes
+│   ├── cli.rs            # clap definitions (Cli, Commands)
 │   ├── lib.rs            # Library exports
-│   ├── error.rs          # Error types
-│   ├── commands/         # Command implementations
+│   ├── error.rs          # Error types and exit codes
+│   ├── test_support.rs   # Helpers shared by tests
+│   ├── commands/         # One file per command
 │   │   ├── mod.rs
-│   │   ├── find.rs
-│   │   ├── on.rs
-│   │   ├── ports.rs
-│   │   ├── kill.rs
-│   │   └── stuck.rs
+│   │   ├── by.rs, find_in.rs, for_file.rs, list.rs, on.rs, ports.rs
+│   │   ├── info.rs, tree.rs, why.rs, stuck.rs, orphans.rs, watch.rs, wait.rs
+│   │   └── kill.rs, stop.rs, free.rs, freeze.rs, thaw.rs, unstick.rs
 │   ├── core/             # Core abstractions
 │   │   ├── mod.rs
+│   │   ├── apply.rs      # Run an action on each target
+│   │   ├── filters.rs    # Shared filter utilities
+│   │   ├── name_match.rs # Exact name vs --cmd matching
+│   │   ├── port.rs
 │   │   ├── process.rs
-│   │   └── port.rs
+│   │   └── target.rs     # Target parsing and resolution
 │   └── ui/               # Output formatting
 │       ├── mod.rs
+│       ├── format.rs
 │       └── output.rs
 ├── tests/                # Integration tests
+├── scripts/              # Coverage tooling
 ├── Cargo.toml
 └── README.md
 ```
@@ -175,7 +181,7 @@ Example:
 ```rust
 #[test]
 fn test_find_process_by_name() {
-    let processes = Process::find_by_name("cargo").unwrap();
+    let processes = Process::find_by_name("cargo", NameMatch::Exact).unwrap();
     assert!(!processes.is_empty());
 }
 ```
@@ -229,17 +235,11 @@ docs: update installation instructions
 
 ## Release Process
 
-Releases are managed by maintainers. The process:
-
-1. Update version in `Cargo.toml`
-2. Update `CHANGELOG.md`
-3. Create a git tag
-4. GitHub Actions builds and publishes releases
+Releases are managed by maintainers and follow [RELEASE.md](RELEASE.md).
 
 ## Questions?
 
 - Open a [Discussion](https://github.com/yazeed/proc-cli/discussions) for questions
-- Join our community chat (if available)
 - Reach out to maintainers
 
 Thank you for contributing to proc!
