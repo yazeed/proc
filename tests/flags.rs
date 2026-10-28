@@ -1,7 +1,8 @@
 //! The flag matrix: a table of cases checked against the clap definitions.
 //!
 //! `every_flag_is_exercised` walks `Cli::command()` and fails for any
-//! `command --flag` that no case uses, so a new flag cannot ship untested.
+//! `command --flag` or `command -f` that no case uses, so a new flag cannot
+//! ship untested.
 //! `flag_matrix_cases_behave` runs every case against the real binary.
 //! `destructive_cases_only_target_what_tests_own` keeps the table safe to run
 //! on a machine with real work on it.
@@ -382,6 +383,7 @@ const CASES: &[Case] = &[
     // ---- wait (the owned process never exits, so each one times out) ----
     code("wait", &["{pid}", "--timeout", "1"], 1),
     code("wait", &[":{port}", "-t", "1", "--json"], 1),
+    code("wait", &["{pid}", "-t", "1", "-j"], 1),
     code("wait", &["{pid}", "-t", "1", "--interval", "1", "--quiet"], 1),
     code("wait", &["{pid}", "-t", "1", "-n", "1", "-q", "-v"], 1),
     code("wait", &["{pid}", "-t", "1", "--verbose"], 1),
@@ -442,6 +444,12 @@ fn spells(arg: &str, long: &str) -> bool {
     })
 }
 
+/// Does `arg` spell the short flag `-s` (one flag per word, as the cases write them)?
+fn spells_short(arg: &str, short: char) -> bool {
+    let mut chars = arg.chars();
+    chars.next() == Some('-') && chars.next() == Some(short) && chars.next().is_none()
+}
+
 #[test]
 fn every_flag_is_exercised() {
     let cli = Cli::command();
@@ -452,17 +460,19 @@ fn every_flag_is_exercised() {
         if NOT_PROCESS_COMMANDS.contains(&name) {
             continue;
         }
+        let cases = || CASES.iter().filter(|c| c.cmd == name);
         for arg in sub.get_arguments() {
-            let Some(long) = arg.get_long() else { continue };
-            if long == "help" || long == "version" {
-                continue;
+            if let Some(long) = arg.get_long() {
+                let used = cases().any(|c| c.args.iter().any(|a| spells(a, long)));
+                if long != "help" && long != "version" && !used {
+                    missing.push(format!("{name} --{long}"));
+                }
             }
-            let used = CASES
-                .iter()
-                .filter(|c| c.cmd == name)
-                .any(|c| c.args.iter().any(|a| spells(a, long)));
-            if !used {
-                missing.push(format!("{name} --{long}"));
+            if let Some(short) = arg.get_short() {
+                let used = cases().any(|c| c.args.iter().any(|a| spells_short(a, short)));
+                if short != 'h' && short != 'V' && !used {
+                    missing.push(format!("{name} -{short}"));
+                }
             }
         }
     }
