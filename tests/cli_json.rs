@@ -412,9 +412,12 @@ mod unix {
     fn cpu_is_measured_where_it_is_shown() {
         // CPU used to be read a few milliseconds after the first refresh, so a
         // process spinning at 100% showed about 0.4%
+        let dir = tempfile::tempdir().unwrap();
+        let dir_path = dir.path().canonicalize().unwrap();
         let spinning = Sleeper(
             StdCommand::new("sh")
                 .args(["-c", "while :; do :; done"])
+                .current_dir(&dir_path)
                 .spawn()
                 .unwrap(),
         );
@@ -443,11 +446,21 @@ mod unix {
             "--min-cpu 20 missed it: {busy}"
         );
 
-        let (top, _) = run_json(&["list", "--sort", "cpu", "--limit", "5", "--json"]);
-        assert!(
-            cpu_of(&top["processes"]).is_some(),
-            "not in the top 5 by CPU: {top}"
-        );
+        // sorted and cut by the measured figure. Only this directory is listed:
+        // "in the top 5 of every process on the machine" depends on what else
+        // the machine runs (measured, it was 5th of 5 in one of 40 runs)
+        let (top, _) = run_json(&[
+            "list",
+            "--in",
+            &dir_path.to_string_lossy(),
+            "--sort",
+            "cpu",
+            "--limit",
+            "1",
+            "--json",
+        ]);
+        let top_cpu = cpu_of(&top["processes"]);
+        assert!(top_cpu.is_some_and(|cpu| cpu > 20.0), "top by CPU: {top}");
     }
 
     #[test]
