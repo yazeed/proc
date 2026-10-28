@@ -22,7 +22,7 @@ Several targets are separate arguments. Comma-separated lists (`node,python`) st
 |------|-------|-------------|
 | `--interval <secs>` | `-n` | Seconds between status lines (default: 5); exits are noticed within a quarter second |
 | `--timeout <secs>` | `-t` | Max wait time, 0 = no timeout (default: 0). Exits 1 if processes are still running |
-| `--quiet` | `-q` | Suppress periodic status, only print exits and final result |
+| `--quiet` | `-q` | Don't print the periodic still-running lines; the start line, each exit and the result still print |
 | `--in [<dir>]` | `-i` | Filter by directory. Takes the next word as its directory unless it starts with `-` (bare `--in` is the current directory, `--in=DIR` is explicit) |
 | `--by <name>` | `-b` | Filter by process name (the whole name, ignoring case) |
 | `--cmd` | | Match name targets and `--by` as a substring of the process name or full command line (like `pkill -f`) |
