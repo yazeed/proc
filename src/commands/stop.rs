@@ -182,13 +182,12 @@ fn ask_to_end(proc: &Process) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{end, idle_child, record_of};
+    use crate::test_support::{end, gone_record, idle_child, record_of};
 
     #[test]
     fn a_process_that_is_gone_cannot_be_asked_to_end() {
         let mut child = idle_child();
-        let record = record_of(&child);
-        end(&mut child);
+        let record = gone_record(&mut child);
         // Not running, so the refusal is not the expected one a console
         // program gives on Windows: it is reported
         let result = ask_to_end(&record);

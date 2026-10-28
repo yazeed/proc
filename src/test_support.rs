@@ -92,3 +92,19 @@ pub(crate) fn end(child: &mut std::process::Child) {
     let _ = child.kill();
     let _ = child.wait();
 }
+
+/// A record of `child` after it is gone: the child is killed and reaped, then
+/// this waits until the process list no longer shows it (on Windows it can
+/// linger for a moment after the kill)
+pub(crate) fn gone_record(child: &mut std::process::Child) -> crate::core::Process {
+    let record = record_of(child);
+    end(child);
+    std::iter::repeat_with(|| {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        record.is_running()
+    })
+    .take(500)
+    .find(|running| !running)
+    .expect("the process is still listed after it was killed");
+    record
+}

@@ -371,8 +371,7 @@ mod tests {
     #[test]
     fn a_refusal_for_a_process_that_is_gone_is_a_warning_and_nothing_is_waited_for() {
         let mut child = crate::test_support::idle_child();
-        let gone = crate::test_support::record_of(&child);
-        crate::test_support::end(&mut child);
+        let gone = crate::test_support::gone_record(&mut child);
         let printer = Printer::from_flags(true, false);
         let start = std::time::Instant::now();
         // Not running, so the refusal is not the one Windows gives a console
