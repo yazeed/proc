@@ -153,6 +153,13 @@ fn answer_cursor_queries(raw: &[u8], answered: &mut usize, writer: &mut dyn Writ
 /// printing cannot hang the test: `Expect` polls with a deadline. The whole
 /// session is limited to [`SESSION_LIMIT`].
 fn run_in_pty(args: &[&str], script: &[Step]) -> PtyRun {
+    try_run_in_pty(args, script).unwrap_or_else(|why| panic!("{why}"))
+}
+
+/// [`run_in_pty`], except that a session that never prints what an `Expect`
+/// waits for (it timed out, or proc ended without printing it) is an `Err`
+/// with what proc printed, for a caller that may ask again.
+fn try_run_in_pty(args: &[&str], script: &[Step]) -> Result<PtyRun, String> {
     let deadline = Instant::now() + SESSION_LIMIT;
     let pair = native_pty_system()
         .openpty(PtySize {
@@ -226,15 +233,25 @@ fn run_in_pty(args: &[&str], script: &[Step]) -> PtyRun {
             Step::Expect(wanted) => loop {
                 #[cfg(windows)]
                 answer(&mut writer);
+                // Read before looking: if proc had ended and its output had
+                // been read to the end by now, `seen` is all it will ever print
+                let over =
+                    guard.0.try_wait().expect("poll the child").is_some() && reading.is_finished();
                 let seen = text();
                 if let Some(at) = seen.get(cursor..).and_then(|rest| rest.find(wanted)) {
                     cursor += at + wanted.len();
                     break;
                 }
-                assert!(
-                    Instant::now() < deadline,
-                    "timed out waiting for {wanted:?}; proc printed:\n{seen:?}"
-                );
+                if over {
+                    return Err(format!(
+                        "proc ended without printing {wanted:?}; it printed:\n{seen:?}"
+                    ));
+                }
+                if Instant::now() >= deadline {
+                    return Err(format!(
+                        "timed out waiting for {wanted:?}; proc printed:\n{seen:?}"
+                    ));
+                }
                 std::thread::sleep(Duration::from_millis(10));
             },
         }
@@ -271,11 +288,11 @@ fn run_in_pty(args: &[&str], script: &[Step]) -> PtyRun {
         std::thread::sleep(Duration::from_millis(5));
     }
     let raw = captured.lock().unwrap().clone();
-    PtyRun {
+    Ok(PtyRun {
         output: text(),
         raw,
         exit_code: status.exit_code(),
-    }
+    })
 }
 
 #[test]
@@ -606,9 +623,30 @@ fn listener_path() -> PathBuf {
 
 const WAIT: Duration = Duration::from_secs(5);
 
+/// How long a session against a busy process is started again, when proc found
+/// nothing stuck to ask about
+const BUSY_PATIENCE: Duration = Duration::from_secs(30);
+
+/// [`run_in_pty`] for a session that begins with a question. If proc says
+/// there is nothing stuck, the busy process got no CPU in the two readings it
+/// takes (proc was right; `Owned::busy` returned once an earlier look had seen
+/// it busy, and this run measures again, over a window of its own). It asked
+/// nothing and changed nothing, so the session is started again, for at most
+/// [`BUSY_PATIENCE`]; any other failure is final.
+fn ask(args: &[&str], script: &[Step]) -> PtyRun {
+    let deadline = Instant::now() + BUSY_PATIENCE;
+    loop {
+        match try_run_in_pty(args, script) {
+            Ok(run) => return run,
+            Err(why) if why.contains("No stuck processes found") && Instant::now() < deadline => {}
+            Err(why) => panic!("{why}"),
+        }
+    }
+}
+
 /// Ask, answer `y`: the command acts
 fn answers_y(args: &[&str], prompt: &'static str) -> PtyRun {
-    run_in_pty(
+    ask(
         args,
         &[Step::Expect(prompt), Step::Send("y"), Step::Send("\r")],
     )
@@ -616,7 +654,7 @@ fn answers_y(args: &[&str], prompt: &'static str) -> PtyRun {
 
 /// Ask, answer `n`: nothing happens, and the command says `declined`
 fn answers_n(args: &[&str], prompt: &'static str, declined: &'static str) -> PtyRun {
-    let run = run_in_pty(
+    let run = ask(
         args,
         &[
             Step::Expect(prompt),
@@ -631,7 +669,7 @@ fn answers_n(args: &[&str], prompt: &'static str, declined: &'static str) -> Pty
 
 /// Ask, press Enter alone: the default is no
 fn answers_enter(args: &[&str], prompt: &'static str, declined: &'static str) -> PtyRun {
-    let run = run_in_pty(
+    let run = ask(
         args,
         &[
             Step::Expect(prompt),

@@ -40,6 +40,41 @@ fn run_text(args: &[&str]) -> (String, i32) {
     )
 }
 
+/// How long a command that needs the busy process to read as busy is run
+/// again before its result is judged
+const BUSY_PATIENCE: Duration = Duration::from_secs(30);
+
+/// Run proc until `saw_busy` says its JSON found the busy process, or until
+/// [`BUSY_PATIENCE`] is up, and return the last run (so the test's own
+/// assertions still fail on it, with its output).
+///
+/// `Owned::busy` returns once proc listed the spinner, but the command a test
+/// then runs measures CPU again, over a window of its own. On a loaded CI
+/// runner the spinner can get no CPU in that window (a full core read 9.5%
+/// there), and proc, rightly, finds nothing stuck. A run that did not find it
+/// changed nothing: `stuck --kill --yes` kills only what it lists, and the
+/// rest here only read. So running it again is safe.
+fn run_json_until(args: &[&str], saw_busy: impl Fn(&Value) -> bool) -> (Value, i32) {
+    let deadline = Instant::now() + BUSY_PATIENCE;
+    loop {
+        let (json, code) = run_json(args);
+        if saw_busy(&json) || Instant::now() >= deadline {
+            return (json, code);
+        }
+    }
+}
+
+/// [`run_json_until`] for a command printed as text
+fn run_text_until(args: &[&str], saw_busy: impl Fn(&str) -> bool) -> (String, i32) {
+    let deadline = Instant::now() + BUSY_PATIENCE;
+    loop {
+        let (out, code) = run_text(args);
+        if saw_busy(&out) || Instant::now() >= deadline {
+            return (out, code);
+        }
+    }
+}
+
 /// `target/debug/examples/listener`, found relative to this test binary
 /// (`target/debug/deps/cmd_find-<hash>`)
 fn listener_path() -> PathBuf {
@@ -137,16 +172,14 @@ impl Owned {
         busy._busy = Some(guard);
         // proc has no CPU reading for a process that has used no CPU yet, so a
         // process started this instant is not found until a later look
-        let deadline = Instant::now() + Duration::from_secs(30);
-        loop {
-            let (json, _) = run_json(&["stuck", "--timeout", "0", "--in", &busy.dir(), "--json"]);
-            if lists(&json, "processes", busy.pid()) {
-                return busy;
-            }
-            if Instant::now() >= deadline {
-                panic!("never seen as stuck: {json}\n{}", busy.what_proc_saw());
-            }
+        let (json, _) = run_json_until(
+            &["stuck", "--timeout", "0", "--in", &busy.dir(), "--json"],
+            |json| lists(json, "processes", busy.pid()),
+        );
+        if !lists(&json, "processes", busy.pid()) {
+            panic!("never seen as stuck: {json}\n{}", busy.what_proc_saw());
         }
+        busy
     }
 
     /// A listener with extra arguments (it ignores them, so they only put words
@@ -275,6 +308,26 @@ fn lists(json: &Value, key: &str, pid: u32) -> bool {
             .iter()
             .any(|p| p["pid"].as_u64() == Some(u64::from(pid)))
     })
+}
+
+/// Whether the JSON names a process with this PID anywhere: in the list it
+/// shows (`processes`) or in what a kill reports (`succeeded`)
+fn names(json: &Value, pid: u32) -> bool {
+    match json {
+        Value::Object(map) => {
+            map.get("pid").and_then(Value::as_u64) == Some(u64::from(pid))
+                || map.values().any(|value| names(value, pid))
+        }
+        Value::Array(items) => items.iter().any(|value| names(value, pid)),
+        _ => false,
+    }
+}
+
+/// Whether the text has this PID as a word of its own
+fn mentions(text: &str, pid: u32) -> bool {
+    let pid = pid.to_string();
+    text.split(|c: char| !c.is_ascii_alphanumeric())
+        .any(|word| word == pid)
 }
 
 // ---- by ----
@@ -441,7 +494,9 @@ fn by_min_cpu_keeps_a_busy_process_and_drops_an_idle_one() {
 
     // a full core measured can read under 50 on a loaded CI runner (49% seen)
     let busy = Owned::busy();
-    let (json, _) = run_json(&["by", &busy.name, "--min-cpu", "20", "--json"]);
+    let (json, _) = run_json_until(&["by", &busy.name, "--min-cpu", "20", "--json"], |json| {
+        lists(json, "processes", busy.pid())
+    });
     assert!(lists(&json, "processes", busy.pid()), "{json}");
 }
 
@@ -767,7 +822,10 @@ fn for_several_processes_without_ports_shows_only_the_table() {
 #[test]
 fn stuck_timeout_zero_finds_a_busy_process() {
     let busy = Owned::busy();
-    let (json, code) = run_json(&["stuck", "--timeout", "0", "--in", &busy.dir(), "--json"]);
+    let (json, code) = run_json_until(
+        &["stuck", "--timeout", "0", "--in", &busy.dir(), "--json"],
+        |json| lists(json, "processes", busy.pid()),
+    );
     assert_eq!(code, 0, "{json}");
     assert_eq!(json["action"], "stuck");
     assert!(lists(&json, "processes", busy.pid()), "{json}");
@@ -776,7 +834,9 @@ fn stuck_timeout_zero_finds_a_busy_process() {
 #[test]
 fn stuck_lists_a_busy_process_and_leaves_it_alone() {
     let mut busy = Owned::busy();
-    let (out, code) = run_text(&["stuck", "--timeout", "0", "--in", &busy.dir()]);
+    let (out, code) = run_text_until(&["stuck", "--timeout", "0", "--in", &busy.dir()], |out| {
+        mentions(out, busy.pid())
+    });
     assert_eq!(code, 0, "{out}");
     assert!(out.contains("Found 1 potentially stuck process"), "{out}");
     assert!(out.contains(&busy.pid().to_string()), "{out}");
@@ -799,11 +859,17 @@ fn stuck_by_name_keeps_only_that_name() {
     // the whole name only, until --cmd
     let (json, _) = run_json(&["stuck", "-t", "0", "-i", &dir, "--by", part, "--json"]);
     assert!(!lists(&json, "processes", busy.pid()), "{json}");
-    let (json, _) = run_json(&[
-        "stuck", "-t", "0", "-i", &dir, "--by", part, "--cmd", "--json",
-    ]);
+    let (json, _) = run_json_until(
+        &[
+            "stuck", "-t", "0", "-i", &dir, "--by", part, "--cmd", "--json",
+        ],
+        |json| lists(json, "processes", busy.pid()),
+    );
     assert!(lists(&json, "processes", busy.pid()), "{json}");
-    let (json, _) = run_json(&["stuck", "-t", "0", "-i", &dir, "--by", &busy.name, "--json"]);
+    let (json, _) = run_json_until(
+        &["stuck", "-t", "0", "-i", &dir, "--by", &busy.name, "--json"],
+        |json| lists(json, "processes", busy.pid()),
+    );
     assert!(lists(&json, "processes", busy.pid()), "{json}");
     let (json, _) = run_json(&[
         "stuck",
@@ -822,28 +888,34 @@ fn stuck_by_name_keeps_only_that_name() {
 fn stuck_kill_dry_run_says_what_it_would_kill() {
     let mut busy = Owned::busy();
     let dir = busy.dir();
-    let (out, code) = run_text(&[
-        "stuck",
-        "--timeout",
-        "0",
-        "--in",
-        &dir,
-        "--kill",
-        "--dry-run",
-    ]);
+    let (out, code) = run_text_until(
+        &[
+            "stuck",
+            "--timeout",
+            "0",
+            "--in",
+            &dir,
+            "--kill",
+            "--dry-run",
+        ],
+        |out| mentions(out, busy.pid()),
+    );
     assert_eq!(code, 0, "{out}");
     assert!(out.contains("Dry run: would kill 1 stuck process"), "{out}");
 
-    let (json, code) = run_json(&[
-        "stuck",
-        "--timeout",
-        "0",
-        "--in",
-        &dir,
-        "--kill",
-        "--dry-run",
-        "--json",
-    ]);
+    let (json, code) = run_json_until(
+        &[
+            "stuck",
+            "--timeout",
+            "0",
+            "--in",
+            &dir,
+            "--kill",
+            "--dry-run",
+            "--json",
+        ],
+        |json| lists(json, "processes", busy.pid()),
+    );
     assert_eq!(code, 0, "{json}");
     assert!(lists(&json, "processes", busy.pid()), "{json}");
     assert!(busy.alive(), "a dry run kills nothing");
@@ -852,15 +924,18 @@ fn stuck_kill_dry_run_says_what_it_would_kill() {
 #[test]
 fn stuck_kill_without_yes_and_json_asks_for_yes_and_lists_what_it_would_kill() {
     let mut busy = Owned::busy();
-    let (json, code) = run_json(&[
-        "stuck",
-        "--timeout",
-        "0",
-        "--in",
-        &busy.dir(),
-        "--kill",
-        "--json",
-    ]);
+    let (json, code) = run_json_until(
+        &[
+            "stuck",
+            "--timeout",
+            "0",
+            "--in",
+            &busy.dir(),
+            "--kill",
+            "--json",
+        ],
+        |json| lists(json, "processes", busy.pid()),
+    );
     assert_eq!(code, 4, "{json}");
     assert_eq!(json["success"], false);
     assert_eq!(json["needs_confirmation"], true, "{json}");
@@ -871,15 +946,18 @@ fn stuck_kill_without_yes_and_json_asks_for_yes_and_lists_what_it_would_kill() {
 #[test]
 fn stuck_kill_yes_kills_the_stuck_process() {
     let mut busy = Owned::busy();
-    let (out, code) = run_text(&[
-        "stuck",
-        "--timeout",
-        "0",
-        "--in",
-        &busy.dir(),
-        "--kill",
-        "--yes",
-    ]);
+    let (out, code) = run_text_until(
+        &[
+            "stuck",
+            "--timeout",
+            "0",
+            "--in",
+            &busy.dir(),
+            "--kill",
+            "--yes",
+        ],
+        |out| mentions(out, busy.pid()),
+    );
     assert_eq!(code, 0, "{out}");
     assert!(busy.ended_within(Duration::from_secs(5)), "{out}");
 }
@@ -887,16 +965,19 @@ fn stuck_kill_yes_kills_the_stuck_process() {
 #[test]
 fn stuck_kill_yes_json_reports_the_kill() {
     let mut busy = Owned::busy();
-    let (json, code) = run_json(&[
-        "stuck",
-        "--timeout",
-        "0",
-        "--in",
-        &busy.dir(),
-        "--kill",
-        "--yes",
-        "--json",
-    ]);
+    let (json, code) = run_json_until(
+        &[
+            "stuck",
+            "--timeout",
+            "0",
+            "--in",
+            &busy.dir(),
+            "--kill",
+            "--yes",
+            "--json",
+        ],
+        |json| names(json, busy.pid()),
+    );
     assert_eq!(code, 0, "{json}");
     assert_eq!(json["action"], "stuck");
     assert_eq!(json["success"], true, "{json}");

@@ -58,6 +58,50 @@ fn run_json(args: &[&str]) -> (Value, i32) {
     (json, r.code)
 }
 
+/// How long a command that needs the busy process to read as busy is run
+/// again before its result is judged
+const BUSY_PATIENCE: Duration = Duration::from_secs(30);
+
+/// Run proc until `saw_busy` says the run found the busy process busy, or until
+/// [`BUSY_PATIENCE`] is up, and return the last run (so the test's own
+/// assertions still fail on it, with its output).
+///
+/// `Owned::busy` returns once proc listed the spinner, but the command a test
+/// then runs measures CPU again, over a window of its own. On a loaded CI
+/// runner the spinner can get no CPU in that window (a full core read 9.5%
+/// there), and proc, rightly, finds nothing stuck. A run that did not find it
+/// busy changed nothing: `unstick` leaves a process it measures as not stuck
+/// alone, `stuck --kill` kills only what it lists, the rest here only read. A
+/// test spinner that ignores SIGINT and SIGTERM, or wakes into a sleep, loses
+/// nothing to a run that did not stop it. So running it again is safe.
+fn run_until(args: &[&str], saw_busy: impl Fn(&Run) -> bool) -> Run {
+    let deadline = Instant::now() + BUSY_PATIENCE;
+    loop {
+        let r = run(args);
+        if saw_busy(&r) || Instant::now() >= deadline {
+            return r;
+        }
+    }
+}
+
+/// [`run_until`] for a command whose stdout is one JSON document
+fn run_json_until(args: &[&str], saw_busy: impl Fn(&Value) -> bool) -> (Value, i32) {
+    let deadline = Instant::now() + BUSY_PATIENCE;
+    loop {
+        let (json, code) = run_json(args);
+        if saw_busy(&json) || Instant::now() >= deadline {
+            return (json, code);
+        }
+    }
+}
+
+/// Whether the first process in the JSON has a CPU reading above [`MEASURED`]
+fn measured(json: &Value) -> bool {
+    json["processes"][0]["cpu_percent"]
+        .as_f64()
+        .is_some_and(|cpu| cpu > MEASURED)
+}
+
 /// `target/debug/examples/listener`, found relative to this test binary
 /// (`target/debug/deps/cmd_actions-<hash>`)
 fn listener_path() -> PathBuf {
@@ -181,16 +225,14 @@ impl Owned {
         busy._busy = Some(guard);
         // proc has no CPU reading for a process that has used no CPU yet, so a
         // process started this instant is not found until a later look
-        let deadline = Instant::now() + Duration::from_secs(30);
-        loop {
-            let (json, _) = run_json(&["stuck", "--timeout", "0", "--in", &busy.dir(), "--json"]);
-            if lists(&json, "processes", busy.pid()) {
-                return busy;
-            }
-            if Instant::now() >= deadline {
-                panic!("never seen as stuck: {json}\n{}", busy.what_proc_saw());
-            }
+        let (json, _) = run_json_until(
+            &["stuck", "--timeout", "0", "--in", &busy.dir(), "--json"],
+            |json| lists(json, "processes", busy.pid()),
+        );
+        if !lists(&json, "processes", busy.pid()) {
+            panic!("never seen as stuck: {json}\n{}", busy.what_proc_saw());
         }
+        busy
     }
 
     fn start(args: &[&str], exe: Option<&Path>) -> Self {
@@ -824,7 +866,7 @@ fn stop_dry_run_says_what_it_would_stop_and_stops_nothing() {
 #[test]
 fn stop_without_yes_and_json_asks_for_yes_with_measured_cpu() {
     let mut busy = Owned::busy();
-    let (json, code) = run_json(&["stop", &busy.pid_arg(), "--json"]);
+    let (json, code) = run_json_until(&["stop", &busy.pid_arg(), "--json"], measured);
     assert_eq!(code, 4, "{json}");
     assert_eq!(json["needs_confirmation"], true, "{json}");
     assert_eq!(json["processes"][0]["pid"], busy.pid(), "{json}");
@@ -1112,7 +1154,7 @@ fn freeze_and_thaw_dry_runs_change_nothing() {
 fn freeze_and_thaw_without_yes_and_json_ask_for_yes_with_measured_cpu() {
     let busy = Owned::busy();
     for action in ["freeze", "thaw"] {
-        let (json, code) = run_json(&[action, &busy.pid_arg(), "--json"]);
+        let (json, code) = run_json_until(&[action, &busy.pid_arg(), "--json"], measured);
         assert_eq!(code, 4, "{action}: {json}");
         assert_eq!(json["needs_confirmation"], true, "{action}: {json}");
         assert_eq!(json["processes"][0]["pid"], busy.pid(), "{action}: {json}");
@@ -1310,21 +1352,21 @@ impl Shell {
         };
         if spins {
             // proc has no CPU reading for a process that has used no CPU yet
-            let deadline = Instant::now() + Duration::from_secs(30);
-            loop {
-                let (json, _) = run_json(&[
+            let (json, _) = run_json_until(
+                &[
                     "stuck",
                     "--timeout",
                     "0",
                     "--in",
                     &shell.dir.to_string_lossy(),
                     "--json",
-                ]);
-                if lists(&json, "processes", shell.pid()) {
-                    break;
-                }
-                assert!(Instant::now() < deadline, "never seen as stuck: {json}");
-            }
+                ],
+                |json| lists(json, "processes", shell.pid()),
+            );
+            assert!(
+                lists(&json, "processes", shell.pid()),
+                "never seen as stuck: {json}"
+            );
         }
         shell
     }
@@ -1521,7 +1563,10 @@ fn orphans_kill_dry_run_says_what_it_would_kill_and_kills_nothing() {
 fn orphans_kill_without_yes_and_json_asks_for_yes_with_measured_cpu() {
     let orphan = Orphan::spinning();
     let pid = orphan.pid as u32;
-    let (json, code) = run_json(&["orphans", "--kill", "--in", &orphan.dir(), "--json"]);
+    let (json, code) = run_json_until(
+        &["orphans", "--kill", "--in", &orphan.dir(), "--json"],
+        measured,
+    );
     assert_eq!(code, 4, "{json}");
     assert_eq!(json["needs_confirmation"], true, "{json}");
     assert_eq!(json["processes"][0]["pid"], pid, "{json}");
@@ -1613,7 +1658,9 @@ fn unstick_with_nothing_stuck_says_so() {
 fn unstick_dry_run_shows_measured_cpu_and_attempts_nothing() {
     let mut busy = Owned::busy();
     let pid = busy.pid_arg();
-    let r = run(&["unstick", &pid, "--dry-run"]);
+    let r = run_until(&["unstick", &pid, "--dry-run"], |r| {
+        cpu_in_line(&r.stdout, busy.pid()) > MEASURED
+    });
     assert_eq!(r.code, 0, "{}{}", r.stdout, r.stderr);
     let cpu = cpu_in_line(&r.stdout, busy.pid());
     assert!(cpu > MEASURED, "cpu {cpu} was not measured:\n{}", r.stdout);
@@ -1649,7 +1696,7 @@ fn unstick_dry_run_shows_measured_cpu_and_attempts_nothing() {
 #[test]
 fn unstick_without_yes_and_json_asks_for_yes_with_measured_cpu() {
     let mut busy = Owned::busy();
-    let (json, code) = run_json(&["unstick", &busy.pid_arg(), "--json"]);
+    let (json, code) = run_json_until(&["unstick", &busy.pid_arg(), "--json"], measured);
     assert_eq!(code, 4, "{json}");
     assert_eq!(json["needs_confirmation"], true, "{json}");
     assert_eq!(json["processes"][0]["pid"], busy.pid(), "{json}");
@@ -1681,7 +1728,16 @@ fn unstick_leaves_a_process_that_is_not_stuck_alone() {
 #[test]
 fn unstick_without_force_acts_on_a_busy_process_by_what_the_os_allows() {
     let mut busy = Owned::busy();
-    let (json, code) = run_json(&["unstick", &busy.pid_arg(), "--yes", "--json"]);
+    // a run that found it calm or not stuck acted on nothing: only the outcome
+    // this OS gives a busy process ends the wait
+    let outcome = if cfg!(unix) {
+        "terminated"
+    } else {
+        "still_stuck"
+    };
+    let (json, code) = run_json_until(&["unstick", &busy.pid_arg(), "--yes", "--json"], |json| {
+        json["processes"][0]["outcome"] == outcome
+    });
     if cfg!(unix) {
         // the listener dies on SIGINT, step 2
         assert_eq!(code, 0, "{json}");
@@ -1700,7 +1756,9 @@ fn unstick_without_force_acts_on_a_busy_process_by_what_the_os_allows() {
 #[test]
 fn unstick_force_terminates_a_busy_process() {
     let mut busy = Owned::busy();
-    let r = run(&["unstick", &busy.pid_arg(), "--yes", "--force"]);
+    let r = run_until(&["unstick", &busy.pid_arg(), "--yes", "--force"], |r| {
+        r.stdout.contains("1 process terminated")
+    });
     assert_eq!(r.code, 0, "{}{}", r.stdout, r.stderr);
     assert!(r.stdout.contains("terminated"), "{}", r.stdout);
     assert!(r.stdout.contains("1 process terminated"), "{}", r.stdout);
@@ -1710,16 +1768,19 @@ fn unstick_force_terminates_a_busy_process() {
 #[test]
 fn unstick_without_a_target_finds_the_stuck_process_in_the_directory() {
     let mut busy = Owned::busy();
-    let (json, code) = run_json(&[
-        "unstick",
-        "--timeout",
-        "0",
-        "--in",
-        &busy.dir(),
-        "--yes",
-        "--force",
-        "--json",
-    ]);
+    let (json, code) = run_json_until(
+        &[
+            "unstick",
+            "--timeout",
+            "0",
+            "--in",
+            &busy.dir(),
+            "--yes",
+            "--force",
+            "--json",
+        ],
+        |json| json["terminated"] == 1,
+    );
     assert_eq!(code, 0, "{json}");
     assert_eq!(json["found"], 1, "{json}");
     assert_eq!(json["terminated"], 1, "{json}");
@@ -1733,7 +1794,9 @@ fn unstick_recovers_a_process_that_calms_down_when_woken() {
     // SIGCONT makes the shell swap itself for an idle sleep
     let script = format!("trap 'exec sleep 120' CONT; echo ready; {SPIN}");
     let mut shell = Shell::run(&script, true);
-    let r = run(&["unstick", &shell.pid_arg(), "--yes"]);
+    let r = run_until(&["unstick", &shell.pid_arg(), "--yes"], |r| {
+        r.stdout.contains("1 process recovered")
+    });
     assert_eq!(r.code, 0, "{}{}", r.stdout, r.stderr);
     assert!(r.stdout.contains("recovered"), "{}", r.stdout);
     assert!(r.stdout.contains("1 process recovered"), "{}", r.stdout);
@@ -1742,7 +1805,9 @@ fn unstick_recovers_a_process_that_calms_down_when_woken() {
     drop(shell);
 
     let mut again = Shell::run(&script, true);
-    let (json, code) = run_json(&["unstick", &again.pid_arg(), "--yes", "--json"]);
+    let (json, code) = run_json_until(&["unstick", &again.pid_arg(), "--yes", "--json"], |json| {
+        json["recovered"] == 1
+    });
     assert_eq!(code, 0, "{json}");
     assert_eq!(json["recovered"], 1, "{json}");
     assert_eq!(json["processes"][0]["outcome"], "recovered", "{json}");
@@ -1754,7 +1819,9 @@ fn unstick_recovers_a_process_that_calms_down_when_woken() {
 fn unstick_without_force_leaves_a_process_that_ignores_sigint_still_stuck() {
     let script = format!("trap '' INT TERM; echo ready; {SPIN}");
     let mut shell = Shell::run(&script, true);
-    let r = run(&["unstick", &shell.pid_arg(), "--yes"]);
+    let r = run_until(&["unstick", &shell.pid_arg(), "--yes"], |r| {
+        r.stdout.contains("still stuck")
+    });
     assert_eq!(r.code, 1, "{}{}", r.stdout, r.stderr);
     assert!(r.stdout.contains("still stuck"), "{}", r.stdout);
     assert!(
@@ -1771,7 +1838,10 @@ fn unstick_without_force_leaves_a_process_that_ignores_sigint_still_stuck() {
 fn unstick_force_goes_on_to_sigkill_for_a_process_that_ignores_everything_gentle() {
     let script = format!("trap '' INT TERM; echo ready; {SPIN}");
     let mut shell = Shell::run(&script, true);
-    let (json, code) = run_json(&["unstick", &shell.pid_arg(), "--yes", "--force", "--json"]);
+    let (json, code) = run_json_until(
+        &["unstick", &shell.pid_arg(), "--yes", "--force", "--json"],
+        |json| json["terminated"] == 1,
+    );
     assert_eq!(code, 0, "{json}");
     assert_eq!(json["terminated"], 1, "{json}");
     assert_eq!(
