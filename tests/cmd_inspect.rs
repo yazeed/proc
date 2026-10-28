@@ -1085,6 +1085,113 @@ fn help_and_version_print_and_exit_cleanly() {
     assert_eq!(version, proc_cli::VERSION);
 }
 
+/// The footer facts, as they must read in plain text
+const FOOTER_FACTS: [&str; 9] = [
+    "Targets:",
+    ":3000 node   Several: separate arguments",
+    "The process name, the file name of its executable or of argv[0],",
+    "ignoring case (like pkill -x); 'node' is not 'Claude Helper'",
+    "Any part of the name or the full command line (like pkill -f)",
+    "Not a name: use --cmd, or proc for <file>",
+    "Not expanded by proc, but by your shell if unquoted: use --cmd",
+    "Deprecated, to be removed; prints a note on stderr",
+    "put it after the targets, or write --in=DIR",
+];
+
+#[test]
+fn the_help_ends_with_labelled_sections() {
+    let (out, _, code) = run_text(&["--help"]);
+    assert_eq!(code, 0);
+    for fact in FOOTER_FACTS {
+        assert!(out.contains(fact), "{fact:?} is not in\n{out}");
+    }
+    for header in ["Targets:", "Names:", "Notes:", "More:"] {
+        assert!(
+            out.lines().any(|l| l.starts_with(header)),
+            "no {header} section in\n{out}"
+        );
+    }
+    assert!(out
+        .trim_end()
+        .ends_with("More: https://github.com/yazeed/proc-cli"));
+    // every line of the footer fits an 80-column terminal
+    let footer = &out[out.find("\nTargets:").unwrap()..];
+    for line in footer.lines() {
+        assert!(line.chars().count() <= 80, "{line:?} is wider than 80");
+    }
+    // piped output has no colour codes
+    assert!(!out.contains('\u{1b}'), "{out:?}");
+
+    // the short help keeps the targets and points to the long one
+    let (short, _, code) = run_text(&["-h"]);
+    assert_eq!(code, 0);
+    assert!(short.contains("Targets:\n  :3000"), "{short}");
+    assert!(short.contains("More: proc --help for examples"), "{short}");
+    assert!(!short.contains("Names:"), "{short}");
+}
+
+#[test]
+fn the_footer_headers_use_clap_header_style_and_only_when_colour_is_on() {
+    // the Command's own styles, which the footer must use: no look of its own
+    let command = Cli::command();
+    let header = command.get_styles().get_header();
+    let literal = command.get_styles().get_literal();
+    assert_eq!(
+        format!("{:?}", command.get_styles()),
+        format!("{:?}", proc_cli::cli::STYLES)
+    );
+
+    let forced = Command::cargo_bin("proc")
+        .unwrap()
+        .env_remove("NO_COLOR")
+        .env("CLICOLOR_FORCE", "1")
+        .arg("--help")
+        .output()
+        .unwrap();
+    let out = String::from_utf8(forced.stdout).unwrap();
+    for title in ["Usage:", "Targets:", "Names:", "Notes:", "More:"] {
+        assert!(
+            out.contains(&format!("{header}{title}{header:#}")),
+            "{title} is not drawn in clap's header style:\n{out:?}"
+        );
+    }
+    assert!(
+        out.contains(&format!("{literal}--cmd{literal:#}")),
+        "{out:?}"
+    );
+
+    // NO_COLOR wins over a forced colour
+    let plain = Command::cargo_bin("proc")
+        .unwrap()
+        .env("NO_COLOR", "1")
+        .env("CLICOLOR_FORCE", "1")
+        .arg("--help")
+        .output()
+        .unwrap();
+    assert!(!String::from_utf8(plain.stdout).unwrap().contains('\u{1b}'));
+}
+
+#[test]
+fn the_man_page_and_completions_have_no_colour_codes() {
+    for args in [
+        &["manpage"][..],
+        &["completions", "bash"][..],
+        &["completions", "zsh"][..],
+        &["completions", "fish"][..],
+    ] {
+        let output = Command::cargo_bin("proc")
+            .unwrap()
+            .env_remove("NO_COLOR")
+            .env("CLICOLOR_FORCE", "1")
+            .args(args)
+            .output()
+            .unwrap();
+        let out = String::from_utf8(output.stdout).unwrap();
+        assert!(!out.contains('\u{1b}'), "{args:?} has an escape code");
+        assert!(!out.is_empty(), "{args:?}");
+    }
+}
+
 #[test]
 fn completions_print_a_script_for_each_shell() {
     for (shell, marker) in [

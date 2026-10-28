@@ -8,6 +8,8 @@ use crate::commands::{
     ListCommand, OnCommand, OrphansCommand, PortsCommand, StopCommand, StuckCommand, ThawCommand,
     TreeCommand, UnstickCommand, WaitCommand, WatchCommand, WhyCommand,
 };
+use clap::builder::styling::Styles;
+use clap::builder::StyledStr;
 use clap::{Parser, Subcommand};
 use clap_complete::Shell;
 
@@ -17,16 +19,13 @@ const VERSION_INFO: &str = concat!(
     "\nLicense: MIT"
 );
 
-/// Semantic CLI tool for process management. Target by port, PID, name or path.
-#[derive(Parser)]
-#[command(name = "proc")]
-#[command(author, version = VERSION_INFO, about, long_about = None)]
-#[command(propagate_version = true)]
-#[command(
-    after_help = "Targets: :port, PID, or process name. Give several as separate arguments.
-Run 'proc --help' for examples or visit https://github.com/yazeed/proc-cli"
-)]
-#[command(after_long_help = "EXAMPLES:
+/// The look of the help. This is clap's own default, named here so the help
+/// footers below are drawn from the same styles as the `Usage:` and `Options:`
+/// headers around them.
+pub const STYLES: Styles = Styles::styled();
+
+/// The examples that open the long help; the footer follows them
+const EXAMPLES: &str = "EXAMPLES:
 
   Port/Process Lookup:
     proc on :3000                  What's on port 3000?
@@ -93,20 +92,123 @@ Run 'proc --help' for examples or visit https://github.com/yazeed/proc-cli"
     proc stuck                     Find hung processes
     proc unstick --force           Recover or terminate stuck processes
     proc stop nginx --signal USR1  Send a different first signal (force-killed after --timeout if it lives)
+";
 
-Targets: :port, PID, or process name. Give several as separate arguments.
-A name matches the process name, the file name of its executable or the file name
-of its first argument, ignoring case (like pkill -x, but case-insensitive):
-'node' does not match 'Claude Helper'. Add --cmd to match any part of the name
-or the full command line instead (like pkill -f). A path is not a name: use
---cmd, or 'proc for <file>' for an executable. proc doesn't expand wildcards;
-an unquoted node* is expanded by your shell into file names; use --cmd for
-partial matches.
-Comma-separated targets (:3000,:8080) still work but are deprecated and will be
-removed in a future major release; they print a note on stderr (not with --json).
---in takes the next word as its directory unless that word starts with '-':
-put it after the targets, or write --in=DIR.
-For more information, visit: https://github.com/yazeed/proc-cli")]
+/// One labelled block of the footer: a header, then rows of a literal (what to
+/// type) and what it means. A row with an empty literal continues the line above.
+struct Section {
+    header: &'static str,
+    rows: &'static [(&'static str, &'static str)],
+}
+
+const TARGETS: Section = Section {
+    header: "Targets:",
+    rows: &[
+        (":3000", "A port"),
+        ("1234", "A PID"),
+        ("node", "A name"),
+        (":3000 node", "Several: separate arguments"),
+    ],
+};
+
+const NAMES: Section = Section {
+    header: "Names:",
+    rows: &[
+        (
+            "node",
+            "The process name, the file name of its executable or of argv[0],",
+        ),
+        (
+            "",
+            "ignoring case (like pkill -x); 'node' is not 'Claude Helper'",
+        ),
+        (
+            "--cmd",
+            "Any part of the name or the full command line (like pkill -f)",
+        ),
+        ("./server", "Not a name: use --cmd, or proc for <file>"),
+        (
+            "node*",
+            "Not expanded by proc, but by your shell if unquoted: use --cmd",
+        ),
+    ],
+};
+
+const NOTES: Section = Section {
+    header: "Notes:",
+    rows: &[
+        (
+            ":3000,:8080",
+            "Deprecated, to be removed; prints a note on stderr",
+        ),
+        ("", "(not with --json)"),
+        (
+            "--in DIR",
+            "Takes the next word as DIR unless it starts with '-':",
+        ),
+        ("", "put it after the targets, or write --in=DIR"),
+    ],
+};
+
+const REPOSITORY: &str = "https://github.com/yazeed/proc-cli";
+
+/// Sections in the look of clap's `Options:` list: the header in the header
+/// style, each literal in the literal style, the meanings aligned in one column.
+fn render_sections(sections: &[&Section]) -> String {
+    let literal_width = sections
+        .iter()
+        .flat_map(|section| section.rows.iter())
+        .map(|(literal, _)| literal.chars().count())
+        .max()
+        .unwrap_or(0);
+    let (header, literal) = (STYLES.get_header(), STYLES.get_literal());
+    let mut out = String::new();
+    for section in sections {
+        out.push_str(&format!("{header}{}{header:#}\n", section.header));
+        for (text, meaning) in section.rows {
+            let pad = " ".repeat(literal_width - text.chars().count());
+            if text.is_empty() {
+                out.push_str(&format!("  {pad}  {meaning}\n"));
+            } else {
+                out.push_str(&format!("  {literal}{text}{literal:#}{pad}  {meaning}\n"));
+            }
+        }
+        out.push('\n');
+    }
+    out
+}
+
+/// The closing line of both helps
+fn more(what: &str) -> String {
+    let header = STYLES.get_header();
+    format!("{header}More:{header:#} {what}")
+}
+
+/// The footer of `proc -h`
+fn short_footer() -> StyledStr {
+    let mut out = String::from("\n");
+    out.push_str(&render_sections(&[&TARGETS]));
+    out.push_str(&more(&format!("proc --help for examples, or {REPOSITORY}")));
+    StyledStr::from(out)
+}
+
+/// The long help's closing text: the examples, then the footer
+fn long_footer() -> StyledStr {
+    let mut out = String::from(EXAMPLES);
+    out.push('\n');
+    out.push_str(&render_sections(&[&TARGETS, &NAMES, &NOTES]));
+    out.push_str(&more(REPOSITORY));
+    StyledStr::from(out)
+}
+
+/// Semantic CLI tool for process management. Target by port, PID, name or path.
+#[derive(Parser)]
+#[command(name = "proc")]
+#[command(author, version = VERSION_INFO, about, long_about = None)]
+#[command(propagate_version = true)]
+#[command(styles = STYLES)]
+#[command(after_help = short_footer())]
+#[command(after_long_help = long_footer())]
 pub struct Cli {
     /// The subcommand; none prints the orientation text
     #[command(subcommand)]
