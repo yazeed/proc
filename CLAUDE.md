@@ -187,7 +187,7 @@ Work is committed and pushed to `main` without a tag, and every change goes unde
 
 **ALWAYS follow [RELEASE.md](RELEASE.md) for every release.** Do not skip steps. This includes:
 
-1. Pre-release checks: `cargo fmt --check`, `cargo clippy`, `cargo test`, `cargo build --release`, `cargo update`, `cargo audit`, `cargo check --target x86_64-pc-windows-msvc`
+1. Pre-release checks: `cargo update` (first), `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`, `cargo build --release`, `cargo audit`, `cargo check --target x86_64-pc-windows-msvc --all-targets`
 2. Manual testing with the release binary (`./target/release/proc --version`, `--help`, new features)
 3. Version bump in ALL files: `Cargo.toml`, `pkg/npm/package.json`, `flake.nix`, `.claude-plugin/marketplace.json`, `docs/_data/release.yml`
 4. Documentation: `CHANGELOG.md`, `docs/changelog.md`, `README.md`, `ROADMAP.md`, `src/lib.rs`, `skills/proc-cli/*.md`, `docs/commands/` — verify all reflect new changes
@@ -199,8 +199,8 @@ Work is committed and pushed to `main` without a tag, and every change goes unde
 - `README.md` — Main documentation, installation, examples, shell completions, man page
 - `CHANGELOG.md` — Keep a Changelog format, update with each release
 - `RELEASE.md` — Release checklist and publishing process
-- `ROADMAP.md` — Version plans, feature status, under consideration
-- `PHILOSOPHY.md` — Project manifesto, principles, feature test
+- `ROADMAP.md` — The future only: candidate ideas, none promised until vetted against PHILOSOPHY.md. Update it with every change that adds, finishes or rethinks planned work; shipped items leave it (the CHANGELOG is the history)
+- `PHILOSOPHY.md` — Project manifesto, principles, feature test: the criteria every ROADMAP idea is vetted against. Not tied to a version; it changes rarely and deliberately
 - `CONTRIBUTING.md` — Contribution guidelines
 - `SECURITY.md` — Security policy
 - `skills/proc-cli/SKILL.md` — Agent Skills definition for LLM tool use
