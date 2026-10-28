@@ -54,6 +54,28 @@ jobs:
       - name: Build release
         run: cargo build --release --target ${{ matrix.target }}
 
+      # Every publish job needs this one, so a binary that would call itself a
+      # -dev build, or a tag that doesn't match Cargo.toml's version, stops the
+      # release here. Cross-compiled targets can't run on the runner, so they
+      # only get the marker check.
+      - name: Check the binary reports the tag's version
+        shell: bash
+        run: |
+          bin=target/${{ matrix.target }}/release/proc${{ runner.os == 'Windows' && '.exe' || '' }}
+          if LC_ALL=C grep -a -q -- '-dev (' "$bin"; then
+            echo "::error::$bin is labelled as a dev build; the tag must be v<Cargo.toml version>"
+            exit 1
+          fi
+          if [ "${{ matrix.target }}" != aarch64-unknown-linux-musl ] && [ "${{ matrix.target }}" != x86_64-apple-darwin ]; then
+            got=$("$bin" --version | head -1 | tr -d '\r')
+            want="proc ${GITHUB_REF_NAME#v}"
+            if [ "$got" != "$want" ]; then
+              echo "::error::$bin --version printed '$got', expected '$want'"
+              exit 1
+            fi
+            echo "$got"
+          fi
+
       - name: Rename binary (Unix)
         if: runner.os != 'Windows'
         run: |
