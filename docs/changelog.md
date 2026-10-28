@@ -5,6 +5,28 @@ description: "Release history for proc."
 permalink: /changelog
 ---
 
+## 2.0.1 — 2026-10-28
+
+**Added**
+
+- **Every exit-4 JSON error says why, in `reason`.** Exit 4 means nothing was done, for one of three causes, and only a missing `--yes` was machine-readable (`needs_confirmation: true`). A wrong flag such as `proc kill --name wispworker -j` came back as exit 4 with only the text `unexpected argument '--name' found`, so an agent had to read prose to know it should fix the command. The error now has `"reason"`: `"invalid_input"` for a wrong flag, value or argument (clap's own usage errors included), `"needs_confirmation"` for a missing `--yes` (which keeps `needs_confirmation: true` for agents written against 2.0.0), and `"not_supported"` for `freeze`, `thaw`, `orphans` and `stop --signal` on Windows. Exits 1 to 3 have no `reason`. Human output is unchanged. The skill's exit-code table and `reference.md` say to branch on `reason`. **Library API:** `ProcError::reason()` returns it (`None` unless the error is exit 4), and `proc_cli::error` has the strings as `REASON_INVALID_INPUT`, `REASON_NEEDS_CONFIRMATION` and `REASON_NOT_SUPPORTED`
+
+**Changed**
+
+- **`proc --help` ends with short labelled sections instead of one dense paragraph, and its examples are styled the same way** (an `Examples:` header, commands highlighted, meanings aligned). `Targets:` (`:3000`, `1234`, `node`, several as separate arguments), `Names:` (what a name matches, `--cmd`, a path is not a name, wildcards), `Notes:` (the deprecated comma list, `--in`) and a `More:` link, with the meanings aligned like the `Options:` list. Headers and literals use the help's own styles (`proc_cli::cli::STYLES`, clap's default look), so they follow clap's colour handling: no colour codes when piped or with `NO_COLOR`, and none in `proc manpage` or the completions. `proc -h` gets the `Targets:` section and the link. The facts are the same. **Library API:** `proc_cli::cli::STYLES` is new
+- **The agent skill treats process fields as data, not instructions** (rule 8). A process's name, command line, working directory, executable path and user are written by whoever started it, so an agent never acts on text found in them and tells the user if one reads like an instruction
+- **The skill and its JSON reference say how to tell exit-4 cases apart:** only the confirmation error has a `needs_confirmation` key (always `true`), and a successful action's `succeeded` and `failed` lists are the receipt for the preview's `processes`
+- **The README points Arch Linux users to `proc-bin`**, the community AUR package of the release binaries, until proc's own AUR package is published
+- **`--sort` help says which way each key runs** on `list`, `by`, `in`, `for`, `watch` and `ports`: cpu and mem put the biggest first; pid, name and port go ascending. Ties come by PID (by port, then PID, for `ports`)
+
+**Fixed**
+
+- **Windows: `stop --signal` is a "not supported" error**, as the docs already said: `reason` is `not_supported` and the message starts "Not supported on this platform". It was reported as invalid input
+- **The order of what proc prints is the same on every run, and `--limit` picks the same rows.** `proc by zsh --json` listed its PIDs in a new order each time, and `proc list --limit 8` returned different processes each time. The process list came out of a randomly ordered map, and `--sort cpu` (the default) ties for nearly every process, so the ties kept the random order. Now every process source lists by PID ascending and a sort breaks ties by PID, so a name, `--limit`, `orphans`, `stuck` and every list a command asks you to approve read the same twice
+- **`tree` and `tree --json` give the same tree.** The human tree sorted each parent's children by PID, but the JSON children, the roots, the filtered list, the target list and `--ancestors` for a name came out in a new order every run. All of them are now in PID order, in both forms
+- **A process's ports are ascending** in `on <pid>`, `for` and `why`, and `ports --sort pid` and `--sort name` break ties by port, then PID. They followed the order lsof (macOS), the kernel's socket table (Linux) or netstat (Windows) listed them in. The holders of a port are by PID, and `on :port --json` has `process`, `protocol` and `address` of the holder with the lowest PID on every OS (Linux and Windows used to follow the kernel's or netstat's listing order; macOS already did)
+- **The list a command asks you to approve is in a stated order**: the targets in the order typed, then PID ascending within each target. `kill`, `stop`, `freeze`, `thaw`, `free`, `unstick`, `orphans --kill` and `stuck --kill` use it for the preview, the prompt, `--dry-run --json`, the `needs_confirmation` list and the receipt. `stop` reports `failed` in that order too, instead of the processes that refused the signal followed by the ones it could not force-kill
+
 ## 2.0.0 — 2026-10-28
 
 This is a major release. Read **Changed** first: a name now matches the whole process name (add `--cmd` for the old matching), and `--json` no longer counts as `--yes`. The library API changed too (see the entries marked **Library API**).

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-10-28
+
 ### Added
 
 - **Every exit-4 JSON error says why, in `reason`.** Exit 4 means nothing was done, for one of three causes, and only a missing `--yes` was machine-readable (`needs_confirmation: true`). A wrong flag such as `proc kill --name wispworker -j` came back as exit 4 with only the text `unexpected argument '--name' found`, so an agent had to read prose to know it should fix the command. The error now has `"reason"`: `"invalid_input"` for a wrong flag, value or argument (clap's own usage errors included), `"needs_confirmation"` for a missing `--yes` (which keeps `needs_confirmation: true` for agents written against 2.0.0), and `"not_supported"` for `freeze`, `thaw`, `orphans` and `stop --signal` on Windows. Exits 1 to 3 have no `reason`. Human output is unchanged. The skill's exit-code table and `reference.md` say to branch on `reason`. **Library API:** `ProcError::reason()` returns it (`None` unless the error is exit 4), and `proc_cli::error` has the strings as `REASON_INVALID_INPUT`, `REASON_NEEDS_CONFIRMATION` and `REASON_NOT_SUPPORTED`
@@ -813,7 +815,8 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 
 ---
 
-[Unreleased]: https://github.com/yazeed/proc-cli/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/yazeed/proc-cli/compare/v2.0.1...HEAD
+[2.0.1]: https://github.com/yazeed/proc-cli/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/yazeed/proc-cli/compare/v1.14.5...v2.0.0
 [1.14.5]: https://github.com/yazeed/proc-cli/compare/v1.14.4...v1.14.5
 [1.14.4]: https://github.com/yazeed/proc-cli/compare/v1.14.3...v1.14.4

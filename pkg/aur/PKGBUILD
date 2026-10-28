@@ -1,7 +1,7 @@
 # Maintainer: Yazeed Al Oyoun <me@yazeed.com>
 pkgname=proc
 _repo=proc-cli
-pkgver=2.0.0
+pkgver=2.0.1
 pkgrel=1
 pkgdesc="Semantic CLI tool for process management. Target by port, PID, name or path."
 arch=('x86_64' 'aarch64')
