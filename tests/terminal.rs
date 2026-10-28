@@ -259,8 +259,13 @@ fn run_in_pty(args: &[&str], script: &[Step]) -> PtyRun {
     // ConPTY keeps the pipe open until the terminal is closed, so on Windows the
     // terminal is closed here (the reader keeps draining while it closes); the
     // end of file is then the end of the output, not a guess at a quiet spell.
+    // Closing can block on some Windows versions, so it is done on a thread the
+    // test does not wait for: the wait below has a deadline.
     #[cfg(windows)]
-    drop(pair.master);
+    {
+        let master = pair.master;
+        std::thread::spawn(move || drop(master));
+    }
     let drained = Instant::now() + Duration::from_secs(5);
     while !reading.is_finished() && Instant::now() < drained {
         std::thread::sleep(Duration::from_millis(5));
