@@ -1181,8 +1181,17 @@ mod tests {
             .arg("300")
             .spawn()
             .unwrap();
-        let record = Process::find_by_pid(child.id()).unwrap().unwrap();
         let pid = child.id();
+        // `spawn` returns once the exec has begun, not once it has finished:
+        // measured on Linux, /proc/<pid>/cmdline is still empty for a moment
+        // after it (name and exe are already the new program's). A record taken
+        // in that moment has no first argument, so wait for the command line.
+        let record = std::iter::repeat_with(|| {
+            std::thread::sleep(Duration::from_millis(5));
+            Process::find_by_pid(pid).unwrap().unwrap()
+        })
+        .take(1000)
+        .find(|record| record.argv0.is_some());
         let part = format!("\u{7}ctl{}", std::process::id());
 
         let found = |pattern: &str, mode| {
@@ -1195,6 +1204,7 @@ mod tests {
         let _ = child.kill();
         let _ = child.wait();
 
+        let record = record.expect("the child's command line never appeared");
         assert!(named, "find_by_name read the escaped first argument");
         assert!(
             named_in_command,
