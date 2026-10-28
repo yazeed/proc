@@ -14,10 +14,10 @@ COPY Cargo.toml Cargo.lock ./
 COPY src/ src/
 RUN cargo build --release
 
-# Stage 2: VHS plus the tools the story uses (iproute2 provides `ss` for port lookups)
+# Stage 2: VHS plus the tools the story uses (jq, tmux, node)
 FROM ghcr.io/charmbracelet/vhs:latest
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends nodejs npm jq iproute2 procps tmux && \
+    apt-get install -y --no-install-recommends nodejs npm jq procps tmux && \
     rm -rf /var/lib/apt/lists/*
 COPY --from=builder /build/target/release/proc /usr/local/bin/proc
 

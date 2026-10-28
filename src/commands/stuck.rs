@@ -64,7 +64,8 @@ pub struct StuckCommand {
 }
 
 impl StuckCommand {
-    /// Executes the stuck command, finding long-running processes using high CPU.
+    /// Executes the stuck command, finding long-running processes that stay busy (over 50% CPU)
+    /// or are blocked in uninterruptible sleep.
     pub fn execute(&self) -> Result<()> {
         let printer = Printer::from_flags(self.json, self.verbose).wide(self.wide);
 

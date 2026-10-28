@@ -1,9 +1,9 @@
 //! `proc for` - Find processes by file path
 //!
 //! Examples:
-//!   proc for script.py           # What's running this script?
+//!   proc for ./server            # Processes running this program (or holding it open)
 //!   proc for ./app               # Relative path
-//!   proc for /var/log/app.log    # What has this file open?
+//!   proc for /var/log/app.log    # What has this file open? (not searched on Windows)
 //!   proc for ~/bin/myapp         # Tilde expansion
 //!   proc for app.log --by node   # Only the process named node (--cmd: node anywhere in the command line)
 

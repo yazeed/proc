@@ -43,7 +43,7 @@ On failure with `--json`, stdout carries the four fields below. `action` is the 
 }
 ```
 
-A name that matches no process name but appears in some command lines says so: `2 processes have 'serve' in their command line (add --cmd to match those)`.
+`on`, `by` and `why` say so in their error text when a name matches no process name but appears in some command lines: `2 processes have 'serve' in their command line (add --cmd to match those)`. The commands that change processes (and `wait`, `info`, `tree`) report the plain exit 2 / `not_found`; run `proc by <name> --json` to see the hint.
 
 A command that changes processes (`kill`, `stop`, `freeze`, `thaw`, `free`, `unstick`, `orphans --kill`, `stuck --kill`) run with `--json` or with no terminal, and without `--yes`, changes nothing and exits 4:
 
@@ -106,7 +106,7 @@ Filters (a command takes only those its `--help` lists):
 | `--wide` (`-w`) | `list`, `by`, `in`, `for`, `watch`, `stuck`, `orphans` |
 | `--exposed` (0.0.0.0, `::`), `--local` (127.0.0.1, `::1`), `--range <from>-<to>` | `ports` |
 | `--depth <n>`, `--compact`, `--ancestors` | `tree` |
-| `--interval <secs>` (`-n`) | `watch`, `wait` (`wait --quiet` hides status lines) |
+| `--interval <secs>` (`-n`) | `watch`, `wait` (`wait --quiet` hides the periodic still-running lines) |
 | `--timeout <secs>` (`-t`) | `stop` (default 10), `wait` (0 = forever), `stuck` and `unstick` (default 300) |
 
 ## Target and filter semantics
@@ -117,7 +117,7 @@ Filters (a command takes only those its `--help` lists):
 - **proc never matches itself or its ancestor shells** (up to 10 levels) for name targets and `--by`. PID and port targets are not protected: `proc kill <pid> --dry-run` on your own agent host lists it.
 - **`:3000`** means every process listening on that port, workers sharing a socket included. A PID or name means all of that process's ports for `on`.
 - **Several targets** are separate arguments, deduplicated by PID (a process named by port and PID is handled once). `on` and `why` answer each target under its own entry. `by`, `tree`, `in` and `for` take one value. Commas (`:3000,:8080`) still split a target but are deprecated and will be removed in a future major release. Use them only to read old scripts.
-- **`--in`** matches the process's current working directory, including subdirectories, not prefixes (`/a/t1` does not match `/a/t1x`). Paths resolve through symlinks. A broad directory scopes nothing (`/` kept all 185 `node` processes). Processes with cwd `/` never match. It takes the next word as its value unless that starts with `-`; `proc kill --in 123 456` reads `123` as the directory, so write targets first or `--in=<dir>`.
+- **`--in`** matches the process's current working directory, including subdirectories, not prefixes (`/a/t1` does not match `/a/t1x`). Paths resolve through symlinks. A broad directory scopes nothing (`/` kept all 185 `node` processes). Processes with no readable cwd never match. A process whose cwd is `/` matches only `--in=/`. It takes the next word as its value unless that starts with `-`; `proc kill --in 123 456` reads `123` as the directory, so write targets first or `--in=<dir>`.
 - **`--in` with a missing directory:** `in` exits 4 (`Directory not found`), `kill` exits 2 (nothing matched), `by` exits 0 with `count: 0`.
 - **A PID with `--in <its cwd> --by <its name>`** is a guard: a mismatch exits 2 with the PID in the error.
 - **Plain patterns** for `list` are exact names (or substrings with `--cmd`), never regular expressions.
@@ -297,7 +297,7 @@ NDJSON, one object per refresh (`-n` seconds, default 2), until interrupted: `{"
 Both list candidates. Neither proves that a process is hung or abandoned. Never act on a list without checking each PID.
 
 - **`stuck`** lists a process that has run longer than `--timeout` (default 300 s) and, in each of two readings a second apart, either uses over 50% of one core or is in uninterruptible sleep (blocked in the kernel, usually on I/O). It takes about 2 seconds. False positives: a long build, a compiler, a busy server, or any healthy program at full CPU look the same as an infinite loop. On one laptop it listed a `python` at 97%, a `node` at 98% and a `node` at 453%.
-- **`orphans`** lists processes whose parent is PID 1, minus system daemons (no cwd, or cwd `/`, with a system executable path). False positives: on macOS every app launched by launchd has parent 1, and an unscoped run listed 90 ordinary apps; `nohup` and `tmux` jobs and daemons are orphaned on purpose. A process whose parent is any other process is never listed, and Windows has no PID 1 parent, so the list can be empty there.
+- **`orphans`** lists processes whose parent is PID 1, minus system daemons (processes with no cwd, or with cwd `/`). False positives: on macOS every app launched by launchd has parent 1, and an unscoped run listed 90 ordinary apps; `nohup` and `tmux` jobs and daemons are orphaned on purpose. A process whose parent is any other process is never listed, and Windows has no PID 1 parent, so the list can be empty there.
 - **`--kill`** applies the action to the whole list. Do not use it. Check each PID with `proc info <pid> --json` and `proc why <pid> --json`, then act on the approved PIDs only. `--in <dir>` narrows the list but does not make it yours.
 
 ## Edge cases

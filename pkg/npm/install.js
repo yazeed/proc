@@ -49,7 +49,8 @@ function getPlatformInfo() {
       archName = "x86_64";
       break;
     case "arm64":
-      archName = "aarch64";
+      // Releases have no Windows Arm build; Windows on Arm runs the x64 one
+      archName = platform === "win32" ? "x86_64" : "aarch64";
       break;
     default:
       throw new Error(`Unsupported architecture: ${arch}`);

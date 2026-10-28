@@ -1,4 +1,5 @@
-//! JSON output contract tests: every command prints exactly one JSON document,
+//! JSON output contract tests: every command prints exactly one JSON document
+//! (`watch` streams one per refresh),
 //! `action` is the canonical command name, and `success: false` means a non-zero exit.
 
 use assert_cmd::Command;

@@ -649,7 +649,8 @@ impl Printer {
 
     /// Print dry-run summary with a custom human message.
     ///
-    /// JSON output is always `{"action", "success", "dry_run": true, "count", "processes"}`.
+    /// JSON output is `{"action", "success", "dry_run": true, "count", "not_found" (when the
+    /// printer was given targets), "processes"}`.
     pub fn print_dry_run_with(&self, action: &str, processes: &[Process], message: &str) {
         match self.format {
             OutputFormat::Human => {

@@ -34,7 +34,7 @@ Rules, in priority order:
 4. **Ask with specifics.** Show the user each process's PID, name, cwd, command, parent and uptime, say what the command will do to it, and wait for a yes. A PID or port the user named is approval only for that target, and only if the preview shows what they described. With nobody to ask, report instead of acting.
 5. **`--yes` is the user's consent to one specific list. It is never a retry flag.** Pass it only on PID or port targets that are yours or were approved from a preview. Never pass it with a name.
 6. **Exit 4 with `needs_confirmation: true` means nothing changed.** `processes` is what the command would have touched. Show it to the user. Do not re-run with `--yes` until rule 4 is met, and then re-run by the PIDs you showed, not by the original name.
-7. **Act by PID, always guarded, and verify.** Every `stop` or `kill` by PID carries `--by <name>` and `--in=<cwd>` copied from the preview, so a recycled PID matches nothing and exits 2. Use one command per name when PIDs differ. If the preview cwd is `/` or missing (daemons), `--in` never matches: keep `--by` and drop `--in`. Afterwards check each PID with its own `proc info <pid> --json` (exit 2 means gone; a call with several PIDs exits 2 only when all are gone).
+7. **Act by PID, always guarded, and verify.** Every `stop` or `kill` by PID carries `--by <name>` and `--in=<cwd>` copied from the preview, so a recycled PID matches nothing and exits 2. Use one command per name when PIDs differ. If the preview has no `cwd` (daemons), `--in` never matches: keep `--by` and drop `--in`. If the cwd is `/`, `--in=/` matches but scopes nothing, so drop it too. Afterwards check each PID with its own `proc info <pid> --json` (exit 2 means gone; a call with several PIDs exits 2 only when all are gone).
 
 Never do these: `--yes` with a name; `orphans --kill` or `stuck --kill`; `kill` before `stop` has been tried; `sudo` without asking; targeting an ancestor of your own process (check `proc tree $$ --ancestors --json`); treating `--in .` as proof of ownership. proc skips itself and its ancestor shells only for name targets. A PID or port target is never protected.
 
@@ -94,7 +94,7 @@ proc kill <name> --in=<dir> --dry-run --json     # a search, not an action
 proc stop <pid> --in=<cwd> --by <name> --yes --json   # per approved PID, values from the preview
 ```
 
-Run the first line with `stop` or `kill`, whichever the user asked for. Show the preview (rule 4). If the user approves, act by the PIDs you showed. If the preview is empty with exit 2 and the error says "N processes have '<name>' in their command line", show that hint to the user. To see `--cmd` matches, run `proc by <name> --cmd --json` (read-only) or add `--dry-run` to the action. Never combine `--cmd` with `--yes`.
+Run the first line with `stop` or `kill`, whichever the user asked for. Show the preview (rule 4). If the user approves, act by the PIDs you showed. If the preview exits 2, the name may still appear in some command lines, but the JSON error of `kill` and `stop` does not say so. Run `proc by <name> --json`: its error reads "N processes have '<name>' in their command line (add --cmd to match those)". Show that to the user. To see `--cmd` matches, run `proc by <name> --cmd --json` (read-only) or add `--dry-run` to the action. Never combine `--cmd` with `--yes`.
 
 ### Clean up before you finish
 

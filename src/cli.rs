@@ -34,9 +34,9 @@ Run 'proc --help' for examples or visit https://github.com/yazeed/proc-cli"
     proc on node                   What ports are the processes named node using?
 
   Find by File:
-    proc for ./script.py           What's running this file?
+    proc for ./server              Processes running this program (or holding it open)
     proc for /usr/bin/node         Processes running this executable
-    proc for app.log               What has this file open?
+    proc for app.log               What has this file open? (not searched on Windows)
 
   Filter by Name:
     proc by node                   Processes named 'node' (the whole name)
@@ -88,14 +88,15 @@ Run 'proc --help' for examples or visit https://github.com/yazeed/proc-cli"
     proc wait node -n 10 -q        Check every 10s, quiet mode
 
   Other:
-    proc ports                     List all listening ports
+    proc ports                     List all listening TCP ports
     proc tree --min-cpu 5          Process tree filtered by CPU
     proc stuck                     Find hung processes
     proc unstick --force           Recover or terminate stuck processes
-    proc stop nginx --signal HUP   Send custom signal (config reload)
+    proc stop nginx --signal USR1  Send a different first signal (force-killed after --timeout if it lives)
 
 Targets: :port, PID, or process name. Give several as separate arguments.
-A name matches the whole process name, ignoring case, like killall and pkill:
+A name matches the process name, the file name of its executable or the file name
+of its first argument, ignoring case (like pkill -x, but case-insensitive):
 'node' does not match 'Claude Helper'. Add --cmd to match any part of the name
 or the full command line instead (like pkill -f). A path is not a name: use
 --cmd, or 'proc for <file>' for an executable. proc doesn't expand wildcards;
@@ -138,7 +139,7 @@ pub enum Commands {
     #[command(visible_aliases = ["i", "inspect"])]
     Info(InfoCommand),
 
-    /// List all listening ports
+    /// List all listening TCP ports
     #[command(visible_alias = "p")]
     Ports(PortsCommand),
 

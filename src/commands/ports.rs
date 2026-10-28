@@ -1,11 +1,11 @@
-//! `proc ports` - List all listening ports
+//! `proc ports` - List all listening TCP ports
 //!
 //! Examples:
-//!   proc ports              # Show all listening ports
+//!   proc ports              # Show all listening TCP ports
 //!   proc ports --by node     # Only ports of the processes named node
 //!   proc ports --by node --cmd  # ... or with node anywhere in their command line
-//!   proc ports --exposed    # Only network-accessible ports (0.0.0.0)
-//!   proc ports --local      # Only localhost ports (127.0.0.1)
+//!   proc ports --exposed    # Only network-accessible ports (0.0.0.0, ::)
+//!   proc ports --local      # Only localhost ports (127.0.0.1, ::1)
 //!   proc ports -v           # Show with executable paths
 
 use crate::core::{matches_name, resolve_in_dir, NameMatch, Names, PortInfo, PortSortKey, Process};
@@ -58,7 +58,7 @@ fn parse_port_range(s: &str) -> std::result::Result<(u16, u16), String> {
     Ok((start, end))
 }
 
-/// List all listening ports
+/// List all listening TCP ports
 #[derive(Args, Debug)]
 pub struct PortsCommand {
     /// Filter by process name
@@ -104,7 +104,7 @@ pub struct PortsCommand {
 }
 
 impl PortsCommand {
-    /// Executes the ports command, listing all listening network ports.
+    /// Executes the ports command, listing all listening TCP ports.
     pub fn execute(&self) -> Result<()> {
         let mut ports = PortInfo::get_all_listening()?;
 

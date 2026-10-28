@@ -11,18 +11,18 @@
 //! - **Working Directory**: See which project folder a process is running from
 //! - **Terminal-Adaptive Tables**: Tables adjust to terminal width automatically
 //! - **Consistent Filters**: `--in`, `--by`, `--min-uptime`, `--parent`, `--range`, `--sort`, `--limit`
-//! - **JSON Output**: `--json` on every command — one `{action, success, ...}` document per command, and `success: false` always exits non-zero
-//! - **Custom Signals**: `proc stop nginx --signal HUP` - send any signal via `--signal`
+//! - **JSON Output**: `--json` on every command except `completions` and `manpage` — one `{action, success, ...}` document per run (`watch` streams one per refresh), and `success: false` always exits non-zero
+//! - **Custom Signals**: `proc stop worker --signal INT` - send a different first signal; whatever is still running after `--timeout` is force-killed
 //! - **Real-Time Monitoring**: `proc watch` / `proc top` - live process table (TUI on a terminal, NDJSON stream with `--json`)
 //! - **Process Waiting**: `proc wait node` - block until process(es) exit (pipe-friendly)
 //! - **Freeze/Thaw**: `proc freeze` / `proc thaw` - pause and resume by port, PID, or name
 //! - **Port Freeing**: `proc free :3000` - kill and verify port is available
 //! - **Ancestry Tracing**: `proc why :3000` - trace why a port is busy
 //! - **Orphan Detection**: `proc orphans` - find abandoned child processes
-//! - **File Lookup**: `proc for ./script.py` - find by file path
+//! - **File Lookup**: `proc for ./server` - find by file path
 //! - **Cross-Platform**: macOS, Linux, and Windows
-//! - **Shell Completions**: bash, zsh, fish via `proc completions`
-//! - **Man Pages**: `proc manpage` generates documentation
+//! - **Shell Completions**: bash, zsh, fish, elvish, PowerShell via `proc completions`
+//! - **Man Pages**: `proc manpage` generates the top-level page (commands and examples; per-command flags are in `proc <command> --help`)
 //!
 //! ## Quick Start
 //!
@@ -30,8 +30,8 @@
 //! # What's on port 3000?
 //! proc on :3000
 //!
-//! # What's running this file?
-//! proc for ./script.py
+//! # What has this file open, or runs it as its program?
+//! proc for ./server
 //!
 //! # Kill multiple targets
 //! proc kill :3000 :8080 node
@@ -60,8 +60,8 @@
 //! # Pause and resume
 //! proc freeze node && proc thaw node
 //!
-//! # Send custom signal
-//! proc stop nginx --signal HUP
+//! # Ask politely with SIGINT instead of SIGTERM
+//! proc stop worker --signal INT
 //!
 //! # JSON output for scripting/LLMs
 //! proc by node --json
@@ -83,7 +83,10 @@
 //! ## Exit Codes
 //!
 //! `0` success, `1` error or partial failure (including `wait` timeouts),
-//! `2` not found, `3` permission denied, `4` invalid input (including unknown flags).
+//! `2` not found, `3` permission denied, `4` invalid input (including unknown flags),
+//! an action this OS does not support, or a command that changes processes run
+//! without `--yes` where nobody can confirm (`--json`, or no terminal): nothing
+//! was changed.
 
 pub mod cli;
 pub mod commands;

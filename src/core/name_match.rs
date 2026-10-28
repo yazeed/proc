@@ -1,7 +1,7 @@
 //! How a name target (and a `--by` filter) is compared with a process.
 //!
-//! By default a name matches a process the way `killall` and `pkill` do: the
-//! whole name, equal ignoring case. `--cmd` matches the way `pkill -f` does:
+//! By default a name matches a process the way `pkill -x` does, except that case
+//! is ignored: the whole name, equal ignoring case. `--cmd` matches the way `pkill -f` does:
 //! the text anywhere in the name or the full command line. The default is the
 //! safe one: `proc kill node` must not reach "Claude Helper" or an editor
 //! whose command line happens to mention node.

@@ -1,6 +1,8 @@
 //! Unstick command - Attempt to recover stuck processes
 //!
-//! Tries gentle recovery signals. Only terminates with --force.
+//! Tries gentle recovery signals first. SIGINT can end a process that does not
+//! handle it, with or without --force; SIGTERM and SIGKILL are sent only with
+//! --force.
 //!
 //! Recovery sequence:
 //! 1. SIGCONT (wake if stopped)
@@ -82,7 +84,7 @@ pub struct UnstickCommand {
 #[derive(Debug, Clone, PartialEq)]
 enum Outcome {
     Recovered,  // Process unstuck and still running
-    Terminated, // Had to kill it (only with --force)
+    Terminated, // Gone: killed with --force, or ended by the SIGINT step
     StillStuck, // Could not recover, not terminated (no --force)
     NotStuck,   // Process wasn't stuck to begin with
     Failed(String),

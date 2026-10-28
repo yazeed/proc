@@ -1,7 +1,7 @@
 {
   "name": "proc-cli",
   "version": "1.14.5",
-  "description": "Semantic CLI tool for process management. Target by port, process id (PID), name or path.",
+  "description": "Semantic CLI tool for process management. Target by port, PID, name or path.",
   "keywords": [
     "process",
     "management",
@@ -23,7 +23,7 @@
     "proc": "run.js"
   },
   "engines": {
-    "node": ">=14"
+    "node": ">=14.14"
   },
   "os": [
     "darwin",

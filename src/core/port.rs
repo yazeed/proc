@@ -168,7 +168,8 @@ impl PortInfo {
 
     /// Linux: read the kernel's socket tables directly, as `ss` does, so nothing
     /// needs to be installed. Listening sockets come from /proc/net/tcp and tcp6,
-    /// and each socket's process is the one with that socket open in /proc/<pid>/fd.
+    /// and each socket's holders are all the processes with that socket open in
+    /// /proc/<pid>/fd (a master and its workers share one).
     /// Sockets of other users' processes have no visible owner without root, so
     /// they are left out, as with `ss -p`.
     #[cfg(target_os = "linux")]

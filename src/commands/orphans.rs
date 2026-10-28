@@ -13,7 +13,7 @@ use crate::ui::{must_confirm, plural, Printer};
 use clap::Args;
 use dialoguer::Confirm;
 
-/// Find orphaned processes (parent has exited)
+/// Find orphaned processes (re-parented to PID 1: init/launchd; includes processes launchd started itself)
 #[derive(Args, Debug)]
 pub struct OrphansCommand {
     /// Kill found orphaned processes
@@ -55,7 +55,7 @@ pub struct OrphansCommand {
 }
 
 impl OrphansCommand {
-    /// Executes the orphans command, finding processes whose parent has exited.
+    /// Executes the orphans command, finding processes whose parent is PID 1.
     pub fn execute(&self) -> Result<()> {
         let printer = Printer::from_flags(self.json, self.verbose).wide(self.wide);
 

@@ -1,6 +1,6 @@
 # proc-cli
 
-Semantic CLI tool for process management. Target by port, process id (PID), name or path.
+Semantic CLI tool for process management. Target by port, PID, name or path.
 
 ## Install
 

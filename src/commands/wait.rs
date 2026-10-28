@@ -54,7 +54,7 @@ pub struct WaitCommand {
     #[arg(long)]
     pub cmd: bool,
 
-    /// Suppress periodic status messages (only print final result)
+    /// Don't print the periodic still-running lines; the start, each exit and the result still print
     #[arg(long, short = 'q')]
     quiet: bool,
 }
