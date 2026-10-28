@@ -76,6 +76,12 @@ struct Owned {
     /// individually, so it can't hit a PID that has been reused.
     #[cfg_attr(not(unix), allow(dead_code))]
     group: Option<i32>,
+    /// With `--respawn` on Windows, which has no fork or process group: the PID
+    /// of the copy the listener started, which takes the port after the parent
+    /// is gone. Read from the listener's own `CHILD <pid>` line, and stopped on
+    /// drop by that PID, only while it is still a `listener` process.
+    #[cfg(windows)]
+    takeover: std::cell::Cell<Option<u32>>,
 }
 
 impl Owned {
@@ -114,6 +120,8 @@ impl Owned {
             group: args
                 .contains(&"--respawn")
                 .then(|| i32::try_from(child_id).expect("pid fits")),
+            #[cfg(windows)]
+            takeover: std::cell::Cell::new(None),
         };
         // Checked only now, with `owned` already holding the group: a panic here
         // drops it, which kills the parent and the forked copy
@@ -125,6 +133,8 @@ impl Owned {
                 .strip_prefix("CHILD ")
                 .and_then(|p| p.parse::<u32>().ok());
             assert!(child_pid.is_some(), "expected `CHILD <pid>`, got {line:?}");
+            #[cfg(windows)]
+            owned.takeover.set(child_pid);
         }
         owned
     }
@@ -164,6 +174,22 @@ impl Drop for Owned {
             unsafe {
                 libc::kill(-group, libc::SIGKILL);
             }
+        }
+        #[cfg(windows)]
+        if let Some(pid) = self.takeover.get() {
+            // The copy was started by the listener this test started. The image
+            // filter keeps a reused PID from being anything but a listener.
+            let _ = std::process::Command::new("taskkill")
+                .args([
+                    "/F",
+                    "/PID",
+                    &pid.to_string(),
+                    "/FI",
+                    "IMAGENAME eq listener.exe",
+                ])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status();
         }
         let _ = self.child.kill();
         let _ = self.child.wait();
@@ -299,9 +325,9 @@ fn free_force_kills_a_holder_that_ignores_sigterm() {
     assert!(held.ended_within(Duration::from_secs(5)), "{out}");
 }
 
-/// A copy forked off the holder takes the port the moment the holder is killed,
-/// so the port is in use again: `free` reports it instead of claiming it free
-#[cfg(unix)]
+/// A copy started by the holder (forked on Unix, a new process on Windows) takes
+/// the port the moment the holder is killed, so the port is in use again: `free`
+/// reports it instead of claiming it free
 #[test]
 fn free_reports_a_port_that_stays_in_use() {
     let held = Owned::start(&["--respawn"]);
@@ -313,7 +339,6 @@ fn free_reports_a_port_that_stays_in_use() {
     );
 }
 
-#[cfg(unix)]
 #[test]
 fn free_json_reports_a_port_that_stays_in_use() {
     let held = Owned::start(&["--respawn"]);

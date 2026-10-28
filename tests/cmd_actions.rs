@@ -583,61 +583,106 @@ fn wait_with_a_filter_that_matches_nothing_is_not_found() {
     assert_eq!(r.code, 2, "{}{}", r.stdout, r.stderr);
 }
 
-/// Children of this test that exit by themselves and are not reaped until drop,
-/// so once they exit they are zombies: gone, but with their PID still taken
-#[cfg(unix)]
-struct Short(Child);
+/// A child of this test that exits by itself after about `secs` seconds. On Unix
+/// the test keeps it unreaped until drop, so once it exits it is a zombie: gone,
+/// but with its PID still taken. Windows has no zombies, and a process there
+/// whose exit status is still held may stay in the process list, so a thread
+/// reaps it the moment it ends and the test keeps nothing but its PID.
+struct Short {
+    pid: u32,
+    #[cfg(unix)]
+    child: Child,
+}
 
-#[cfg(unix)]
 impl Short {
     fn sleeping(secs: &str) -> Self {
-        Short(
-            std::process::Command::new("sleep")
-                .arg(secs)
-                .spawn()
-                .unwrap(),
-        )
+        #[cfg(unix)]
+        let mut command = {
+            let mut command = std::process::Command::new("sleep");
+            command.arg(secs);
+            command
+        };
+        // ping sends one request a second, so n requests last n - 1 seconds
+        #[cfg(windows)]
+        let mut command = {
+            let mut command = std::process::Command::new("ping");
+            command.args(["-n", &(secs.parse::<u32>().unwrap() + 1).to_string()]);
+            command.arg("127.0.0.1");
+            command
+        };
+        let child = command
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let pid = child.id();
+        #[cfg(windows)]
+        {
+            // reaped the moment it ends, by a thread that outlasts it by nothing
+            let mut child = child;
+            std::thread::spawn(move || {
+                let _ = child.wait();
+            });
+        }
+        Short {
+            pid,
+            #[cfg(unix)]
+            child,
+        }
+    }
+
+    fn id(&self) -> u32 {
+        self.pid
     }
 }
 
 #[cfg(unix)]
 impl Drop for Short {
     fn drop(&mut self) {
-        let _ = self.0.kill();
-        let _ = self.0.wait();
+        let _ = self.child.kill();
+        let _ = self.child.wait();
     }
 }
 
-#[cfg(unix)]
 #[test]
-fn wait_json_counts_zombies_as_exited_and_reports_each() {
+fn wait_json_counts_exits_and_reports_each() {
     let first = Short::sleeping("1");
     let second = Short::sleeping("2");
-    let targets = format!("{},{}", first.0.id(), second.0.id());
+    let targets = format!("{},{}", first.id(), second.id());
     let (json, code) = run_json(&["wait", &targets, "--timeout", "60", "--json"]);
     assert_eq!(code, 0, "{json}");
     assert_eq!(json["success"], true, "{json}");
     assert_eq!(json["timed_out"], false, "{json}");
     assert_eq!(json["initial_count"], 2, "{json}");
     assert!(json["still_running"].as_array().unwrap().is_empty());
-    assert!(lists(&json, "exited", first.0.id()), "{json}");
-    assert!(lists(&json, "exited", second.0.id()), "{json}");
+    assert!(lists(&json, "exited", first.id()), "{json}");
+    assert!(lists(&json, "exited", second.id()), "{json}");
     assert!(json["exited"][0]["exited_after_seconds"].is_u64(), "{json}");
     assert!(json["elapsed_human"].is_string(), "{json}");
 }
 
-#[cfg(unix)]
 #[test]
 fn wait_json_timeout_reports_the_exited_and_the_still_running() {
     let short = Short::sleeping("1");
     let long = Owned::listener();
-    let targets = format!("{},{}", short.0.id(), long.pid());
+    let targets = format!("{},{}", short.id(), long.pid());
     let (json, code) = run_json(&["wait", &targets, "--timeout", "4", "--json"]);
     assert_eq!(code, 1, "{json}");
     assert_eq!(json["timed_out"], true, "{json}");
-    assert!(lists(&json, "exited", short.0.id()), "{json}");
+    assert!(lists(&json, "exited", short.id()), "{json}");
     assert!(lists(&json, "still_running", long.pid()), "{json}");
     assert_eq!(json["initial_count"], 2, "{json}");
+}
+
+/// No `--timeout` (the default is none): wait for as long as it takes
+#[test]
+fn wait_without_a_timeout_waits_for_the_exit() {
+    let short = Short::sleeping("2");
+    let (json, code) = run_json(&["wait", &short.id().to_string(), "--json"]);
+    assert_eq!(code, 0, "{json}");
+    assert_eq!(json["timed_out"], false, "{json}");
+    assert!(lists(&json, "exited", short.id()), "{json}");
 }
 
 // ---- stop ----
@@ -778,6 +823,32 @@ fn stop_ends_a_process_and_says_so() {
     assert!(r.stdout.contains("Stopped 1 process"), "{}", r.stdout);
     assert!(r.stdout.contains(&format!("[PID {pid}]")), "{}", r.stdout);
     assert!(owned.ended_within(Duration::from_secs(15)));
+}
+
+/// A process that ends by itself while `stop` waits for it is not killed.
+/// It is given 8 seconds to live; if proc is slow enough to start that the
+/// process is gone before it is looked up (exit 2), try again with a new one.
+#[test]
+fn stop_waits_for_a_process_that_ends_by_itself_within_the_timeout() {
+    for _ in 0..3 {
+        let short = Short::sleeping("8");
+        let (json, code) = run_json(&[
+            "stop",
+            &short.id().to_string(),
+            "--yes",
+            "--timeout",
+            "60",
+            "--json",
+        ]);
+        if code == 2 {
+            continue;
+        }
+        assert_eq!(code, 0, "{json}");
+        assert_eq!(json["success"], true, "{json}");
+        assert_eq!(json["succeeded_count"], 1, "{json}");
+        return;
+    }
+    panic!("proc never found the process before it ended");
 }
 
 #[test]

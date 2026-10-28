@@ -538,6 +538,19 @@ fn for_several_processes_shows_a_table_and_who_listens_where() {
     assert!(out.contains(&format!(":{}", second.port)), "{out}");
 }
 
+/// Several processes with no port to list: the table, and no `Listening:` list
+#[test]
+fn for_several_processes_that_listen_on_nothing_shows_only_the_table() {
+    let first = Owned::with_args(&["--no-port"]);
+    let second = Owned::start(&["--no-port"], Some(&first.exe));
+    let (out, code) = run_text(&["for", &first.exe()]);
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("Found 2 processes for"), "{out}");
+    assert!(out.contains(&first.pid().to_string()), "{out}");
+    assert!(out.contains(&second.pid().to_string()), "{out}");
+    assert!(!out.contains("Listening:"), "{out}");
+}
+
 #[test]
 fn for_json_lists_each_process_with_its_ports() {
     let p = Owned::listener();
