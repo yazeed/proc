@@ -13,8 +13,9 @@ Line hits are merged across all lcov files (covered if hit in any). Lines in
 the exclusions file (`src/path.rs:START-END  reason`, reason required, `#` comments) are dropped;
 an exclusion that hides no uncovered line is reported as stale (a failure under
 --enforce).
-Prints per-file covered/total and every uncovered `src/path.rs:LINE`; with
---enforce, exits 1 if any line is uncovered or a stale exclusion remains.
+Prints per-file covered/total and every uncovered `src/path.rs:LINE`, then each
+input lcov's own TOTAL line, labelled by its file name (for information only:
+the merged result is the only rule); with --enforce, exits 1 if any line is uncovered or a stale exclusion remains.
 --enforce without any --require is an error. Also under --enforce: each --require NAME must match (as a substring of the
 file name) exactly one lcov file and every lcov file must match one, so a
 failed OS job cannot slip through as a partial merge; and a src file with no
@@ -139,10 +140,14 @@ def main():
 
     sources = repo_sources(Path(args.repo_root))
     hits = {}
+    per_file_hits = []  # (lcov path, its own hits)
     for path in args.lcov:
         if not Path(path).is_file():
             # an unmatched shell glob arrives as the literal pattern
             sys.exit(f"no lcov file at {path}: did every coverage job fail?")
+        own = {}
+        parse_lcov(path, sources, own)
+        per_file_hits.append((path, own))
         parse_lcov(path, sources, hits)
     excluded, entries = (
         parse_exclusions(args.exclusions, set(sources)) if args.exclusions else ({}, [])
@@ -169,6 +174,17 @@ def main():
 
     pct = 100.0 * covered / total if total else 100.0
     print(f"{'TOTAL':<32} {f'{covered}/{total}':>14}  {pct:5.1f}%")
+    if len(per_file_hits) > 1:
+        print("\nPer lcov file (information only; the merged TOTAL is the rule):")
+        for path, own in per_file_hits:
+            own_total = own_covered = 0
+            for rel, lines in own.items():
+                kept = [c for n, c in lines.items() if n not in excluded.get(rel, ())]
+                own_total += len(kept)
+                own_covered += sum(1 for c in kept if c > 0)
+            own_pct = 100.0 * own_covered / own_total if own_total else 100.0
+            label = Path(path).name
+            print(f"{label:<32} {f'{own_covered}/{own_total}':>14}  {own_pct:5.1f}%")
     if hidden:
         print("\nLines hidden by exclusions (uncovered, excluded):")
         for rel in sorted(hidden):

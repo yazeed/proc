@@ -80,6 +80,21 @@ class GateTest(unittest.TestCase):
         self.assertIn("src/a.rs:5", r.stdout)
         self.assertIn("src/a.rs:7", r.stdout)
 
+    def test_each_lcov_gets_its_own_total_line_and_it_decides_nothing(self):
+        r = self.run_gate(self.mac, self.win)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        # mac.info hits lines 1, 2 of 6; win.info only line 3
+        self.assertRegex(r.stdout, r"mac\.info\s+2/6\s+33\.3%")
+        self.assertRegex(r.stdout, r"win\.info\s+1/6\s+16\.7%")
+        self.assertRegex(r.stdout, r"TOTAL\s+3/6\s+50\.0%")
+        # a per-platform shortfall is not a failure: only the merged result is
+        r = self.run_gate(self.mac, self.win, "--enforce", *REQUIRE_BOTH)
+        self.assertEqual(r.returncode, 1)
+        ex = self.write("ex.txt", "src/a.rs:5-7  fixture\n")
+        r = self.run_gate(self.mac, self.win, "--exclusions", ex, "--enforce", *REQUIRE_BOTH)
+        self.assertEqual(r.returncode, 0, r.stdout)
+        self.assertRegex(r.stdout, r"mac\.info\s+2/3\s+66\.7%")
+
     def test_single_file_leaves_line_three_uncovered(self):
         r = self.run_gate(self.mac)
         self.assertIn("src/a.rs:3", r.stdout)
