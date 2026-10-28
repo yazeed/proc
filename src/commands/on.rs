@@ -203,10 +203,10 @@ impl OnCommand {
             .filter(|(_, process)| process.as_ref().is_none_or(|p| self.matches_filters(p)))
             .collect();
         if kept.is_empty() {
-            return Err(ProcError::ProcessNotFound(format!(
-                "port {} (process not in specified directory)",
-                port
-            )));
+            return Err(ProcError::FilteredOut {
+                target: format!(":{port}"),
+                reason: "process not in specified directory".to_string(),
+            });
         }
 
         // Real CPU reading for what's shown
@@ -259,10 +259,10 @@ impl OnCommand {
 
         // Apply --in and --by filters if present
         if !self.matches_filters(&process) {
-            return Err(ProcError::ProcessNotFound(format!(
-                "PID {} (not in specified directory)",
-                pid
-            )));
+            return Err(ProcError::FilteredOut {
+                target: pid.to_string(),
+                reason: "not in specified directory".to_string(),
+            });
         }
 
         let ports = find_ports_for_pid(pid)?;
@@ -304,10 +304,10 @@ impl OnCommand {
         if self.in_dir.is_some() || self.by_name.is_some() {
             processes.retain(|p| self.matches_filters(p));
             if processes.is_empty() {
-                return Err(ProcError::ProcessNotFound(format!(
-                    "{} (no matches with specified filters)",
-                    name
-                )));
+                return Err(ProcError::FilteredOut {
+                    target: name.to_string(),
+                    reason: "no matches with specified filters".to_string(),
+                });
             }
         }
 
@@ -666,7 +666,7 @@ mod tests {
         let none = command(Some("/definitely/not/here/either"))
             .filter_holders(4000, holders[..1].to_vec());
         assert!(
-            matches!(&none, Err(ProcError::ProcessNotFound(m)) if m.starts_with("port 4000")),
+            matches!(&none, Err(ProcError::FilteredOut { target, .. }) if target == ":4000"),
             "{none:?}"
         );
     }

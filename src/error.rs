@@ -22,6 +22,18 @@ pub enum ProcError {
         in_command_line: usize,
     },
 
+    /// A target exists but `--in` or `--by` ruled out everything it matched.
+    /// The target sits in the quotes and the reason follows them.
+    #[error(
+        "No process found matching '{target}' ({reason})\n  Try: proc list to list all processes"
+    )]
+    FilteredOut {
+        /// The target as typed (`node`, `:3000`, `1234`)
+        target: String,
+        /// Which filter ruled it out
+        reason: String,
+    },
+
     /// No process is listening on the specified port
     #[error("No process listening on port {0}\n  Try: proc ports")]
     PortNotFound(u16),
@@ -166,6 +178,7 @@ impl From<&ProcError> for ExitCode {
         match err {
             ProcError::ProcessNotFound(_)
             | ProcError::NameNotFound { .. }
+            | ProcError::FilteredOut { .. }
             | ProcError::PortNotFound(_) => ExitCode::NotFound,
             ProcError::PermissionDenied(_) => ExitCode::PermissionDenied,
             ProcError::InvalidInput(_)
@@ -212,6 +225,14 @@ mod tests {
                     in_command_line: 2,
                 },
                 "No process found matching 'serve'\n  2 processes have 'serve' in their command line (add --cmd to match those)\n  Try: proc list to list all processes",
+                2,
+            ),
+            (
+                ProcError::FilteredOut {
+                    target: "node".to_string(),
+                    reason: "no matches with specified filters".to_string(),
+                },
+                "No process found matching 'node' (no matches with specified filters)\n  Try: proc list to list all processes",
                 2,
             ),
             (

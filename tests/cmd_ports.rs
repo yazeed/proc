@@ -294,9 +294,39 @@ fn on_port_keeps_the_process_only_when_it_passes_in_and_by() {
 
     let (out, err, code) = run_text(&["on", &p.target(), "--in", &other]);
     assert_eq!(code, 2, "{out}{err}");
-    assert!(err.contains("process not in specified directory"), "{err}");
+    assert_eq!(
+        err.lines()
+            .next()
+            .unwrap_or_default()
+            .trim_start_matches("Error: "),
+        format!(
+            "No process found matching '{}' (process not in specified directory)",
+            p.target()
+        ),
+        "the target sits in the quotes, the reason follows them: {err}"
+    );
     let (out, err, code) = run_text(&["on", &p.target(), "--by", "no-such-process-name"]);
     assert_eq!(code, 2, "{out}{err}");
+}
+
+/// `list` and `by` take process names, never targets: a colon is part of the
+/// name, so `:70000` is not an impossible port there but a name nothing has, and
+/// `:<port>` of a live listener does not find the process holding that port.
+#[test]
+fn list_and_by_read_a_colon_word_as_a_name_not_a_port() {
+    let p = Owned::listener();
+    for word in [":70000".to_string(), p.target()] {
+        let (json, code) = run_json(&["list", &word, "--json"]);
+        assert_eq!(code, 0, "list {word}: {json}");
+        assert_eq!(json["count"], 0, "list {word}: {json}");
+
+        let (out, err, code) = run_text(&["by", &word]);
+        assert_eq!(code, 2, "by {word}: {out}{err}");
+        assert!(
+            err.contains(&format!("No process found matching '{word}'")),
+            "by {word}: {err}"
+        );
+    }
 }
 
 // ---- on: process to ports ----
@@ -361,7 +391,17 @@ fn on_pid_outside_in_or_by_exits_not_found() {
     let (_other, other) = other_dir();
     let (out, err, code) = run_text(&["on", &p.pid_arg(), "--in", &other]);
     assert_eq!(code, 2, "{out}{err}");
-    assert!(err.contains("not in specified directory"), "{err}");
+    assert_eq!(
+        err.lines()
+            .next()
+            .unwrap_or_default()
+            .trim_start_matches("Error: "),
+        format!(
+            "No process found matching '{}' (not in specified directory)",
+            p.pid_arg()
+        ),
+        "the target sits in the quotes, the reason follows them: {err}"
+    );
 
     let (out, err, code) = run_text(&["on", &p.pid_arg(), "--by", "no-such-process-name"]);
     assert_eq!(code, 2, "{out}{err}");
@@ -408,7 +448,17 @@ fn on_name_applies_in_and_by() {
 
     let (out, err, code) = run_text(&["on", &p.name, "--in", &other]);
     assert_eq!(code, 2, "{out}{err}");
-    assert!(err.contains("no matches with specified filters"), "{err}");
+    assert_eq!(
+        err.lines()
+            .next()
+            .unwrap_or_default()
+            .trim_start_matches("Error: "),
+        format!(
+            "No process found matching '{}' (no matches with specified filters)",
+            p.name
+        ),
+        "the target sits in the quotes, the reason follows them: {err}"
+    );
 
     let (out, err, code) = run_text(&["on", &p.name, "--by", "no-such-process-name"]);
     assert_eq!(code, 2, "{out}{err}");
