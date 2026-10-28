@@ -51,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Printing helpers nothing called.** `Printer::error`, `Printer::print_ports`, `Printer::print_port_info` and `Printer::print_kill_result` (in `proc_cli::ui::output`) are gone, along with the output types behind the two port printers. proc itself never used them: `ports` and `on` print through their own code, and `kill` reports through `print_action_result`
 - **Two library functions nothing called.** `proc_cli::core::resolve_target_single` and `Process::wait` are gone. proc itself never used them: every command resolves targets with `resolve_targets` (or `resolve_target`), and `proc wait` polls for the exit instead of calling `Process::wait`
+- **Unused dependencies `tokio`, `anyhow` and `indicatif`.** Nothing in proc used them; builds are smaller and faster (20 fewer crates to compile)
 
 ### Fixed
 

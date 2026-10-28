@@ -30,22 +30,17 @@ unicode-width = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-# Async Runtime
-tokio = { version = "1.41", features = ["full"] }
-
 # Cross-platform process/system info
 sysinfo = "0.38"
 
 # User Interaction
 dialoguer = "0.12"
-indicatif = "0.18"
 
 # Regex (for pattern matching)
 regex = "1.11"
 
 # Error handling
 thiserror = "2.0"
-anyhow = "1.0"
 
 # Unix-specific (for signals)
 [target.'cfg(unix)'.dependencies]
