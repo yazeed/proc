@@ -48,10 +48,22 @@ fn listener_path() -> PathBuf {
     path
 }
 
-/// A port nothing listens on: one the OS just handed out and took back
+/// A port nothing listens on, from below every OS's ephemeral range (Linux
+/// starts at 32768, macOS and Windows at 49152), so a listener another test
+/// binds to port 0 can never be handed it. A port the OS just handed out and
+/// took back could be: on CI a parallel test's listener got one between the
+/// lookup and proc's run
 fn unused_port() -> u16 {
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    listener.local_addr().unwrap().port()
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    let start = 20_000 + std::process::id() as usize % 10_000;
+    loop {
+        let port = start + NEXT.fetch_add(1, Ordering::SeqCst);
+        assert!(port < 32_768, "no unused port below the ephemeral range");
+        if TcpListener::bind(("0.0.0.0", port as u16)).is_ok() {
+            return port as u16;
+        }
+    }
 }
 
 /// A listener the test owns. Killed and reaped on drop, whatever a test did to it.

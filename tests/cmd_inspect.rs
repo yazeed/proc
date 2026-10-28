@@ -69,13 +69,21 @@ fn nobody() -> String {
     format!("nobody-{}-{n}x", std::process::id())
 }
 
-/// A port nothing listens on right now: one that was just free to bind
+/// A port nothing listens on, from below every OS's ephemeral range (Linux
+/// starts at 32768, macOS and Windows at 49152), so a listener another test
+/// binds to port 0 can never be handed it. A port the OS just handed out and
+/// took back could be: on CI a parallel test's listener got one between the
+/// lookup and proc's run
 fn free_port() -> u16 {
-    std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port()
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    let start = 20_000 + std::process::id() as usize % 10_000;
+    loop {
+        let port = start + NEXT.fetch_add(1, Ordering::SeqCst);
+        assert!(port < 32_768, "no unused port below the ephemeral range");
+        if std::net::TcpListener::bind(("0.0.0.0", port as u16)).is_ok() {
+            return port as u16;
+        }
+    }
 }
 
 /// Run the copy, with its cwd in `dir`. On Linux a file another thread has
