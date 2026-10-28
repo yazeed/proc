@@ -44,6 +44,24 @@ impl Drop for TestChild {
     }
 }
 
+/// Makes the command's child start with SIGINT at its default. A test run
+/// started from a background job (a trailing `&`, as cargo may be run) has
+/// SIGINT ignored, every child inherits that, and a shell cannot take it back:
+/// measured, `unstick` then sees SIGINT do nothing to a busy loop and reports it
+/// `still_stuck`. Step 2 of `unstick` needs the default, so a test that expects
+/// SIGINT to end its child sets it.
+fn default_sigint(command: &mut StdCommand) -> &mut StdCommand {
+    use std::os::unix::process::CommandExt;
+    // SAFETY: only signal(2), which is async-signal-safe, runs between fork and exec
+    unsafe {
+        command.pre_exec(|| {
+            libc::signal(libc::SIGINT, libc::SIG_DFL);
+            Ok(())
+        });
+    }
+    command
+}
+
 /// Run proc with a hard time limit; returns the JSON, the exit code (None if
 /// proc had to be killed at the limit) and how long it took in seconds.
 fn run_json_timed(args: &[&str], limit_secs: u64) -> (Value, Option<i32>, f64) {
@@ -115,8 +133,7 @@ fn unstick_sees_a_spinning_process_as_stuck() {
     // anything, so a targeted unstick called every process "not stuck". A
     // shell busy loop is stuck by any measure, and SIGINT (step 2) ends it.
     let spinning = TestChild(
-        StdCommand::new("sh")
-            .args(["-c", "while :; do :; done"])
+        default_sigint(StdCommand::new("sh").args(["-c", "while :; do :; done"]))
             .spawn()
             .unwrap(),
     );
