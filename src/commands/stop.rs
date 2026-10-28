@@ -133,13 +133,7 @@ impl StopCommand {
             if let Some(signal) = custom_signal {
                 return proc.send_signal(signal);
             }
-            match proc.terminate() {
-                // Windows can't ask a console program to close (taskkill
-                // without /F needs a window); it still gets stopped, by the
-                // force kill after --timeout
-                Err(_) if cfg!(not(unix)) && proc.is_running() => Ok(()),
-                result => result,
-            }
+            ask_to_end(proc)
         });
 
         let outlived = self.wait_for_exit(&signalled);
@@ -171,5 +165,47 @@ impl StopCommand {
             }
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
+    }
+}
+
+/// Ask one process to end (SIGTERM; on Windows, `taskkill` without `/F`)
+fn ask_to_end(proc: &Process) -> Result<()> {
+    match proc.terminate() {
+        // Windows can't ask a console program to close (taskkill without /F
+        // needs a window); it still gets stopped, by the force kill after
+        // --timeout
+        Err(_) if cfg!(not(unix)) && proc.is_running() => Ok(()),
+        result => result,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::{end, idle_child, record_of};
+
+    #[test]
+    fn a_process_that_is_gone_cannot_be_asked_to_end() {
+        let mut child = idle_child();
+        let record = record_of(&child);
+        end(&mut child);
+        // Not running, so the refusal is not the expected one a console
+        // program gives on Windows: it is reported
+        let result = ask_to_end(&record);
+        assert!(
+            matches!(&result, Err(ProcError::ProcessNotFound(_))),
+            "{result:?}"
+        );
+    }
+
+    #[test]
+    fn a_running_process_is_asked_and_the_answer_does_not_matter_on_windows() {
+        let mut child = idle_child();
+        let record = record_of(&child);
+        let result = ask_to_end(&record);
+        end(&mut child);
+        // Unix: SIGTERM was delivered. Windows: taskkill refuses a console
+        // program, and that is not a failure.
+        assert!(result.is_ok(), "{result:?}");
     }
 }

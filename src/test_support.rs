@@ -48,3 +48,50 @@ pub(crate) fn assert_stops_at_a_failed_write(
         assert_eq!(out.written, full[..limit], "limit {limit}");
     }
 }
+
+/// A child process that only waits, for a test to look up, signal and reap.
+/// `sleep` on Unix; `ping` on Windows, which has no `sleep` program and whose
+/// `ping -n 300` lasts five minutes. Its output goes nowhere.
+pub(crate) fn idle_child() -> std::process::Child {
+    use std::process::{Command, Stdio};
+
+    #[cfg(unix)]
+    let mut command = {
+        let mut command = Command::new("sleep");
+        command.arg("300");
+        command
+    };
+    #[cfg(windows)]
+    let mut command = {
+        let mut command = Command::new("ping");
+        command.args(["-n", "300", "127.0.0.1"]);
+        command
+    };
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn an idle child")
+}
+
+/// A record of `child`, once its process shows in the process list
+pub(crate) fn record_of(child: &std::process::Child) -> crate::core::Process {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        if let Some(record) = crate::core::Process::find_by_pid(child.id()).unwrap() {
+            return record;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the child never showed in the process list"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+}
+
+/// Kill `child` and wait for it, so a record of it is of a process that is gone
+pub(crate) fn end(child: &mut std::process::Child) {
+    let _ = child.kill();
+    let _ = child.wait();
+}

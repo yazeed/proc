@@ -91,13 +91,9 @@ impl ForCommand {
         let mut seen_pids = HashSet::new();
         let mut processes: Vec<Process> = Vec::new();
 
-        for proc in exe_processes {
-            if seen_pids.insert(proc.pid) {
-                processes.push(proc);
-            }
-        }
-
-        for proc in open_file_procs {
+        // One loop for both lists: Windows has no open-file lookup, so its second
+        // list is always empty and a loop of its own would never run there
+        for proc in exe_processes.into_iter().chain(open_file_procs) {
             if seen_pids.insert(proc.pid) {
                 processes.push(proc);
             }

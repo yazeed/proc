@@ -856,6 +856,27 @@ mod tests {
     }
 
     #[test]
+    fn a_process_that_outlasts_the_request_is_killed_and_seen_gone() {
+        // still running after the pause, gone once the kill has been sent
+        let fake = Fake::running(&[true, false]);
+        assert_eq!(recover_by_termination(&fake, true), Outcome::Terminated);
+        assert_eq!(fake.calls(), ["terminate", "pause 3", "kill"]);
+    }
+
+    #[test]
+    fn the_steps_act_on_the_real_process() {
+        let mut child = crate::test_support::idle_child();
+        let record = crate::test_support::record_of(&child);
+        assert!(Steps::is_running(&record));
+        // a pause with no time in it: the real wait is the same call
+        Steps::pause(&record, 0);
+        Steps::kill(&record).unwrap();
+        let _ = child.wait();
+        assert!(!Steps::is_running(&record));
+        crate::test_support::end(&mut child);
+    }
+
+    #[test]
     fn each_outcome_has_its_words_in_text_and_json() {
         let cases = [
             (Outcome::Recovered, "recovered", "recovered"),

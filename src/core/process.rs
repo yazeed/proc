@@ -670,6 +670,10 @@ impl Process {
     /// CPU use over `window` (at least sysinfo's minimum), in percent of one core;
     /// None if the process is gone. A reading over a few milliseconds is ~0 for
     /// any process, so a real window is needed.
+    ///
+    /// Unix only: its one caller is the gentle recovery `unstick` tries there;
+    /// on Windows `unstick` only terminates.
+    #[cfg(unix)]
     pub fn cpu_over(&self, window: Duration) -> Option<f32> {
         let pid = Pid::from_u32(self.pid);
         let mut sys = System::new();
@@ -1133,19 +1137,16 @@ mod tests {
         assert!(!idle_stuck, "an idle process counted as stuck");
     }
 
-    #[cfg(unix)]
     #[test]
     fn test_signals_never_reach_a_process_that_reused_the_pid() {
-        let mut child = std::process::Command::new("sleep")
-            .arg("300")
-            .spawn()
-            .unwrap();
-        let mut stale = Process::find_by_pid(child.id()).unwrap().unwrap();
+        let mut child = crate::test_support::idle_child();
+        let mut stale = crate::test_support::record_of(&child);
         // A record from before the PID was reused: same PID, older start time
         stale.start_time = stale.start_time.map(|t| t - 3600);
 
         let kill = stale.kill();
         let term = stale.terminate();
+        #[cfg(unix)]
         let sig = stale.send_signal(nix::sys::signal::Signal::SIGKILL);
         let alive = child.try_wait().unwrap().is_none();
         let _ = child.kill();
@@ -1163,6 +1164,7 @@ mod tests {
             matches!(term, Err(ProcError::ProcessNotFound(_))),
             "{term:?}"
         );
+        #[cfg(unix)]
         assert!(matches!(sig, Err(ProcError::ProcessNotFound(_))), "{sig:?}");
     }
 
@@ -1222,6 +1224,91 @@ mod tests {
         let shown = record.command.as_deref().unwrap();
         assert!(shown.contains("\\x07ctl"), "{shown}");
         assert!(!shown.contains('\u{7}'), "{shown:?}");
+    }
+
+    /// The same, on Windows, where a process has no `arg0` to set: a control
+    /// character in the command line (the listener example ignores extra
+    /// arguments) is shown escaped and still matches as typed with `--cmd`
+    #[cfg(windows)]
+    #[test]
+    fn a_control_character_in_a_windows_command_line_matches_as_typed_and_displays_escaped() {
+        use crate::core::matches_by_filter;
+
+        let mut exe = std::env::current_exe().unwrap();
+        exe.pop();
+        exe.pop();
+        exe.push("examples");
+        exe.push("listener.exe");
+        assert!(exe.exists(), "build the example first: {}", exe.display());
+        let part = format!("\u{7}ctl{}", std::process::id());
+        let mut child = std::process::Command::new(&exe)
+            .arg(&part)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let pid = child.id();
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        let record = loop {
+            if let Some(record) = Process::find_by_pid(pid).unwrap() {
+                if record.command.is_some() {
+                    break record;
+                }
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the child's command line never appeared"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        };
+        let found = Process::find_by_name(&part, NameMatch::Command)
+            .map(|found| found.iter().any(|p| p.pid == pid))
+            .unwrap_or(false);
+        let kept = matches_by_filter(&record, &part, NameMatch::Command);
+        crate::test_support::end(&mut child);
+
+        assert!(found, "find_by_name read the escaped command line");
+        assert!(kept, "--by --cmd read the escaped command line");
+        let shown = record.command.as_deref().unwrap();
+        assert!(shown.contains("\\x07ctl"), "{shown}");
+        assert!(!shown.contains('\u{7}'), "{shown:?}");
+    }
+
+    #[test]
+    fn a_name_is_read_from_the_raw_text_when_escaping_changed_it() {
+        let record = Process {
+            name: "a\\x07b".to_string(),
+            raw: Some(Box::new(RawText {
+                name: "a\u{7}b".to_string(),
+                exe_path: Some("c\u{7}d".to_string()),
+                command: Some("e\u{7}f".to_string()),
+            })),
+            argv0: Some("g".to_string()),
+            ..ghost()
+        };
+        let names = record.names();
+        assert_eq!(names.name, "a\u{7}b");
+        assert_eq!(names.exe, Some("c\u{7}d"));
+        assert_eq!(names.argv0, Some("g"));
+        assert_eq!(names.command, Some("e\u{7}f"));
+    }
+
+    #[test]
+    fn the_ancestors_stop_where_the_process_list_does() {
+        // A list that holds only this process: its parent is named but not
+        // listed, so the climb ends there instead of going on
+        let me = Pid::from_u32(std::process::id());
+        let mut sys = System::new();
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[me]), true);
+        let parent = sys.process(me).and_then(|p| p.parent());
+        let found = self_and_ancestors(&sys);
+        assert!(found.contains(&me));
+        if let Some(parent) = parent {
+            assert!(found.contains(&parent));
+            assert_eq!(found.len(), 2, "{found:?}");
+        } else {
+            assert_eq!(found.len(), 1, "{found:?}");
+        }
     }
 
     #[test]
@@ -1560,14 +1647,10 @@ mod tests {
         assert!(found.unwrap().is_empty());
     }
 
-    #[cfg(unix)]
     #[test]
     fn a_process_still_alive_when_the_wait_ends_is_an_error() {
-        let mut child = std::process::Command::new("sleep")
-            .arg("300")
-            .spawn()
-            .unwrap();
-        let record = Process::find_by_pid(child.id()).unwrap().unwrap();
+        let mut child = crate::test_support::idle_child();
+        let record = crate::test_support::record_of(&child);
         // no time to wait: the SIGKILL is sent, but the process isn't seen gone
         let result = record.kill_and_wait_within(Duration::ZERO);
         let _ = child.kill();

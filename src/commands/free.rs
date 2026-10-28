@@ -372,6 +372,27 @@ mod tests {
     }
 
     #[test]
+    fn a_refusal_for_a_process_that_is_gone_is_a_warning_and_nothing_is_waited_for() {
+        let mut child = crate::test_support::idle_child();
+        let gone = crate::test_support::record_of(&child);
+        crate::test_support::end(&mut child);
+        let printer = Printer::from_flags(true, false);
+        let start = std::time::Instant::now();
+        // Not running, so the refusal is not the one Windows gives a console
+        // program that is still there: it is reported, on every OS. The kill
+        // is never tried, and the grace period ends at once.
+        let failed = stop_all(
+            std::slice::from_ref(&gone),
+            std::time::Duration::from_secs(30),
+            &printer,
+            refuse,
+            |_| panic!("a process that is gone is not killed"),
+        );
+        assert_eq!(failed, vec![gone.pid]);
+        assert!(start.elapsed() < std::time::Duration::from_secs(10));
+    }
+
+    #[test]
     fn signals_that_work_report_nothing() {
         let me = this_process();
         let printer = Printer::from_flags(true, false);

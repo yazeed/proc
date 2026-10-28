@@ -57,9 +57,15 @@ pub struct OrphansCommand {
 impl OrphansCommand {
     /// Executes the orphans command, finding processes whose parent is PID 1.
     pub fn execute(&self) -> Result<()> {
-        let printer = Printer::from_flags(self.json, self.verbose).wide(self.wide);
+        self.run(Process::find_orphans()?)
+    }
 
-        let mut processes = Process::find_orphans()?;
+    /// Everything after the lookup: filter `processes` (the orphans found), then
+    /// list them or, with `--kill`, kill them. Apart from `execute` it is called
+    /// with processes a test made, because no process is an orphan on Windows
+    /// (there is no PID 1 to be adopted by), so a Windows run can't make one.
+    fn run(&self, mut processes: Vec<Process>) -> Result<()> {
+        let printer = Printer::from_flags(self.json, self.verbose).wide(self.wide);
 
         // Apply --in and --by filters
         apply_filters(
@@ -130,5 +136,139 @@ impl OrphansCommand {
         let (killed, failed) = apply_to_each(&processes, |proc| proc.kill_and_wait());
 
         printer.print_action_result_as("orphans", "kill", &killed, &failed)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::error::ProcError;
+    use crate::test_support::{end, idle_child, record_of};
+
+    fn command() -> OrphansCommand {
+        OrphansCommand {
+            kill: false,
+            dry_run: false,
+            yes: false,
+            json: false,
+            verbose: false,
+            wide: false,
+            in_dir: None,
+            by_name: None,
+            cmd: false,
+        }
+    }
+
+    /// Whether the child has ended; it is ours, so this also reaps it
+    fn ended(child: &mut std::process::Child) -> bool {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while std::time::Instant::now() < deadline {
+            if child.try_wait().unwrap().is_some() {
+                return true;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        false
+    }
+
+    #[test]
+    fn no_orphans_is_not_an_error() {
+        command().run(Vec::new()).unwrap();
+        let json = OrphansCommand {
+            json: true,
+            ..command()
+        };
+        json.run(Vec::new()).unwrap();
+    }
+
+    #[test]
+    fn a_filter_that_matches_none_of_them_leaves_nothing_to_list() {
+        let mut child = idle_child();
+        let orphan = record_of(&child);
+        let elsewhere = tempfile::tempdir().unwrap();
+        let kill = OrphansCommand {
+            kill: true,
+            yes: true,
+            in_dir: Some(elsewhere.path().to_string_lossy().into_owned()),
+            ..command()
+        };
+        let result = kill.run(vec![orphan]);
+        let alive = child.try_wait().unwrap().is_none();
+        end(&mut child);
+        result.unwrap();
+        assert!(alive, "a process outside --in was killed");
+    }
+
+    #[test]
+    fn listing_orphans_kills_nothing() {
+        let mut child = idle_child();
+        let orphan = record_of(&child);
+        for json in [false, true] {
+            let list = OrphansCommand {
+                json,
+                verbose: true,
+                ..command()
+            };
+            list.run(vec![orphan.clone()]).unwrap();
+        }
+        let alive = child.try_wait().unwrap().is_none();
+        end(&mut child);
+        assert!(alive);
+    }
+
+    #[test]
+    fn a_dry_run_kills_nothing() {
+        let mut child = idle_child();
+        let orphan = record_of(&child);
+        for json in [false, true] {
+            let dry = OrphansCommand {
+                kill: true,
+                dry_run: true,
+                json,
+                ..command()
+            };
+            dry.run(vec![orphan.clone()]).unwrap();
+        }
+        let alive = child.try_wait().unwrap().is_none();
+        end(&mut child);
+        assert!(alive);
+    }
+
+    #[test]
+    fn nobody_to_ask_is_not_a_yes() {
+        let mut child = idle_child();
+        let orphan = record_of(&child);
+        // --json never answers the prompt, and the test has no terminal
+        let kill = OrphansCommand {
+            kill: true,
+            json: true,
+            ..command()
+        };
+        let result = kill.run(vec![orphan]);
+        let alive = child.try_wait().unwrap().is_none();
+        end(&mut child);
+        assert!(
+            matches!(result, Err(ProcError::ConfirmationRequired { .. })),
+            "{result:?}"
+        );
+        assert!(alive);
+    }
+
+    #[test]
+    fn kill_with_yes_ends_the_orphans() {
+        for json in [false, true] {
+            let mut child = idle_child();
+            let orphan = record_of(&child);
+            let kill = OrphansCommand {
+                kill: true,
+                yes: true,
+                json,
+                ..command()
+            };
+            kill.run(vec![orphan]).unwrap();
+            let gone = ended(&mut child);
+            end(&mut child);
+            assert!(gone, "--kill --yes left the orphan running (json: {json})");
+        }
     }
 }
