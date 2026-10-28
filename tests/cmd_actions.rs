@@ -645,8 +645,13 @@ impl Drop for Short {
     }
 }
 
+/// Unix only: a child that ends by itself is a zombie there, so its PID stays
+/// listed until the test reaps it and proc still has to count it as exited. On
+/// Windows a process this short could end before proc looks it up, so the Windows
+/// cases below end their processes when the test says so.
+#[cfg(unix)]
 #[test]
-fn wait_json_counts_exits_and_reports_each() {
+fn wait_json_counts_zombies_as_exited_and_reports_each() {
     let first = Short::sleeping("1");
     let second = Short::sleeping("2");
     let targets = format!("{},{}", first.id(), second.id());
@@ -662,6 +667,7 @@ fn wait_json_counts_exits_and_reports_each() {
     assert!(json["elapsed_human"].is_string(), "{json}");
 }
 
+#[cfg(unix)]
 #[test]
 fn wait_json_timeout_reports_the_exited_and_the_still_running() {
     let short = Short::sleeping("1");
@@ -675,14 +681,36 @@ fn wait_json_timeout_reports_the_exited_and_the_still_running() {
     assert_eq!(json["initial_count"], 2, "{json}");
 }
 
-/// No `--timeout` (the default is none): wait for as long as it takes
+/// No `--timeout` (the default is none): wait for as long as it takes, and the
+/// test ends the process once proc has said it is waiting
 #[test]
 fn wait_without_a_timeout_waits_for_the_exit() {
-    let short = Short::sleeping("2");
-    let (json, code) = run_json(&["wait", &short.id().to_string(), "--json"]);
-    assert_eq!(code, 0, "{json}");
-    assert_eq!(json["timed_out"], false, "{json}");
-    assert!(lists(&json, "exited", short.id()), "{json}");
+    let mut owned = Owned::listener();
+    let pid = owned.pid_arg();
+    let mut waiter = Live::start(&["wait", &pid]);
+    waiter.line_with("Waiting for 1 process to exit");
+    owned.exit_now();
+    waiter.line_with(&format!("[PID {pid}] exited after"));
+    let done = waiter.finish();
+    assert_eq!(done.code, 0, "{}", done.stderr);
+}
+
+/// With a timeout, one process exits and one stays: the one that stays is
+/// reported, and the exit code is 1
+#[test]
+fn wait_times_out_on_the_process_that_stays_and_reports_the_one_that_left() {
+    let mut leaves = Owned::listener();
+    let stays = Owned::listener();
+    let (left, kept) = (leaves.pid_arg(), stays.pid_arg());
+    let mut waiter = Live::start(&["wait", &left, &kept, "--timeout", "5"]);
+    waiter.line_with("Waiting for 2 processes to exit");
+    leaves.exit_now();
+    waiter.line_with(&format!("[PID {left}] exited after"));
+    let done = waiter.finish();
+    assert_eq!(done.code, 1, "{}", done.stderr);
+    let text = done.lines.join("\n") + &done.stderr;
+    assert!(text.contains("1 still running"), "{text}");
+    assert!(text.contains(&format!("[{kept}]")), "{text}");
 }
 
 // ---- stop ----
@@ -825,30 +853,32 @@ fn stop_ends_a_process_and_says_so() {
     assert!(owned.ended_within(Duration::from_secs(15)));
 }
 
-/// A process that ends by itself while `stop` waits for it is not killed.
-/// It is given 8 seconds to live; if proc is slow enough to start that the
-/// process is gone before it is looked up (exit 2), try again with a new one.
+/// A process that ends by itself while `stop` waits for it is not killed. Only
+/// Windows runs this: there `taskkill` without `/F` refuses a console program,
+/// so `stop` waits out the timeout (SIGTERM ends a Unix process at once). The
+/// process lives 15 seconds, far longer than proc takes to find it, and the
+/// elapsed time shows that `stop` waited for it instead of killing it.
+#[cfg(windows)]
 #[test]
 fn stop_waits_for_a_process_that_ends_by_itself_within_the_timeout() {
-    for _ in 0..3 {
-        let short = Short::sleeping("8");
-        let (json, code) = run_json(&[
-            "stop",
-            &short.id().to_string(),
-            "--yes",
-            "--timeout",
-            "60",
-            "--json",
-        ]);
-        if code == 2 {
-            continue;
-        }
-        assert_eq!(code, 0, "{json}");
-        assert_eq!(json["success"], true, "{json}");
-        assert_eq!(json["succeeded_count"], 1, "{json}");
-        return;
-    }
-    panic!("proc never found the process before it ended");
+    let short = Short::sleeping("15");
+    let started = Instant::now();
+    let (json, code) = run_json(&[
+        "stop",
+        &short.id().to_string(),
+        "--yes",
+        "--timeout",
+        "60",
+        "--json",
+    ]);
+    let elapsed = started.elapsed();
+    assert_eq!(code, 0, "{json}");
+    assert_eq!(json["success"], true, "{json}");
+    assert_eq!(json["succeeded_count"], 1, "{json}");
+    assert!(
+        elapsed >= Duration::from_secs(8),
+        "stop returned after {elapsed:?}: it killed the process instead of waiting"
+    );
 }
 
 #[test]
@@ -1178,6 +1208,38 @@ fn freeze_and_thaw_are_not_supported_on_windows() {
 
 // ---- orphans ----
 
+/// Windows does not re-parent a process whose parent exited, so there is no
+/// orphan to find: every form of the command is refused, as `freeze` is
+#[cfg(not(unix))]
+#[test]
+fn orphans_is_not_supported_on_windows() {
+    let (_tmp, dir) = fresh_dir();
+    let dir = dir.to_string_lossy().into_owned();
+    for extra in [&[][..], &["--kill", "--dry-run"], &["--kill", "--yes"]] {
+        let mut args = vec!["orphans", "--in", &dir];
+        args.extend_from_slice(extra);
+        let r = run(&args);
+        assert_eq!(r.code, 4, "{args:?}: {}{}", r.stdout, r.stderr);
+        assert!(
+            r.stderr.contains("not supported on Windows")
+                && r.stderr.contains("doesn't re-parent processes"),
+            "{args:?}: {}",
+            r.stderr
+        );
+    }
+    let (json, code) = run_json(&["orphans", "--in", &dir, "--json"]);
+    assert_eq!(code, 4, "{json}");
+    assert_eq!(json["success"], false, "{json}");
+    assert!(
+        json["error"]
+            .as_str()
+            .unwrap()
+            .contains("not supported on Windows"),
+        "{json}"
+    );
+}
+
+#[cfg(unix)]
 #[test]
 fn orphans_with_none_in_the_directory_says_so() {
     let (_tmp, dir) = fresh_dir();

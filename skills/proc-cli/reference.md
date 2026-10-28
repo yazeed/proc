@@ -24,7 +24,7 @@ Everything here is for lookup. The safety model, the playbooks and the exit-code
 | 1 | The command ran but did not fully succeed: a process failed (listed in `failed`), a port stayed busy, `wait` timed out. Also unexpected system errors. |
 | 2 | Not found: no target matched. |
 | 3 | Permission denied. Raised only when proc itself gets an I/O permission error. It is not what a refused signal produces (see below). |
-| 4 | Invalid input (unknown flag, missing argument, bad signal name, missing directory or file), an action this OS does not support (`freeze`, `thaw` and `stop --signal` on Windows), or `needs_confirmation`. |
+| 4 | Invalid input (unknown flag, missing argument, bad signal name, missing directory or file), an action this OS does not support (`freeze`, `thaw`, `orphans` and `stop --signal` on Windows), or `needs_confirmation`. |
 
 A signal the OS refuses, such as `kill` on another user's process, is not exit 3. It is a `failed` entry for that process with `error` text such as `Signal failed: Failed to kill process 123` (SIGKILL) or `Signal failed: EPERM: Operation not permitted` (other signals), and the exit code is 1. If the process is gone or its PID was reused, the entry reads `No process found matching '123'`. Treat any unexpected `failed` entry as a process that is not yours: stop and ask the user.
 
@@ -81,7 +81,7 @@ Aliases: `on` `:`; `for` `f`; `by` `b`; `list` `l` `ps`; `info` `i` `inspect`; `
 | `watch` | optional targets | Refreshing table, or NDJSON with `--json`. |
 | `wait` | targets | Block until the targets exit. Default `--timeout 0` means forever, so always set one. |
 | `stuck` | none | Processes that look hung. `--kill` acts on them. |
-| `orphans` | none | Processes reparented to PID 1. `--kill` acts on them. |
+| `orphans` | none | Processes reparented to PID 1. `--kill` acts on them. Unix only: exits 4 on Windows. |
 | `kill` | targets | SIGKILL. `--graceful` sends SIGTERM instead. |
 | `stop` | targets | SIGTERM (or `--signal`), then SIGKILL after `--timeout` (default 10). All targets are asked at once and share the timeout. |
 | `freeze`, `thaw` | targets | SIGSTOP, SIGCONT. Unix only. |
@@ -297,7 +297,7 @@ NDJSON, one object per refresh (`-n` seconds, default 2), until interrupted: `{"
 Both list candidates. Neither proves that a process is hung or abandoned. Never act on a list without checking each PID.
 
 - **`stuck`** lists a process that has run longer than `--timeout` (default 300 s) and, in each of two readings a second apart, either uses over 50% of one core or is in uninterruptible sleep (blocked in the kernel, usually on I/O). It takes about 2 seconds. False positives: a long build, a compiler, a busy server, or any healthy program at full CPU look the same as an infinite loop. On one laptop it listed a `python` at 97%, a `node` at 98% and a `node` at 453%.
-- **`orphans`** lists processes whose parent is PID 1, minus system daemons (processes with no cwd, or with cwd `/`). False positives: on macOS every app launched by launchd has parent 1, and an unscoped run listed 90 ordinary apps; `nohup` and `tmux` jobs and daemons are orphaned on purpose. A process whose parent is any other process is never listed, and Windows has no PID 1 parent, so the list can be empty there.
+- **`orphans`** lists processes whose parent is PID 1, minus system daemons (processes with no cwd, or with cwd `/`). False positives: on macOS every app launched by launchd has parent 1, and an unscoped run listed 90 ordinary apps; `nohup` and `tmux` jobs and daemons are orphaned on purpose. A process whose parent is any other process is never listed, and on Windows the command exits 4 (not supported): Windows does not re-parent processes, so there is no reliable orphan.
 - **`--kill`** applies the action to the whole list. Do not use it. Check each PID with `proc info <pid> --json` and `proc why <pid> --json`, then act on the approved PIDs only. `--in <dir>` narrows the list but does not make it yours.
 
 ## Edge cases

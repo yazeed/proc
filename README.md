@@ -35,7 +35,7 @@ proc info :3000 1234            # info for port + PID
 | Free port 3000 | `proc free :3000` | `lsof -i :3000 -t \| xargs kill && sleep 1 && lsof -i :3000` |
 | Why is port busy? | `proc why :3000` | `lsof -i :3000` + `ps -o ppid=` chain |
 | Pause a process | `proc freeze node` | `kill -STOP $(pgrep node)` |
-| Find orphans | `proc orphans --in .` | No standard tool |
+| Find orphans (macOS, Linux) | `proc orphans --in .` | No standard tool |
 | Wait for process | `proc wait node` | `while ps aux \| grep node \| grep -v grep; do sleep 5; done` |
 | Ports used by node | `proc on node` | `lsof -i -P -n \| grep node` |
 | Node processes in cwd | `proc by node --in .` | `ps aux \| grep node` + manual check |
@@ -174,7 +174,7 @@ A name matches the whole process name, ignoring case, the way `killall` and `pki
 | `tree` | `t` | Process hierarchy |
 | `watch` | `w`, `top` | Real-time process monitoring |
 | `why <target>` | | Trace process ancestry (why is this port busy?) |
-| `orphans` | `o` | Find orphaned processes |
+| `orphans` | `o` | Find orphaned processes (Unix only: exits 4 on Windows) |
 | `stuck` | `x` | Find hung processes |
 
 ### Lifecycle
@@ -242,7 +242,7 @@ With `--json`, every command prints one JSON document with `action` (the command
 | `1` | Error, or not fully successful: a process failed, a port stayed busy, `wait` timed out |
 | `2` | Process or port not found |
 | `3` | Permission denied: proc itself got an I/O permission error. A signal the OS refuses (another user's process) is a `failed` entry and exit 1 |
-| `4` | Invalid input (unknown flag, bad argument, invalid signal), an action this OS doesn't support (`freeze`, `thaw` and `stop --signal` on Windows), or a command that changes processes run without `--yes` where nobody can confirm (`--json`, or no terminal): nothing was changed |
+| `4` | Invalid input (unknown flag, bad argument, invalid signal), an action this OS doesn't support (`freeze`, `thaw`, `orphans` and `stop --signal` on Windows), or a command that changes processes run without `--yes` where nobody can confirm (`--json`, or no terminal): nothing was changed |
 
 `"success": false` always comes with a non-zero exit code. Full schemas: [`skills/proc-cli/reference.md`](skills/proc-cli/reference.md).
 

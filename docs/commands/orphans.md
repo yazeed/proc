@@ -7,6 +7,8 @@ permalink: /commands/orphans
 
 Find processes whose parent has exited, leaving them orphaned (reparented to PID 1). Alias: `o`.
 
+**Not available on Windows.** Windows does not re-parent a process whose parent exited, so there is no reliable orphan to find: every form of `proc orphans`, including `--kill` and `--dry-run`, exits 4 with "not supported on Windows".
+
 ```bash
 proc orphans                 # list all orphaned processes
 proc orphans --kill --yes    # kill all orphans without confirmation

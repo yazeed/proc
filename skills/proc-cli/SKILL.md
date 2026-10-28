@@ -125,6 +125,6 @@ With `--json` every command prints one JSON document on stdout, including errors
 
 ## Platform notes
 
-- Windows: `freeze`, `thaw` and `stop --signal` exit 4 (not supported). `kill --graceful` fails for console programs, so use `stop`, which escalates after `--timeout`. `for` finds no open files. Names include `.exe`, which is optional when matching.
+- Windows: `freeze`, `thaw`, `orphans` (with any flag) and `stop --signal` exit 4 (not supported). Windows does not re-parent processes, so there is no reliable orphan. `kill --graceful` fails for console programs, so use `stop`, which escalates after `--timeout`. `for` finds no open files. Names include `.exe`, which is optional when matching.
 - macOS has no `timeout` command. Bound `proc watch` with `| head -n 5`, or use `proc list`.
 - `ports` and `on` show TCP listeners only. IPv6 addresses read `::1` and `::`.

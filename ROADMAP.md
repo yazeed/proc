@@ -78,6 +78,12 @@ proc doctor
 
 One health check after a crash or a messy session: port conflicts, orphans, stuck processes, zombies, each with the command that fixes it. **Feature test:** fits, one command, but it aggregates existing commands rather than adding a capability. **Open:** what counts as a problem worth reporting.
 
+### Orphans on Windows
+
+`proc orphans` exits 4 on Windows, because an orphan there can't be told by a parent PID of 1: Windows has no PID 1 and keeps the dead parent's PID on the child. The idea: call a process an orphan when its parent PID is no longer running, or has been reused by a process that started after the child.
+
+**Feature test:** fits the domain; keeps one command the same on every OS. **Open / risk:** normal Windows processes outlive their launcher (`explorer.exe`, services, installers, anything started through a shell that exits), so the list would be long and mostly wanted, and `--kill` could take wanted processes with it. It would need to be list-only, or limited by `--in`, before it is safe.
+
 ### UDP ports
 
 `proc on`, `ports` and `free` only see TCP listeners. **Open:** how UDP sockets show up in each command without making TCP output noisier.

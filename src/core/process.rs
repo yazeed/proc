@@ -671,7 +671,7 @@ impl Process {
     /// None if the process is gone. A reading over a few milliseconds is ~0 for
     /// any process, so a real window is needed.
     ///
-    /// Unix only: its one caller is the gentle recovery `unstick` tries there;
+    /// Unix only (the method does not exist on Windows): its one caller is the gentle recovery `unstick` tries there;
     /// on Windows `unstick` only terminates.
     #[cfg(unix)]
     pub fn cpu_over(&self, window: Duration) -> Option<f32> {

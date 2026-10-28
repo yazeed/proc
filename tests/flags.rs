@@ -32,7 +32,7 @@ use std::time::Duration;
 enum Expect {
     /// Exit with this code and print one JSON document
     Code(i32),
-    /// Exit codes that differ by OS (freeze and thaw are unsupported
+    /// Exit codes that differ by OS (freeze, thaw and orphans are unsupported
     /// on Windows, as is `stop --signal`)
     PerOs { unix: i32, windows: i32 },
     /// A streaming command: the first stdout line is a JSON document whose
@@ -344,18 +344,18 @@ const CASES: &[Case] = &[
     code("unstick", &["--yes", "--in", "{dir}", "-t", "1"], 0),
     code("unstick", &["--yes", "-i", "{dir}", "-b", "{name}"], 0),
     code("unstick", &["{pid}", "--json"], 4),
-    // ---- orphans ----
-    code("orphans", &["--in", "{dir}"], 0),
-    code("orphans", &["--in", "{dir}", "--json"], 0),
-    code("orphans", &["-i", "{dir}", "-j", "-v"], 0),
-    code("orphans", &["--in", "{dir}", "--verbose", "--wide"], 0),
-    code("orphans", &["-i", "{dir}", "-w", "-b", "{name}"], 0),
-    code("orphans", &["--in", "{dir}", "--by", "{name}"], 0),
-    code("orphans", &["--in", "{dir}", "--by", "{part}", "--cmd"], 0),
-    code("orphans", &["--kill", "--yes", "--in", "{dir}"], 0),
-    code("orphans", &["-k", "-y", "-i", "{dir}"], 0),
-    code("orphans", &["--kill", "--dry-run", "--in", "{dir}"], 0),
-    code("orphans", &["--kill", "--in", "{dir}", "--json"], 0),
+    // ---- orphans (unsupported on Windows: nothing re-parents an orphan) ----
+    per_os("orphans", &["--in", "{dir}"], 0, 4),
+    per_os("orphans", &["--in", "{dir}", "--json"], 0, 4),
+    per_os("orphans", &["-i", "{dir}", "-j", "-v"], 0, 4),
+    per_os("orphans", &["--in", "{dir}", "--verbose", "--wide"], 0, 4),
+    per_os("orphans", &["-i", "{dir}", "-w", "-b", "{name}"], 0, 4),
+    per_os("orphans", &["--in", "{dir}", "--by", "{name}"], 0, 4),
+    per_os("orphans", &["--in", "{dir}", "--by", "{part}", "--cmd"], 0, 4),
+    per_os("orphans", &["--kill", "--yes", "--in", "{dir}"], 0, 4),
+    per_os("orphans", &["-k", "-y", "-i", "{dir}"], 0, 4),
+    per_os("orphans", &["--kill", "--dry-run", "--in", "{dir}"], 0, 4),
+    per_os("orphans", &["--kill", "--in", "{dir}", "--json"], 0, 4),
     // ---- stuck ----
     code("stuck", &["--in", "{dir}"], 0),
     code("stuck", &["--in", "{dir}", "--json"], 0),
