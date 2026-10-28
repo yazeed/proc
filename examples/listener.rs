@@ -19,6 +19,9 @@
 //!   `[::1]` instead of `127.0.0.1`. Two copies, one of each, hold one port
 //!   number through two different sockets.
 //!
+//! - `--also <n>` binds `n` more ports (free ones, on the same address) after the
+//!   first, highest port first, and prints `ALSO <port>` for each in that order,
+//!   so one process holds several ports and the system lists them descending.
 //! - `--share` (Unix only) forks after binding and prints `CHILD <pid>`. Both
 //!   processes keep the listening socket open, as an nginx master and its
 //!   workers do, so both hold the port.
@@ -64,6 +67,38 @@ fn main() {
     let port = listener.local_addr().expect("local addr").port();
     println!("PORT {port}");
     std::io::stdout().flush().expect("flush stdout");
+
+    // more ports, held until we exit, bound from the highest to the lowest so
+    // the order the system lists them in is the opposite of ascending
+    let also: usize = std::env::args()
+        .skip_while(|a| a != "--also")
+        .nth(1)
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(0);
+    let _also_listeners: Vec<TcpListener> = loop {
+        // held together, so no two of them are the same port
+        let probes: Vec<TcpListener> = (0..also)
+            .map(|_| TcpListener::bind(format!("{host}:0")).expect("bind a free port"))
+            .collect();
+        let mut ports: Vec<u16> = probes
+            .iter()
+            .map(|l| l.local_addr().expect("local addr").port())
+            .collect();
+        drop(probes);
+        ports.sort_unstable_by(|a, b| b.cmp(a));
+        // rebind them in that order; if another process took one meanwhile, pick again
+        let bound: std::io::Result<Vec<TcpListener>> = ports
+            .iter()
+            .map(|port| TcpListener::bind(format!("{host}:{port}")))
+            .collect();
+        if let Ok(bound) = bound {
+            for extra in &bound {
+                println!("ALSO {}", extra.local_addr().expect("local addr").port());
+            }
+            std::io::stdout().flush().expect("flush stdout");
+            break bound;
+        }
+    };
 
     let deadline = Instant::now() + LIFETIME;
     if flag("--share") {

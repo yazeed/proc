@@ -23,7 +23,7 @@ proc ports --exposed       # network-exposed only
 | `--exposed` | `-e` | Only network-exposed ports (0.0.0.0, ::) |
 | `--local` | `-l` | Only localhost ports (127.0.0.1, ::1) |
 | `--range <start-end>` | `-r` | Filter by port range (e.g., 3000-9000) |
-| `--sort <key>` | `-s` | Sort by: port, pid, name (default: port) |
+| `--sort <key>` | `-s` | Sort by: port, pid, name; all ascending, ties by port, then PID (default: port) |
 | `--limit <n>` | `-n` | Limit results |
 | `--json` | `-j` | Output as JSON |
 | `--verbose` | `-v` | Show executable path |

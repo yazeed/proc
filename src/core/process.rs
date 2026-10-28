@@ -448,7 +448,7 @@ impl Process {
         // arguments (e.g. "zsh -c proc by node"), causing false positives
         let ancestor_pids = self_and_ancestors(&sys);
         let mut in_command_line_only = 0;
-        let processes: Vec<Process> = sys
+        let mut processes: Vec<Process> = sys
             .processes()
             .iter()
             .filter_map(|(pid, proc)| {
@@ -466,6 +466,9 @@ impl Process {
                 }
             })
             .collect();
+        // sysinfo keeps its processes in a randomly ordered map: PID ascending
+        // makes every list that starts here the same on every run
+        processes.sort_by_key(|p| p.pid);
 
         if processes.is_empty() {
             return Err(if in_command_line_only > 0 {
@@ -513,6 +516,11 @@ impl Process {
             let known: std::collections::HashSet<u32> = processes.iter().map(|p| p.pid).collect();
             processes.extend(macos_zombies(&known));
         }
+
+        // sysinfo keeps its processes in a randomly ordered map (and the
+        // zombies are appended after them): PID ascending makes every list
+        // that starts here the same on every run
+        processes.sort_by_key(|p| p.pid);
 
         Ok(processes)
     }
@@ -635,7 +643,7 @@ impl Process {
         }
 
         let stuck = stuck.unwrap_or_default();
-        Ok(sys
+        let mut found: Vec<Process> = sys
             .processes()
             .iter()
             .filter(|(pid, _)| stuck.contains(pid))
@@ -647,7 +655,10 @@ impl Process {
                 }
                 process
             })
-            .collect())
+            .collect();
+        // sysinfo keeps its processes in a randomly ordered map: PID ascending
+        found.sort_by_key(|p| p.pid);
+        Ok(found)
     }
 
     /// Whether this process looks stuck now, measured the way `find_stuck` does
@@ -1105,6 +1116,35 @@ mod tests {
     fn test_find_all_processes() {
         let processes = Process::find_all().unwrap();
         assert!(!processes.is_empty(), "Should find at least one process");
+    }
+
+    #[test]
+    fn every_process_source_lists_pid_ascending() {
+        use crate::test_support::{end, idle_child, record_of};
+
+        let mut children: Vec<_> = (0..3).map(|_| idle_child()).collect();
+        let mine: Vec<u32> = children.iter().map(|c| record_of(c).pid).collect();
+        let name = record_of(&children[0]).name;
+
+        let ascending = |what: &str, list: &[Process]| {
+            let pids: Vec<u32> = list.iter().map(|p| p.pid).collect();
+            let mut sorted = pids.clone();
+            sorted.sort_unstable();
+            sorted.dedup();
+            assert_eq!(pids, sorted, "{what} is not PID ascending");
+            pids
+        };
+        let all = ascending("find_all", &Process::find_all().unwrap());
+        let named = ascending(
+            "find_by_name",
+            &Process::find_by_name(&name, NameMatch::Exact).unwrap(),
+        );
+        ascending("find_stuck", &Process::find_stuck(Duration::ZERO).unwrap());
+        for pid in &mine {
+            assert!(all.contains(pid), "find_all has {pid}");
+            assert!(named.contains(pid), "find_by_name has {pid}");
+        }
+        children.iter_mut().for_each(end);
     }
 
     #[test]

@@ -64,7 +64,7 @@ pub struct InCommand {
     #[arg(long, short = 'n')]
     pub limit: Option<usize>,
 
-    /// Sort by: cpu, mem, pid, name
+    /// Sort by: cpu, mem (biggest first); pid, name (ascending). Ties come by PID
     #[arg(long, short = 's', value_enum, default_value_t = SortKey::Cpu)]
     pub sort: SortKey,
 }

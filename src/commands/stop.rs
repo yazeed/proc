@@ -147,6 +147,9 @@ impl StopCommand {
             }
         });
         failed.extend(failed_to_kill);
+        // the failures read in the order of the list that was approved, not
+        // "signal failures, then force-kill failures"
+        in_process_order(&processes, &mut failed);
 
         // Output results
         printer.print_action_result("stop", &stopped, &failed)
@@ -168,6 +171,18 @@ impl StopCommand {
     }
 }
 
+/// Put `failed` in the order `processes` lists its processes in. A process that
+/// could not be asked to end and one that outlived the timeout and could not be
+/// force-killed are found by different passes; this merges them.
+fn in_process_order(processes: &[Process], failed: &mut [(Process, String)]) {
+    failed.sort_by_key(|(failed, _)| {
+        processes
+            .iter()
+            .position(|p| p.pid == failed.pid)
+            .unwrap_or(usize::MAX)
+    });
+}
+
 /// Ask one process to end (SIGTERM; on Windows, `taskkill` without `/F`)
 fn ask_to_end(proc: &Process) -> Result<()> {
     match proc.terminate() {
@@ -183,6 +198,28 @@ fn ask_to_end(proc: &Process) -> Result<()> {
 mod tests {
     use super::*;
     use crate::test_support::{end, gone_record, idle_child, record_of};
+
+    #[test]
+    fn failures_from_both_passes_read_in_the_order_of_the_approved_list() {
+        let mut child = idle_child();
+        let record = record_of(&child);
+        end(&mut child);
+        let with_pid = |pid| Process {
+            pid,
+            ..record.clone()
+        };
+        // typed order, not PID order: 30 was typed first
+        let approved = [with_pid(30), with_pid(10), with_pid(20), with_pid(40)];
+        // the force-kill pass found 20; the signal pass found 40 and 30
+        let mut failed = vec![
+            (with_pid(40), "signal".to_string()),
+            (with_pid(30), "signal".to_string()),
+            (with_pid(20), "kill".to_string()),
+        ];
+        in_process_order(&approved, &mut failed);
+        let order: Vec<(u32, &str)> = failed.iter().map(|(p, e)| (p.pid, e.as_str())).collect();
+        assert_eq!(order, [(30, "signal"), (20, "kill"), (40, "signal")]);
+    }
 
     #[test]
     fn a_process_that_is_gone_cannot_be_asked_to_end() {

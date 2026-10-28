@@ -207,7 +207,7 @@ Filters can be combined with discovery and lifecycle commands:
 | `--exposed` | Only network-exposed ports (`ports`) |
 | `--local` | Only localhost ports (`ports`) |
 | `--range <s-e>` | Filter ports by range (e.g., `3000-9000`) |
-| `--sort/-s <key>` | Sort by: cpu, mem, pid, name |
+| `--sort/-s <key>` | Sort by: cpu, mem (biggest first); pid, name (ascending). Ties come by PID |
 | `--limit/-n <n>` | Limit number of results (`-l` on `watch`, where `-n` is `--interval`) |
 | `--ancestors/-a` | Show ancestry path to root (`tree`) |
 | `--depth/-d <n>` | Maximum tree depth (default: 10) |

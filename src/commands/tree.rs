@@ -134,6 +134,12 @@ impl TreeCommand {
         let mut all_processes = Process::find_all()?;
         Process::measure_cpu(&mut all_processes);
 
+        // The one place the tree's order is decided: PID ascending. The roots,
+        // every parent's children, the filter list, the target list and the
+        // ancestry targets all come from walking this list (or `children_map`,
+        // built from it), so the human tree and `--json` read alike.
+        all_processes.sort_by_key(|p| p.pid);
+
         // Build PID -> Process map for quick lookup
         let pid_map: HashMap<u32, &Process> = all_processes.iter().map(|p| (p.pid, p)).collect();
 
@@ -148,7 +154,7 @@ impl TreeCommand {
 
         // Handle --ancestors mode
         if self.ancestors {
-            return self.show_ancestors(&printer, &pid_map);
+            return self.show_ancestors(&printer, &pid_map, &all_processes);
         }
 
         // Determine target processes; `in_command_line` counts the processes a name
@@ -384,12 +390,10 @@ impl TreeCommand {
             format!("{}│   ", prefix)
         };
 
+        // the children are already in PID order (see `execute`)
         if let Some(children) = children_map.get(&proc.pid) {
-            let mut sorted_children: Vec<&&Process> = children.iter().collect();
-            sorted_children.sort_by_key(|p| p.pid);
-
-            for (i, child) in sorted_children.iter().enumerate() {
-                let child_is_last = i == sorted_children.len() - 1;
+            for (i, child) in children.iter().enumerate() {
+                let child_is_last = i == children.len() - 1;
                 self.print_tree(child, children_map, &child_prefix, child_is_last, depth + 1);
             }
         }
@@ -425,8 +429,14 @@ impl TreeCommand {
         }
     }
 
-    /// Show ancestry (path UP to root) for target processes
-    fn show_ancestors(&self, printer: &Printer, pid_map: &HashMap<u32, &Process>) -> Result<()> {
+    /// Show ancestry (path UP to root) for target processes; `all_processes` is
+    /// the process list in PID order, which the targets of a name follow
+    fn show_ancestors(
+        &self,
+        printer: &Printer,
+        pid_map: &HashMap<u32, &Process>,
+        all_processes: &[Process],
+    ) -> Result<()> {
         use crate::core::{parse_target, resolve_target, TargetType};
 
         let mode = NameMatch::from_flag(self.cmd);
@@ -443,10 +453,9 @@ impl TreeCommand {
         let target_processes = match parse_target(target) {
             TargetType::Port(_) | TargetType::Pid(_) => resolve_target(target, mode)?,
             TargetType::Name(ref pattern) => {
-                let all_procs: Vec<Process> = pid_map.values().map(|p| (*p).clone()).collect();
-                let ancestor_pids = Self::ancestor_pids(&all_procs);
+                let ancestor_pids = Self::ancestor_pids(all_processes);
                 let (named, others) =
-                    Self::named(pid_map.values().copied(), &ancestor_pids, pattern, mode);
+                    Self::named(all_processes.iter(), &ancestor_pids, pattern, mode);
                 in_command_line = others;
                 named.into_iter().cloned().collect()
             }

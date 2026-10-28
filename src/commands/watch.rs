@@ -95,7 +95,7 @@ pub struct WatchCommand {
     #[arg(long, short = 'l')]
     pub limit: Option<usize>,
 
-    /// Sort by: cpu, mem, pid, name
+    /// Sort by: cpu, mem (biggest first); pid, name (ascending). Ties come by PID
     #[arg(long, short = 's', value_enum, default_value_t = WatchSortKey::Cpu)]
     pub sort: WatchSortKey,
 }

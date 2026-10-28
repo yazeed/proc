@@ -26,7 +26,7 @@ One process gets the same detail view as `proc on :port` (directory, path, liste
 | `--min-mem <n>` | | Minimum memory (MB) |
 | `--status <s>` | | Filter by status: running, sleeping, stopped, zombie |
 | `--min-uptime <s>` | | Minimum uptime in seconds |
-| `--sort <key>` | `-s` | Sort by: cpu, mem, pid, name (default: cpu) |
+| `--sort <key>` | `-s` | Sort by: cpu, mem (biggest first); pid, name (ascending). Ties come by PID (default: cpu) |
 | `--limit <n>` | `-n` | Limit results |
 | `--json` | `-j` | Output as JSON |
 | `--verbose` | `-v` | Show extra details |

@@ -33,7 +33,7 @@ One process is always one line. Directories and arguments are shortened to fit t
 | `--status <s>` | | Filter by status: running, sleeping, stopped, zombie |
 | `--min-uptime <s>` | | Minimum uptime in seconds |
 | `--parent <pid>` | | Only children of this parent PID |
-| `--sort <key>` | `-s` | Sort by: cpu, mem, pid, name (default: cpu) |
+| `--sort <key>` | `-s` | Sort by: cpu, mem (biggest first); pid, name (ascending). Ties come by PID (default: cpu) |
 | `--limit <n>` | `-n` | Limit results |
 | `--json` | `-j` | Output as JSON |
 | `--verbose` | `-v` | Show command line, cwd, parent PID, uptime |

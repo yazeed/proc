@@ -8,7 +8,9 @@
 //!   proc ports --local      # Only localhost ports (127.0.0.1, ::1)
 //!   proc ports -v           # Show with executable paths
 
-use crate::core::{matches_name, resolve_in_dir, NameMatch, Names, PortInfo, PortSortKey, Process};
+use crate::core::{
+    matches_name, resolve_in_dir, sort_ports, NameMatch, Names, PortInfo, PortSortKey, Process,
+};
 use crate::error::Result;
 use crate::ui::{truncate_string, Printer};
 use clap::Args;
@@ -90,7 +92,7 @@ pub struct PortsCommand {
     #[arg(long, short = 'v')]
     pub verbose: bool,
 
-    /// Sort by: port, pid, name
+    /// Sort by: port, pid, name (all ascending; ties by port, then PID)
     #[arg(long, short = 's', value_enum, default_value_t = PortSortKey::Port)]
     pub sort: PortSortKey,
 
@@ -142,16 +144,8 @@ impl PortsCommand {
             ports.retain(|p| p.port >= start && p.port <= end);
         }
 
-        // Sort ports
-        match self.sort {
-            PortSortKey::Port => ports.sort_by_key(|p| p.port),
-            PortSortKey::Pid => ports.sort_by_key(|p| p.pid),
-            PortSortKey::Name => ports.sort_by(|a, b| {
-                a.process_name
-                    .to_lowercase()
-                    .cmp(&b.process_name.to_lowercase())
-            }),
-        }
+        // Sort ports: ties come by port, then PID
+        sort_ports(&mut ports, self.sort);
 
         // Apply limit if specified
         if let Some(limit) = self.limit {

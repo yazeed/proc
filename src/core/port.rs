@@ -39,25 +39,25 @@ pub struct PortInfo {
 }
 
 impl PortInfo {
-    /// Get all listening ports on the system
+    /// Get all listening ports on the system, port ascending and, for one port,
+    /// PID ascending. The system lists them in its own order (lsof's on macOS,
+    /// the kernel's socket table on Linux, netstat's on Windows), so the order
+    /// is fixed here once for everything that reads ports: a process's ports are
+    /// ascending in `on`, `for` and `why`, and the holders of a port are by PID.
     pub fn get_all_listening() -> Result<Vec<PortInfo>> {
         #[cfg(target_os = "macos")]
-        {
-            Self::get_listening_macos()
-        }
+        let mut ports = Self::get_listening_macos()?;
         #[cfg(target_os = "linux")]
-        {
-            Self::get_listening_linux()
-        }
+        let mut ports = Self::get_listening_linux()?;
         #[cfg(target_os = "windows")]
-        {
-            Self::get_listening_windows()
-        }
+        let mut ports = Self::get_listening_windows()?;
+        ports.sort_by_key(|p| (p.port, p.pid));
+        Ok(ports)
     }
 
-    /// Every process listening on a port, each once, in the order the system
-    /// lists them (empty when nothing listens). One port number can be held by
-    /// several processes: `127.0.0.1` and `[::1]` are different sockets.
+    /// Every process listening on a port, each once, PID ascending (empty when
+    /// nothing listens). One port number can be held by several processes:
+    /// `127.0.0.1` and `[::1]` are different sockets.
     pub fn holders_of(port: u16) -> Result<Vec<PortInfo>> {
         Ok(holders_in(Self::get_all_listening()?, port))
     }
@@ -907,5 +907,35 @@ Active Connections
         // This test may or may not find ports depending on the system
         let result = PortInfo::get_all_listening();
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn listening_ports_come_by_port_then_pid_and_a_process_has_its_ports_ascending() {
+        // bound in the order the system hands them out, which is no rule
+        let held: Vec<std::net::TcpListener> = (0..4)
+            .map(|_| std::net::TcpListener::bind("127.0.0.1:0").unwrap())
+            .collect();
+        let ports = PortInfo::get_all_listening().unwrap();
+
+        let keys: Vec<(u16, u32)> = ports.iter().map(|p| (p.port, p.pid)).collect();
+        assert!(keys.windows(2).all(|w| w[0] <= w[1]), "{keys:?}");
+
+        let me = std::process::id();
+        let mine: Vec<u16> = ports
+            .iter()
+            .filter(|p| p.pid == me)
+            .map(|p| p.port)
+            .collect();
+        assert!(mine.windows(2).all(|w| w[0] <= w[1]), "{mine:?}");
+        for listener in &held {
+            let port = listener.local_addr().unwrap().port();
+            assert!(mine.contains(&port), "{port} is not in {mine:?}");
+            let holders: Vec<u32> = PortInfo::holders_of(port)
+                .unwrap()
+                .iter()
+                .map(|h| h.pid)
+                .collect();
+            assert!(holders.windows(2).all(|w| w[0] < w[1]), "{holders:?}");
+        }
     }
 }
