@@ -14,13 +14,13 @@ The best tool is the one you don't have to think about. When you reach for proc,
 Commands mean what they say. `kill` kills. `stop` stops gracefully. `freeze` pauses and `thaw` resumes. `free` frees a port and checks that it's free. `on` tells you what's on a port, and `why` tells you why it's there. There are no surprises and no hidden behaviors. Flags refine a command rather than replace it; the two that add an action, `--kill` on `orphans` and `stuck`, follow the same confirmation rules as `kill` itself.
 
 ### Explicit
-User intent must be clear. Destructive actions ask for confirmation (`--yes` skips it) and can be previewed with `--dry-run`. proc never guesses what a target means: a leading `:` is a port, a number is a PID, anything else is a name. Every failure has a non-zero exit code and a message that says what went wrong. Silent failures are bugs.
+User intent must be clear. Destructive actions ask first, and only `--yes` or a person's own yes counts as consent: `--json` or a missing terminal never does. `--dry-run` previews them. proc never guesses what a target means: a leading `:` is a port, a number is a PID, anything else is a name. Every failure has a non-zero exit code and a message that says what went wrong. Silent failures are bugs.
 
 ### Complete
 Cover the full workflow, nothing more. proc handles process and port management completely: finding, inspecting, tracing, pausing, stopping, freeing and waiting. It doesn't creep into service management, container orchestration, or monitoring dashboards. Scope discipline is a feature.
 
 ### Fast
-Speed isn't a nice-to-have; a slow CLI trains users to avoid it. proc answers in about a tenth of a second, process startup included, with no daemon and no index to keep warm.
+Speed isn't a nice-to-have; a slow CLI trains users to avoid it. proc answers right away, with no daemon and no index to keep warm.
 
 ### Obvious
 If you have to read the docs, we failed. The command structure should be discoverable through tab completion, `--help` and the man page. Examples should cover real use cases, not contrived demos.
@@ -28,13 +28,13 @@ If you have to read the docs, we failed. The command structure should be discove
 ## Values
 
 ### Unified Targets
-`:port`, `PID`, and `name` work the same way everywhere, and so do comma-separated lists of them. Learn the pattern once, use it everywhere.
+`:port`, `PID`, and `name` work the same way everywhere, alone or several at once. Learn the pattern once, use it everywhere.
 
 ```bash
 proc on :3000          # port
 proc on 1234           # PID
 proc on node           # name
-proc kill :3000,node   # same pattern, several targets
+proc kill :3000 node   # same pattern, several targets
 proc info node         # same pattern
 ```
 
@@ -50,7 +50,7 @@ Nouns observe state. Verbs change state.
 You don't "run ports"—you look at ports. You don't "observe kill"—you kill.
 
 ### One Contract for People, Scripts and Agents
-Every process and port command speaks JSON with `--json`: one document (`watch` streams one per refresh), with `action` and `success`, and exit codes that always mean the same thing (0 success, 1 error, 2 not found, 3 permission denied, 4 invalid input). A shell script, a CI job and an AI agent read proc the same way a person does, without parsing tables.
+Every process and port command speaks JSON with `--json`: one document (`watch` streams one per refresh), with `action` and `success`, and exit codes that always mean the same thing (0 success, 1 error, 2 not found, 3 permission denied, 4 nothing was done: invalid input, a confirmation is needed, or the OS doesn't support it). A shell script, a CI job and an AI agent read proc the same way a person does, without parsing tables.
 
 ### Practical Simplicity
 Every feature solves a real, repeated problem. We don't add features because they're technically interesting or because a competitor has them. We add features when users hit the same friction repeatedly.
