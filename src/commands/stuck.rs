@@ -118,7 +118,7 @@ impl StuckCommand {
         }
 
         // Same rule everywhere: --yes, or ask; --json never skips it
-        if must_confirm("stuck --kill", self.yes, self.json, &processes)? {
+        if must_confirm("stuck --kill", self.yes, self.json, &processes, None)? {
             let confirmed = Confirm::new()
                 .with_prompt(format!(
                     "Kill {} stuck process{}?",

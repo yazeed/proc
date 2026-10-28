@@ -21,7 +21,7 @@
 //! Commas still work (`proc unstick :3000,1234`) but are deprecated.
 
 use crate::core::{
-    apply_filters, flatten_targets, resolve_targets_excluding_self, NameMatch, Process,
+    apply_filters, flatten_targets, resolve_targets_excluding_self, NameMatch, Process, Resolved,
 };
 use crate::error::{ExitCode, ProcError, Result};
 use crate::ui::{format_duration, must_confirm, plural, Printer};
@@ -93,14 +93,18 @@ impl UnstickCommand {
     pub fn execute(&self) -> Result<()> {
         let printer = Printer::from_flags(self.json, self.verbose);
 
-        // Get processes to unstick
-        let mut stuck = if !self.target.is_empty() {
+        // Get processes to unstick, and the targets that matched nothing
+        let (mut stuck, not_found) = if !self.target.is_empty() {
             // Specific targets
-            self.resolve_target_processes(&self.target)?
+            let resolved = self.resolve_target_processes(&self.target)?;
+            if let Some(warning) = resolved.warning() {
+                printer.warning(&warning);
+            }
+            (resolved.processes, resolved.not_found)
         } else {
             // Auto-discover stuck processes
             let timeout = Duration::from_secs(self.timeout);
-            Process::find_stuck(timeout)?
+            (Process::find_stuck(timeout)?, Vec::new())
         };
 
         // Apply --in and --by filters
@@ -128,6 +132,7 @@ impl UnstickCommand {
                     still_stuck: 0,
                     terminated: 0,
                     failed: 0,
+                    not_found: &not_found,
                     processes: Vec::new(),
                 });
             } else {
@@ -161,6 +166,7 @@ impl UnstickCommand {
                     still_stuck: 0,
                     terminated: 0,
                     failed: 0,
+                    not_found: &not_found,
                     processes: stuck
                         .iter()
                         .map(|p| ProcessOutcome {
@@ -189,7 +195,7 @@ impl UnstickCommand {
         }
 
         // Confirm. Same rule everywhere: --yes, or ask; --json never skips it
-        if must_confirm("unstick", self.yes, self.json, &stuck)? {
+        if must_confirm("unstick", self.yes, self.json, &stuck, Some(&not_found))? {
             if self.force {
                 println!(
                     "\n{} With --force: processes will be terminated if recovery fails.\n",
@@ -271,6 +277,7 @@ impl UnstickCommand {
                 still_stuck,
                 terminated,
                 failed,
+                not_found: &not_found,
                 processes: outcomes
                     .iter()
                     .map(|(p, o)| ProcessOutcome {
@@ -304,14 +311,13 @@ impl UnstickCommand {
     }
 
     /// Resolve target to processes, excluding self
-    fn resolve_target_processes(&self, typed: &[String]) -> Result<Vec<Process>> {
+    fn resolve_target_processes(&self, typed: &[String]) -> Result<Resolved> {
         let targets = flatten_targets(typed);
-        let processes =
-            resolve_targets_excluding_self(&targets, NameMatch::from_flag(self.cmd)).processes;
-        if processes.is_empty() {
+        let resolved = resolve_targets_excluding_self(&targets, NameMatch::from_flag(self.cmd));
+        if resolved.processes.is_empty() {
             Err(ProcError::ProcessNotFound(typed.join(" ")))
         } else {
-            Ok(processes)
+            Ok(resolved)
         }
     }
 
@@ -573,7 +579,7 @@ fn summary_lines(
 }
 
 #[derive(Serialize)]
-struct UnstickOutput {
+struct UnstickOutput<'a> {
     action: &'static str,
     success: bool,
     dry_run: bool,
@@ -584,6 +590,8 @@ struct UnstickOutput {
     still_stuck: usize,
     terminated: usize,
     failed: usize,
+    /// The targets that matched nothing
+    not_found: &'a [String],
     processes: Vec<ProcessOutcome>,
 }
 

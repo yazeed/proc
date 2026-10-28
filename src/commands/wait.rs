@@ -75,6 +75,7 @@ impl WaitCommand {
         if let Some(warning) = resolved.warning() {
             printer.warning(&warning);
         }
+        let not_found = resolved.not_found;
         let mut processes = resolved.processes;
 
         // Apply --in and --by filters
@@ -201,6 +202,7 @@ impl WaitCommand {
                         elapsed_human: format_duration(elapsed),
                         target: self.target.join(" "),
                         initial_count,
+                        not_found,
                         exited,
                         still_running,
                     });
@@ -262,6 +264,7 @@ impl WaitCommand {
                 elapsed_human: format_duration(elapsed),
                 target: self.target.join(" "),
                 initial_count,
+                not_found,
                 exited,
                 still_running: vec![],
             });
@@ -288,6 +291,8 @@ struct WaitOutput {
     elapsed_human: String,
     target: String,
     initial_count: usize,
+    /// The targets that matched nothing
+    not_found: Vec<String>,
     exited: Vec<ExitedProcess>,
     still_running: Vec<RunningProcess>,
 }

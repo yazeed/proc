@@ -25,7 +25,7 @@ Printed when the command cannot produce its normal result (including invalid fla
 }
 ```
 
-A command that changes processes and is run with `--json` but without `--yes` fails with exit 4 and adds two fields, so the caller can show the user what a retry with `--yes` would hit. Nothing was changed. `processes` holds [Process Objects](#process-object):
+A command that changes processes and is run with `--json` but without `--yes` fails with exit 4 and adds fields, so the caller can show the user what a retry with `--yes` would hit. Nothing was changed. `processes` holds [Process Objects](#process-object). A command that takes targets (`kill`, `stop`, `freeze`, `thaw`, `unstick`, `free`) also adds `not_found`, the targets that matched nothing (`[]` when every target was found):
 
 ```json
 {
@@ -34,11 +34,12 @@ A command that changes processes and is run with `--json` but without `--yes` fa
   "error": "kill changes processes, so it needs --yes, with --json too (or --dry-run to preview)",
   "exit_code": 4,
   "needs_confirmation": true,
-  "processes": [{ "pid": 1234, "name": "node", "...": "..." }]
+  "processes": [{ "pid": 1234, "name": "node", "...": "..." }],
+  "not_found": ["99999999"]
 }
 ```
 
-Every other error has only the four fields above.
+Every other error has only the four fields above. A command whose targets all match nothing is that kind of error (exit 2), so it has no `not_found`: the `error` text names them.
 
 ## Process Object
 
@@ -195,6 +196,7 @@ If no target is found, the standard error response is printed with exit code 2.
   "success": true,
   "succeeded_count": 1,
   "failed_count": 0,
+  "not_found": ["99999999"],
   "succeeded": [<Process>, ...],
   "failed": [
     {
@@ -207,6 +209,8 @@ If no target is found, the standard error response is printed with exit code 2.
 
 `action` is the command name: `"kill"`, `"stop"`, `"freeze"`, `"thaw"`, `"orphans"`, `"stuck"`. If `failed` is non-empty, `success` is `false` and the exit code is 1.
 
+`not_found` is on `kill`, `stop`, `freeze` and `thaw`, which take targets: the targets that matched nothing, `[]` when every target was found. The processes that were found are still acted on, so a non-empty `not_found` does not change `success` or the exit code. `orphans` and `stuck` take no targets and have no `not_found`.
+
 ### --dry-run --json (kill / stop / freeze / thaw / free / orphans --kill / stuck --kill)
 
 Prints the processes that would be affected; nothing is changed. `action` is the command name:
@@ -217,9 +221,12 @@ Prints the processes that would be affected; nothing is changed. `action` is the
   "success": true,
   "dry_run": true,
   "count": 1,
+  "not_found": [],
   "processes": [<Process>, ...]
 }
 ```
+
+`not_found` is on `kill`, `stop`, `freeze`, `thaw` and `free`, as above; `orphans` and `stuck` have none.
 
 ### proc free --json
 
@@ -230,11 +237,12 @@ Prints the processes that would be affected; nothing is changed. `action` is the
   "results": [
     {"port": 3000, "freed": true},
     {"port": 8080, "freed": false}
-  ]
+  ],
+  "not_found": [":9000"]
 }
 ```
 
-If any port is still in use after `--wait` seconds, `success` is `false` and the exit code is 1.
+If any port is still in use after `--wait` seconds, `success` is `false` and the exit code is 1. `not_found` lists the ports nobody was listening on, as typed; it is on the dry run, the empty result and the `needs_confirmation` error too. A port held by several processes has all of them killed, and is `freed` only once none is left.
 
 ### proc wait --json
 
@@ -247,6 +255,7 @@ If any port is still in use after `--wait` seconds, `success` is `false` and the
   "elapsed_human": "15m 45s",
   "target": "node",
   "initial_count": 2,
+  "not_found": [],
   "exited": [
     {"pid": 12346, "name": "node", "exited_after_seconds": 512},
     {"pid": 12345, "name": "node", "exited_after_seconds": 945}
@@ -255,7 +264,7 @@ If any port is still in use after `--wait` seconds, `success` is `false` and the
 }
 ```
 
-On timeout: `success` is `false`, `timed_out` is `true`, `still_running` lists remaining processes as `{"pid": 12345, "name": "node"}`, and the exit code is 1.
+On timeout: `success` is `false`, `timed_out` is `true`, `still_running` lists remaining processes as `{"pid": 12345, "name": "node"}`, and the exit code is 1. `not_found` lists the targets that matched nothing (`[]` when every target was found), on a timeout too; the processes that were found are still waited for.
 
 ### proc unstick --json
 
@@ -271,11 +280,14 @@ On timeout: `success` is `false`, `timed_out` is `true`, `still_running` lists r
   "still_stuck": 0,
   "terminated": 0,
   "failed": 0,
+  "not_found": [],
   "processes": [
     {"pid": 1234, "name": "node", "uptime_secs": 3600, "outcome": "recovered"}
   ]
 }
 ```
+
+`not_found` lists the targets that matched nothing (`[]` when every target was found, and when no target was given).
 
 `outcome` is one of `recovered`, `terminated`, `still_stuck`, `not_stuck`, `failed: <reason>`, or `would_attempt` (with `--dry-run`). If any process is `still_stuck` or `failed`, `success` is `false` and the exit code is 1.
 
@@ -294,6 +306,7 @@ Newline-delimited JSON, one object per refresh (`-n` seconds, default 2), until 
   "action": "why",
   "success": true,
   "count": 1,
+  "not_found": [],
   "results": [
   {
     "target": ":3000",
@@ -317,6 +330,8 @@ Newline-delimited JSON, one object per refresh (`-n` seconds, default 2), until 
   ]
 }
 ```
+
+A port held by several processes has one result per holder, all with the same `target`. `not_found` lists the targets that matched nothing.
 
 ### proc tree --json
 
@@ -388,7 +403,7 @@ Newline-delimited JSON, one object per refresh (`-n` seconds, default 2), until 
 }
 ```
 
-The `action` field matches the command (`"stuck"`, `"orphans"`, `"free"`).
+The `action` field matches the command (`"stuck"`, `"orphans"`, `"free"`). `free` adds `"not_found": [":3000"]`, the ports nobody was listening on.
 
 ## Signal Names (for --signal flag on proc stop)
 

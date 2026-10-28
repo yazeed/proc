@@ -32,7 +32,15 @@ fn to_stdout(write: impl FnOnce(&mut std::io::Stdout) -> std::io::Result<()>) {
 ///
 /// Both refusals carry `processes`, the ones the command would have changed,
 /// so a caller reading the JSON error can see what a retry with `--yes` hits.
-pub fn must_confirm(action: &str, yes: bool, json: bool, processes: &[Process]) -> Result<bool> {
+/// A command that takes targets also passes `not_found`, the ones that matched
+/// nothing, which the refusal carries too.
+pub fn must_confirm(
+    action: &str,
+    yes: bool,
+    json: bool,
+    processes: &[Process],
+    not_found: Option<&[String]>,
+) -> Result<bool> {
     use std::io::IsTerminal;
     if yes {
         return Ok(false);
@@ -44,6 +52,7 @@ pub fn must_confirm(action: &str, yes: bool, json: bool, processes: &[Process]) 
                  (or --dry-run to preview)"
             ),
             processes: processes.to_vec(),
+            not_found: not_found.map(<[String]>::to_vec),
         });
     }
     if !std::io::stdin().is_terminal() || !std::io::stderr().is_terminal() {
@@ -53,6 +62,7 @@ pub fn must_confirm(action: &str, yes: bool, json: bool, processes: &[Process]) 
                  to ask in; pass --yes (or --dry-run to preview)"
             ),
             processes: processes.to_vec(),
+            not_found: not_found.map(<[String]>::to_vec),
         });
     }
     Ok(true)
@@ -74,6 +84,9 @@ pub struct Printer {
     verbose: bool,
     /// Print full values instead of truncating them to the terminal width.
     wide: bool,
+    /// The targets that matched nothing, for a command that takes targets. When
+    /// set, every JSON result the printer writes has them as `not_found`.
+    not_found: Option<Vec<String>>,
 }
 
 /// Detect terminal width, falling back to 120 when stdout is not a TTY.
@@ -88,7 +101,16 @@ impl Printer {
             format,
             verbose,
             wide: false,
+            not_found: None,
         }
+    }
+
+    /// Say which targets matched nothing: the JSON results (dry run, action,
+    /// the empty result and the refusal that asks for `--yes`) then list them
+    /// as `not_found`, an empty array when every target was found.
+    pub fn with_not_found(mut self, not_found: &[String]) -> Self {
+        self.not_found = Some(not_found.to_vec());
+        self
     }
 
     /// Opt into untruncated output (`--wide`). Values print in full and rows
@@ -135,6 +157,7 @@ impl Printer {
                 success: true,
                 count: 0,
                 message,
+                not_found: self.not_found.as_deref(),
             }),
         }
     }
@@ -528,6 +551,7 @@ impl Printer {
                     success: failed.is_empty(),
                     succeeded_count: succeeded.len(),
                     failed_count: failed.len(),
+                    not_found: self.not_found.as_deref(),
                     succeeded,
                     failed: &failed
                         .iter()
@@ -637,6 +661,7 @@ impl Printer {
                 success: true,
                 dry_run: true,
                 count: processes.len(),
+                not_found: self.not_found.as_deref(),
                 processes,
             }),
         }
@@ -649,7 +674,7 @@ impl Printer {
     /// ask (see [`must_confirm`]).
     pub fn ask_confirm(&self, action: &str, processes: &[Process], yes: bool) -> Result<bool> {
         let json = matches!(self.format, OutputFormat::Json);
-        if !must_confirm(action, yes, json, processes)? {
+        if !must_confirm(action, yes, json, processes, self.not_found.as_deref())? {
             return Ok(true);
         }
         // A person is being asked: `must_confirm` never gets here with --json
@@ -702,6 +727,8 @@ struct EmptyResult<'a> {
     success: bool,
     count: usize,
     message: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    not_found: Option<&'a [String]>,
 }
 
 #[derive(Serialize)]
@@ -718,6 +745,8 @@ struct DryRunOutput<'a> {
     success: bool,
     dry_run: bool,
     count: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    not_found: Option<&'a [String]>,
     processes: &'a [Process],
 }
 
@@ -727,6 +756,8 @@ struct ActionOutput<'a> {
     success: bool,
     succeeded_count: usize,
     failed_count: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    not_found: Option<&'a [String]>,
     succeeded: &'a [Process],
     failed: &'a [FailedAction<'a>],
 }
@@ -751,15 +782,37 @@ mod tests {
     #[test]
     fn json_never_stands_in_for_yes() {
         // --yes: go ahead without asking, in either output format
-        assert!(!must_confirm("kill", true, false, &[]).unwrap());
-        assert!(!must_confirm("kill", true, true, &[]).unwrap());
+        assert!(!must_confirm("kill", true, false, &[], None).unwrap());
+        assert!(!must_confirm("kill", true, true, &[], None).unwrap());
         // --json without --yes is refused (exit 4), never treated as a yes
-        let refused = must_confirm("kill", false, true, &[]).unwrap_err();
+        let refused = must_confirm("kill", false, true, &[], None).unwrap_err();
         assert!(
             matches!(refused, ProcError::ConfirmationRequired { .. }),
             "{refused}"
         );
         assert!(refused.to_string().contains("--yes"));
+    }
+
+    #[test]
+    fn the_refusal_carries_the_targets_that_were_not_found() {
+        let missing = ["99999999".to_string()];
+        let refused = must_confirm("kill", false, true, &[], Some(&missing)).unwrap_err();
+        assert!(
+            matches!(&refused, ProcError::ConfirmationRequired { not_found: Some(n), .. } if *n == missing),
+            "{refused:?}"
+        );
+        // a command without targets has nothing to say about them
+        let refused = must_confirm("stuck", false, true, &[], None).unwrap_err();
+        assert!(
+            matches!(
+                &refused,
+                ProcError::ConfirmationRequired {
+                    not_found: None,
+                    ..
+                }
+            ),
+            "{refused:?}"
+        );
     }
 
     use crate::core::ProcessStatus;

@@ -56,6 +56,7 @@ impl WhyCommand {
         let mut json_results: Vec<WhyOutput> = Vec::new();
         let mut found_any = false;
         let mut first_error: Option<ProcError> = None;
+        let mut not_found: Vec<String> = Vec::new();
 
         for (i, target_str) in targets.iter().enumerate() {
             if i > 0 && !self.json {
@@ -80,6 +81,7 @@ impl WhyCommand {
                 Err((error, warning)) => {
                     printer.warning(&warning);
                     first_error.get_or_insert(error);
+                    not_found.push(target_str.clone());
                     continue;
                 }
             };
@@ -148,6 +150,7 @@ impl WhyCommand {
                 action: "why",
                 success: true,
                 count: json_results.len(),
+                not_found,
                 results: json_results,
             });
         }
@@ -305,6 +308,8 @@ struct WhyEnvelope {
     action: &'static str,
     success: bool,
     count: usize,
+    /// The targets that matched nothing
+    not_found: Vec<String>,
     results: Vec<WhyOutput>,
 }
 

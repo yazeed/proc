@@ -231,11 +231,15 @@ fn main() -> process::ExitCode {
 
         // If --json was requested, output error as JSON to stdout
         if wants_json() {
-            let processes = match &e {
-                ProcError::ConfirmationRequired { processes, .. } => Some(processes.as_slice()),
+            let confirmation = match &e {
+                ProcError::ConfirmationRequired {
+                    processes,
+                    not_found,
+                    ..
+                } => Some((processes.as_slice(), not_found.as_deref())),
                 _ => None,
             };
-            print_json_error(&e.to_string(), exit_code as i32, processes);
+            print_json_error(&e.to_string(), exit_code as i32, confirmation);
         } else {
             eprintln!("{}", e);
         }
@@ -248,18 +252,26 @@ fn main() -> process::ExitCode {
 
 /// Print an error as the standard JSON error object on stdout.
 ///
-/// `confirmation` is `Some(processes)` only for a missing `--yes`: the object
-/// then also says `needs_confirmation` and lists what would have been changed.
-fn print_json_error(error: &str, exit_code: i32, confirmation: Option<&[Process]>) {
+/// `confirmation` is `Some((processes, not_found))` only for a missing `--yes`:
+/// the object then also says `needs_confirmation`, lists what would have been
+/// changed and, for a command that takes targets, the targets that were not found.
+fn print_json_error(
+    error: &str,
+    exit_code: i32,
+    confirmation: Option<(&[Process], Option<&[String]>)>,
+) {
     let mut error_json = serde_json::json!({
         "action": action_name(),
         "success": false,
         "error": error,
         "exit_code": exit_code
     });
-    if let Some(processes) = confirmation {
+    if let Some((processes, not_found)) = confirmation {
         error_json["needs_confirmation"] = serde_json::json!(true);
         error_json["processes"] = serde_json::json!(processes);
+        if let Some(not_found) = not_found {
+            error_json["not_found"] = serde_json::json!(not_found);
+        }
     }
     println!("{}", serde_json::to_string_pretty(&error_json).unwrap());
 }

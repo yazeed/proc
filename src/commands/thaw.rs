@@ -71,6 +71,8 @@ impl ThawCommand {
         if let Some(warning) = resolved.warning() {
             printer.warning(&warning);
         }
+        // the JSON results list the targets that matched nothing
+        let printer = printer.with_not_found(&resolved.not_found);
         let mut processes = resolved.processes;
 
         // Apply --in and --by filters

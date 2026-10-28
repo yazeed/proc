@@ -43,6 +43,9 @@ pub enum ProcError {
         message: String,
         /// The processes the command would have changed
         processes: Vec<Process>,
+        /// The targets that matched nothing, for a command that takes targets
+        /// (`None` for one that finds its own processes)
+        not_found: Option<Vec<String>>,
     },
 
     /// An underlying system call failed
@@ -195,6 +198,7 @@ mod tests {
         let confirmation = ProcError::ConfirmationRequired {
             message: "Pass --yes".to_string(),
             processes: Vec::new(),
+            not_found: None,
         };
         let cases: Vec<(ProcError, &str, i32)> = vec![
             (

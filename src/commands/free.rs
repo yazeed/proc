@@ -53,10 +53,10 @@ impl FreeCommand {
         let targets = flatten_targets(&self.target);
 
         // Validate all targets are ports
-        let mut ports: Vec<u16> = Vec::new();
+        let mut ports: Vec<(&String, u16)> = Vec::new();
         for target in &targets {
             match parse_target(target) {
-                TargetType::Port(port) => ports.push(port),
+                TargetType::Port(port) => ports.push((target, port)),
                 _ => {
                     return Err(ProcError::InvalidInput(format!(
                         "proc free only works with port targets (e.g. :3000), got '{}'. Use proc kill for processes.",
@@ -68,9 +68,10 @@ impl FreeCommand {
 
         // Resolve ports to processes: every process holding a port
         let mut port_processes: Vec<(u16, Process)> = Vec::new();
-        let mut not_found: Vec<u16> = Vec::new();
+        // the ports nobody holds, as typed (":3000")
+        let mut not_found: Vec<String> = Vec::new();
 
-        for port in &ports {
+        for (target, port) in &ports {
             // A port nobody listens on, or whose holders have all gone, is not found
             let mut held = false;
             for listener in PortInfo::holders_of(*port)? {
@@ -80,13 +81,12 @@ impl FreeCommand {
                 }
             }
             if !held {
-                not_found.push(*port);
+                printer.warning(&format!("No process listening on port {}", port));
+                not_found.push((*target).clone());
             }
         }
-
-        for port in &not_found {
-            printer.warning(&format!("No process listening on port {}", port));
-        }
+        // the JSON results list the ports that matched nothing
+        let printer = printer.with_not_found(&not_found);
 
         if port_processes.is_empty() {
             if not_found.is_empty() {
@@ -140,7 +140,7 @@ impl FreeCommand {
         }
 
         // Same rule everywhere: --yes, or ask; --json never skips it
-        if must_confirm("free", self.yes, self.json, &processes)? {
+        if must_confirm("free", self.yes, self.json, &processes, Some(&not_found))? {
             printer.print_confirmation("free", &processes);
 
             let prompt = format!(
@@ -223,6 +223,7 @@ impl FreeCommand {
                 action: "free",
                 success: still_busy.is_empty(),
                 results,
+                not_found: &not_found,
             });
         } else {
             for port in &freed {
@@ -257,10 +258,12 @@ impl FreeCommand {
 }
 
 #[derive(Serialize)]
-struct FreeOutput {
+struct FreeOutput<'a> {
     action: &'static str,
     success: bool,
     results: Vec<FreeResult>,
+    /// The ports nobody was listening on, as typed
+    not_found: &'a [String],
 }
 
 #[derive(Serialize)]
