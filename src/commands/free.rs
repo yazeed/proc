@@ -182,6 +182,11 @@ impl FreeCommand {
             std::time::Instant::now() + std::time::Duration::from_secs(1),
         );
 
+        // A port counts as free once it reads free in two looks in a row: a
+        // copy of the holder (a supervisor, a forked worker) can take it back
+        // within milliseconds of the holder's death, and a single look between
+        // the two says "free" about a port that is in use again
+        let mut was_free = false;
         loop {
             let mut all_free = true;
             freed.clear();
@@ -198,7 +203,9 @@ impl FreeCommand {
                 }
             }
 
-            if all_free || std::time::Instant::now() >= poll_deadline {
+            let settled = all_free && was_free;
+            was_free = all_free;
+            if settled || std::time::Instant::now() >= poll_deadline {
                 break;
             }
 

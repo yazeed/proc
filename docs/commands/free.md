@@ -5,7 +5,7 @@ description: "Free ports by killing the occupying process."
 permalink: /commands/free
 ---
 
-Kill the process on a port and verify the port becomes available. A port held by several processes (one on `127.0.0.1`, one on `[::1]`) has all of them killed, and it counts as free only once none is left. Port-only targets. Asks for confirmation unless `--yes`.
+Kill the process on a port and verify the port becomes available. A port held by several processes (one on `127.0.0.1`, one on `[::1]`) has all of them killed, and it counts as free only once none is left, seen in two looks a quarter of a second apart (a copy that takes the port back in between is reported as still in use). Port-only targets. Asks for confirmation unless `--yes`.
 
 ```bash
 proc free :3000            # free port 3000
