@@ -56,12 +56,14 @@ Feature suggestions are welcome! Please create an issue with:
    ```bash
    cargo test
    cargo fmt -- --check
-   cargo clippy -- -D warnings
+   cargo clippy --all-targets -- -D warnings
    ```
 
 5. **Submit a pull request**:
    - Provide a clear description of the changes
-   - Reference any related issues
+   - Reference any related issues as `(#123)`. A fixed issue is closed when the release that contains the fix ships
+   - Leave **Allow edits by maintainers** on, so small fixes (a conflict, a CHANGELOG line) can go straight onto your branch
+   - PRs are merged with **Rebase and merge**, so your commits land on `main` with you as their author
 
 ## Development Setup
 

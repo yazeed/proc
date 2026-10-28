@@ -1,268 +1,112 @@
 # Roadmap
 
-proc follows a simple philosophy: **simplicity is the ultimate sophistication**.
+This file is about what might come next. Nothing in it is promised. An idea ships only after it passes the feature test in [PHILOSOPHY.md](PHILOSOPHY.md), and many won't. When something ships it leaves this file: [CHANGELOG.md](CHANGELOG.md) is the history.
 
-The goal is not to accumulate features, but to cover the process and port management landscape completely, with commands that feel obvious. We seek sophistication in its simplest form.
+Each candidate lists what it would look like, how it fares against the feature test so far, and what's still open.
 
-See [PHILOSOPHY.md](PHILOSOPHY.md) for our full manifesto.
+## Decided: the next major release
 
-## Current Release (v2.0.0)
+### Remove comma-separated targets
 
-The core commands are complete, with process lifecycle control, diagnostics, real-time monitoring, the Proc Query Language, shell completions, file lookup, consistent filtering, terminal-adaptive tables, a consistent JSON and exit-code contract, an agent skill, and full CI/CD automation:
+`proc kill :3000,:8080` has been deprecated since 2.0.0 in favour of separate arguments (`proc kill :3000 :8080`), and prints a notice on stderr when used (human output only, so `--json` is unaffected). The next major release removes it, so there is one spelling for several targets.
 
-| Area | Commands | Status |
-|------|----------|--------|
-| Discovery | `on`, `for`, `by`, `in`, `ports`, `list`, `info`, `tree`, `stuck`, `why`, `orphans` | ✅ |
-| Monitoring | `watch` (alias: `top`) — real-time process monitoring; `wait` — block until exit | ✅ |
-| Lifecycle | `kill`, `stop`, `unstick`, `freeze`, `thaw`, `free` (all support multi-target; all but `free` also take `--in` and `--by`) | ✅ |
-| Tooling | `completions`, `manpage`, agent skill (`npx skills add yazeed/proc-cli`) | ✅ |
+**Open:** what a comma does once removed: an error that shows the separate-argument form, or treating the whole word as one name.
 
-### v2.0.0 Highlights
+## Candidates
 
-- **Exact names**: a name matches the whole process name; `--cmd` matches any part of the name or command line (BREAKING, add `--cmd` to keep the old matching)
-- **Separate-argument targets**: `proc kill :3000 :8080 node` (commas are deprecated)
-- **`--json` is not consent**: commands that change processes need `--yes`; without it they exit 4 with `needs_confirmation`
-- **`not_found` in every action's JSON**, and `:port` means every process listening on the port
-- **Agent skill rewritten** around a safety model for agents
-- **`--wide` and `--version`**: `--wide` prints full directories and arguments; a build that isn't a release says so (`2.0.0-dev (main@abc1234, 3 commits after v2.0.0)`)
-- **Port lookups on Linux read `/proc`** (nothing to install), and CI enforces 100% line coverage across Linux, macOS and Windows
-- **Library API changes** (name matching mode, `Resolved`, new `ProcError` variants): see the CHANGELOG
+### Signal words, not numbers
 
-### v1.14.5 Highlights
+`-9`, `-15` and `-HUP` are notation people copy without knowing what they mean. proc already takes signal names (`--signal KILL`), but rejects numbers: `proc stop 1234 --signal 9` is an error. The idea: accept the number people already type, act on it, and answer with the word (`9 is SIGKILL`), so a habit turns into knowledge.
 
-- **Uptime in every process view**: `on`, `tree`, `why` and `watch` show it, and every command's JSON has `uptime_secs`
-- **No more 56-year uptimes** for other users' processes on macOS, and `--status` rejects typos instead of matching everything
-- **npm package without an install script**, and an [agent skill](https://proc-cli.com/skill) page on the website
+**Feature test:** fits the domain; makes the common case effortless for people with `kill -9` in their fingers. **Open:** whether `proc kill -9 <target>` (today: "unexpected argument") should also be accepted, and how that reads next to `kill` always meaning SIGKILL.
 
-### v1.14.4 Highlights
+### A verb for reloading
 
-- **Linux lists processes, not their threads**: a Node server no longer shows up a dozen times
-- **New demo recording**: a port conflict, where it came from, and the leftovers
+`proc stop nginx --signal HUP` sends HUP and then, like every `stop`, force-kills whatever is still running after `--timeout`, so it can't safely reload a config. Reloading is something people do, so it could be a verb:
 
-### v1.14.3 Highlights
-
-- **Repository renamed to `yazeed/proc-cli`**, matching the crate, npm package, skill and website; old links redirect
-- **Docker image `yazeed/proc-cli`**, with `yazeed/proc` still updated
-
-### v1.14.2 Highlights
-
-- **`proc stop --signal`** rejects an unknown signal before the dry run and the confirmation prompt
-- **Website** at [proc-cli.com](https://proc-cli.com)
-
-### v1.14.1 Highlights
-
-- **Processes in deleted directories**: `proc in <dir>` lists processes still running in a directory that was deleted (such as a removed git worktree), and on Linux `cwd` and `--in` no longer trip over the kernel's `(deleted)` marker
-- **Agent skill**: when to reach for proc, what it replaces, and playbooks for busy ports and cleaning up leftovers
-
-### v1.14.0 Highlights
-
-- **Uptime everywhere**: `uptime_secs` in every process's JSON, an `UPTIME` column in process tables on wide terminals, and an `uptime:` line with `--verbose`
-- **`proc inspect`**: alias of `proc info`
-
-### v1.13.4 Highlights
-
-- **Static Linux binaries**: musl builds that also run on older distributions (Debian 10, Ubuntu 20.04, Amazon Linux 2) and on Alpine
-- **Docker port lookups**: the image includes `ss`, so `on :port`, `ports` and `free` work (run with `--net=host`); 2.0 reads `/proc` itself, so the image no longer needs `ss`
-- **User names**: `user` shows the user name instead of the numeric ID
-
-### v1.13.0 Highlights
-
-- **One JSON contract**: every command prints a single JSON document whose `action` is the command name; `"success": false` always means a non-zero exit code
-- **Dry runs say what they are**: `--dry-run --json` reports the command and `"dry_run": true`
-- **Usage errors are invalid input**: exit 4, and JSON with `--json`
-- **Agent skill** brought up to date with every command, flag, and output shape
-
-### v1.10.0 – v1.12.x Highlights
-
-- **`proc wait`** (1.12.0): block until processes exit, with `--timeout` and `--interval`
-- **Consistent JSON envelopes** (1.12.0): `on`, `for`, and `why` wrap results in `count`/`results`; empty results return JSON
-- **JSON error envelope** (1.10.0): with `--json`, errors print `{"success": false, "error", "exit_code"}` to stdout
-- **Agent Skills** (1.10.0): `skills/proc-cli/SKILL.md` for coding agents
-
-### v1.9.0 Highlights
-
-- **`proc freeze` / `proc thaw`**: Pause and resume processes by port, PID, or name (SIGSTOP/SIGCONT)
-  - `proc freeze :3000` — pause the process on port 3000
-  - `proc thaw :3000` — resume it
-  - Supports `--in`, `--by`, `--dry-run`, `--yes`, `--json`
-- **`proc orphans`**: Find orphaned processes whose parent has exited
-  - `proc orphans --in .` — orphans in current project
-  - `proc orphans --kill` — find and kill them
-  - Smart filtering excludes system daemons on macOS and Linux
-- **`proc why`**: Trace process ancestry with port context
-  - `proc why :3000` — "why is port 3000 busy?" with full ancestry chain
-  - Shows working directory and command for the target
-- **`proc free`**: Kill + verify port freed (the EADDRINUSE fix as a command)
-  - `proc free :3000,:8080` — free multiple ports, verify availability
-  - Polls until port is actually free (handles TIME_WAIT)
-- **`--signal` on `proc stop`**: Send custom signals
-  - `proc stop nginx --signal HUP` — reload config without restart
-  - Accepts: HUP, INT, QUIT, ABRT, KILL, TERM, STOP, CONT, USR1, USR2
-
-### v1.8.0 Highlights
-
-- **`proc watch`**: Real-time process monitoring with auto-refresh
-  - `proc watch` — watch all processes (alias: `proc top`)
-  - `proc watch node` — watch node processes
-  - `proc watch :3000` — watch process on port 3000
-  - `--interval/-n` — configurable refresh interval (default: 2s)
-  - `--sort/-s` — sort by cpu, mem, pid, name
-  - `--limit/-l` — cap number of results
-  - Combines with `--in`, `--by`, `--min-cpu`, `--min-mem` filters
-  - Alternate screen + raw mode for clean terminal experience
-  - NDJSON output (`--json`) for streaming to other tools
-  - Non-TTY detection: single snapshot when piped
-
-### v1.7.4 Highlights
-
-- **Self-exclusion**: `proc` no longer shows itself in `find_all()` results — fixes false positives across `list`, `by`, `in`, `stuck`, and other enumeration commands
-
-### v1.7.3 Highlights
-
-- **Working directory in output**: `proc on`, `proc info`, and all table views now show the process working directory — instantly tells you which project folder a process is running from
-- **Table `PATH` → `DIR` column**: Process tables now show working directory instead of executable path
-
-### v1.7.0 Highlights
-
-- **Terminal-adaptive tables**: Process and port tables now adapt to terminal width using `comfy-table`, no more overflow on 80-column terminals
-- **Deduplication**: Extracted shared utilities (`resolve_in_dir`, `format_duration`, `truncate_string`, `colorize_status`) — 12 duplicate copies eliminated
-- **Flag consistency**: `--verbose`/`-v` added to `stop`, `tree`, `unstick`; `--json` short flag standardized to `-j` across all commands; `--in` defaults fixed on `on` and `for`
-- **New filters**:
-  - `--min-uptime` on `list`, `by`, `in`, `for`, `tree` — filter by process uptime
-  - `--parent` on `list`, `by`, `in` — filter by parent PID
-  - `--range` on `ports` — filter by port range (e.g., `3000-9000`)
-  - `--limit` on `ports` and `for` — cap result count
-  - `--sort` on `for` — sort by cpu, mem, pid, name
-  - `--dry-run` on `stuck --kill` — preview before killing
-- **Multi-target `proc list`**: `proc list node,python` — comma-separated names, deduplicated
-- **Unified confirmation prompts**: All destructive commands use consistent `⚠` icon
-
-### v1.6.0 Highlights
-
-- **`--in` and `--by` everywhere**: All commands now support `--in` (directory) and `--by` (name) filters
-  - `proc kill node --in .` — Only kill node processes in current directory
-  - `proc stop node --by worker --cmd` — Only stop "worker" node processes (since 2.0, `--by` is an exact name; `--cmd` matches a part)
-  - `proc ports --by node --in .` — Ports from node processes in cwd
-  - `proc stuck --by node` — Only stuck node processes
-- **`proc ports`**: Renamed `--filter` to `--by` for consistency
-
-### v1.5.x Highlights
-
-- **`proc for <file>`**: Find processes by file path
-  - `proc for ./script.py` — What's running this file?
-  - `proc for /usr/bin/node` — Processes running this executable
-  - `proc for app.log` — What has this file open?
-  - Supports relative paths, absolute paths, and tilde expansion
-  - Shows process info AND listening ports
-
-### v1.4.x Highlights
-
-- **Shell completions**: `proc completions bash|zsh|fish`
-- **Man page generation**: `proc manpage`
-- **Dry-run for stop**: `proc stop node --dry-run`
-
-### v1.3.x Highlights
-
-_Commas are deprecated in 2.0 and print a note on stderr (human output only); use separate arguments (`proc kill :3000 :8080 node`)._
-
-- **Proc Query Language**: Composable process discovery
-  - `proc by node --in .` — Filter by name with directory
-  - `proc in . --by node` — Filter by directory with name
-  - `proc on node --in .` — Bidirectional lookup with filters
-- **Multi-target support**: `proc kill :3000,:8080,node`
-- **PID deduplication**: Overlapping targets resolved safely
-- **Automated publishing**: All package managers update on release
-  - crates.io, npm, Homebrew, Scoop, Docker — all via CI
-
-## Planned
-
-No features are currently planned. All previously planned features (freeze/thaw, orphans, free, why, --signal) have been shipped in v1.9.0.
-
-## Under Consideration
-
-Features that have valid use cases but are not yet prioritized. Each is evaluated against our [philosophy](PHILOSOPHY.md).
-
-### Hog (Resource-Heavy Processes)
-
-A dedicated command for finding resource hogs.
-
-```
-proc hog           # Find resource-heavy processes
-proc hog --cpu     # Sort by CPU
-proc hog --mem     # Sort by memory
+```bash
+proc reload nginx      # send SIGHUP, don't escalate, report who got it
 ```
 
-**Use cases:**
-- Quickly find what's consuming CPU/memory
-- Shorter than `proc list --min-cpu 10 --sort cpu`
+**Feature test:** one obvious command, natural grammar (a verb that changes state). **Open:** which signal each common server reloads on, and whether `reload` should verify anything afterwards.
 
-**Philosophy check:** ✅ Fits process management, ✅ one obvious command, ✅ common case effortless, ⚠️ functionality exists via flags.
+### Defaults that follow the risk
 
-**Status:** Functionality already exists in `list` via `--min-cpu`, `--min-mem`, and `--sort` flags. Would consider adding `hog` as a shorthand if there's user demand.
+Every confirmation prompt defaults to no today. A prompt that always defaults to no trains people to type yes without reading. The idea: default to yes when the action can be undone (`freeze`, which `thaw` reverses) and to no when it can't (`kill`). `--json` and scripts are unaffected: they still need `--yes`.
 
-### Quiet Mode
+**Feature test:** "is the safe path the short path?" (proposed below). **Open:** which commands count as recoverable (`stop` can escalate to SIGKILL).
 
-Suppress non-essential output for scripting.
+### `proc :3000`
 
+A bare target as a shortcut for `proc on`: the shortest possible answer to "what's on port 3000?". Today it's "unrecognized subcommand".
+
+**Feature test:** one obvious command for the most common question. **Open:** whether a bare name or PID should work too (`proc node`), and the conflict with a process named like a future command.
+
+### Errors that name what you meant
+
+When a guess is wrong, the error should say the right command:
+
+- `proc kil node` is "unrecognized subcommand 'kil'", with no suggestion of `kill`.
+- `proc kill 3000 --dry-run`, with no process 3000 but a listener on port 3000, could ask "did you mean :3000?".
+
+**Feature test:** obvious, explicit (proc says which reading it took). **Open:** how far suggestions go before they become guesses.
+
+### Hog
+
+```bash
+proc hog           # resource-heavy processes
+proc hog --cpu
+proc hog --mem
 ```
-proc kill :3000 -q    # Kill silently, only output errors
-proc on :3000 -q      # Output PID only, no formatting
+
+A shorter `proc list --min-cpu 10 --sort cpu`. **Feature test:** fits, one command, but it adds a second spelling for something `list` already does, which goes against the proposed "one obvious spelling per intent" (below). **Open:** whether there is real demand.
+
+### Quiet mode
+
+```bash
+proc kill :3000 -q    # errors only
+proc on :3000 -q      # the PID only
 ```
 
-**Use cases:**
-- Shell scripts that parse output
-- CI/CD pipelines where minimal output is preferred
-- Chaining with other commands
+For shell scripts and pipelines that want one value without JSON. **Feature test:** fits, obvious flag. **Open:** demand, and what each command prints in quiet mode.
 
-**Philosophy check:** ✅ Fits process management, ✅ obvious flag, ✅ covers scripting workflow, ✅ weekly use in scripts.
+### Doctor
 
-**Status:** Natural complement to `--json`. Would consider if there's user demand.
-
-**Competitive context:** fkill offers `--silent` for similar use cases.
-
-### Doctor (Diagnostic Health Check)
-
-A meta-diagnostic command that checks for common process problems.
-
-```
+```bash
 proc doctor
 ```
 
-Example output:
+One health check after a crash or a messy session: port conflicts, orphans, stuck processes, zombies, each with the command that fixes it. **Feature test:** fits, one command, but it aggregates existing commands rather than adding a capability. **Open:** what counts as a problem worth reporting.
 
-```
-PROCESS HEALTH CHECK
+### UDP ports
 
-✓ no port conflicts
-✗ 2 orphaned node processes
-✗ 1 stuck process (webpack, 98% CPU)
-✓ no zombies
+`proc on`, `ports` and `free` only see TCP listeners. **Open:** how UDP sockets show up in each command without making TCP output noisier.
 
-Suggested:
-  proc orphans --kill
-  proc unstick
-```
+### The human clock
 
-**Use cases:**
-- Quick health check after a crash or messy dev session
-- CI/CD pre-flight: verify clean environment before test run
-- "Something feels slow" — one command to diagnose
+How long someone who has never used proc takes to get a correct answer. Unlike the machine clock (time per command), nothing measures it yet. **Open:** how to measure it (first-run sessions, agent evals like `skills/proc-cli/evals.md`).
 
-**Philosophy check:** ✅ Fits process management, ✅ one obvious command, ✅ common case effortless, ⚠️ aggregates existing commands rather than adding new capability.
+## Proposed changes to PHILOSOPHY.md
 
-**Status:** Useful but depends on `orphans` and `stuck` being solid first. Would be a natural addition once the diagnostic commands are mature.
+PHILOSOPHY.md is the criteria, so it changes slowly and on purpose. These changes are proposed and not adopted:
 
-### Not Planned
+- **Language, not notation:** prefer words to signal numbers and other notation; accept the notation and answer with the word.
+- **Safe by default:** the dangerous path must be longer to type than the safe one; prompts default by risk, not always to no.
+- **Compatible with habits:** familiar spellings keep working, and proc answers in its own words.
+- **One obvious spelling per intent**, as part of "Easy to remember".
+- **Fast, two clocks:** the machine clock (with an honest exception for CPU readings, which need a real sampling interval) and the human clock.
+- **Two new feature-test questions:** "Would you say it out loud?" and "Is the safe path the short path?"
+
+## Not planned
 
 These are outside proc's scope. See [PHILOSOPHY.md](PHILOSOPHY.md) for why.
 
-- **Service management** — Use systemd, launchd, or supervisord
-- **Container management** — Use docker or podman (killport has `--mode container`, we don't)
-- **Remote processes** — Use ssh + proc
-- **Historical data** — Use proper monitoring tools
-- **GUI/Dashboard** — proc is a CLI tool
-- **Interactive TUI mode** — fkill offers fuzzy search UI; proc is for when you know what you want. Note: `proc watch` provides real-time monitoring without interactivity.
-- **Auto-updates** — Use your package manager
+- **Service management:** use systemd, launchd or supervisord
+- **Container management:** use docker or podman
+- **Remote processes:** use ssh + proc
+- **Historical data:** use monitoring tools; `proc watch` shows the present
+- **A GUI or an interactive TUI:** proc is for when you know what you want. `proc watch` refreshes a live view, but its only key is quit
+- **Auto-updates:** use your package manager
 
 ---
 
