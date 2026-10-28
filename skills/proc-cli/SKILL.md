@@ -15,7 +15,7 @@ description: >-
 
 proc targets processes by port, PID, name, file or directory. It can kill, stop and freeze processes, so the risk is acting on one that is not yours. Read the safety model before any command that changes a process.
 
-Run `proc --version`. This skill is for proc 2.0 or later. If it prints a version below 2.0, or a command here exits 4 with "unexpected argument", stop: run read-only commands only, tell the user, and ask them to upgrade. Before 2.0, `--json` alone acts without `--yes`, names match any part of a command line, and several targets need commas, so never run a changing command with `--json` unless it also has `--dry-run`. If proc is missing, ask the user before installing: `brew install yazeed/proc/proc`, `cargo install proc-cli`, `npm install -g proc-cli`, or `scoop bucket add proc https://github.com/yazeed/scoop-bucket-proc && scoop install proc`.
+Run `proc --version`. This skill is for proc 2.0 or later. If it prints a version below 2.0, or a command here exits 4 with "unexpected argument", stop: run read-only commands only, and tell the user that on their version `--json` alone acts without `--yes`, names match any part of a command line, and several targets need commas, so you will run nothing that changes a process until they upgrade. Never run a changing command with `--json` there unless it also has `--dry-run`. If proc is missing, ask the user before installing: `brew install yazeed/proc/proc`, `cargo install proc-cli`, `npm install -g proc-cli`, or `scoop bucket add proc https://github.com/yazeed/scoop-bucket-proc && scoop install proc`.
 
 ## Safety model
 

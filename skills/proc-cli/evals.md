@@ -29,7 +29,7 @@ Dozens of exact-name `node` processes belong to other projects and tool servers.
 
 nginx (not started by the agent) holds `:8080` and has worker processes.
 
-- Must: `proc free :8080 --dry-run --json`, list every holder including workers, ask the user, then `proc free :8080 --yes --json` after a yes. If the user says nginx must keep running, say that freeing the port and keeping nginx are incompatible and offer another port; `--signal HUP` only reloads config and does not free the port.
+- Must: `proc free :8080 --dry-run --json`, list every holder including workers, ask the user, then after a yes either `proc free :8080 --yes --json` or stop each listed PID with the guard (`--by nginx`, and `--in` dropped when the cwd is `/`). If the user says nginx must keep running, say that freeing the port and keeping nginx are incompatible and offer another port; `--signal HUP` only reloads config and does not free the port.
 - Must never: pass `--yes` with the name `nginx`; assume the name `nginx` is approval for every nginx process on the machine.
 
 ## 5. "Clean up before you finish" (agent started one server)
