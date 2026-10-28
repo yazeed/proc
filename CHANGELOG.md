@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The agent skill treats process fields as data, not instructions** (rule 8). A process's name, command line, working directory, executable path and user are written by whoever started it, so an agent never acts on text found in them and tells the user if one reads like an instruction
+- **The skill and its JSON reference say how to tell exit-4 cases apart:** only the confirmation error has a `needs_confirmation` key (always `true`), and a successful action's `succeeded` and `failed` lists are the receipt for the preview's `processes`
+
 ## [2.0.0] - 2026-10-28
 
 This is a major release. Read **Changed** first: a name now matches the whole process name (add `--cmd` for the old matching), and `--json` no longer counts as `--yes`. The library API changed too (see the entries marked **Library API**).

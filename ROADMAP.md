@@ -16,13 +16,13 @@ Each candidate lists what it would look like, how it fares against the feature t
 
 ### A reason on every exit 4
 
-Exit 4 means nothing was done, for one of three reasons: the input was invalid, a confirmation is needed, or the OS doesn't support the command. Only the second is machine-readable today (`needs_confirmation: true`). A bad flag and "not supported" both come back as exit 4 with only an `error` message, so an agent has to read prose to tell them apart. The idea: every exit-4 JSON error carries a `reason`:
+Exit 4 means nothing was done, for one of three reasons: the input was invalid, a confirmation is needed, or the OS doesn't support the command. Only the second is machine-readable today: the confirmation error is the only one with a `needs_confirmation` key (always `true`). A bad flag and "not supported" both come back as exit 4 with only an `error` message, so an agent has to read prose to tell them apart. The idea: every exit-4 JSON error carries a `reason`:
 
 ```json
 { "action": "orphans", "success": false, "exit_code": 4, "reason": "not_supported", "error": "..." }
 ```
 
-**Feature test:** follows the JSON contract (scripts and agents read proc without parsing text), adds a field and changes no behaviour, so it fits a 2.x release. Raised by an agent tester after 2.0.0. **Open:** the names (`invalid_input`, `needs_confirmation`, `not_supported`), and whether exits 1 to 3 get one too.
+**Feature test:** follows the JSON contract (scripts and agents read proc without parsing text), adds a field and changes no behaviour, so it fits a 2.x release. Raised by an agent tester after 2.0.0. **Open:** the names (`invalid_input`, `needs_confirmation`, `not_supported`), whether exits 1 to 3 get one too, and whether the success receipt should use the preview's word too (today the preview lists `processes` and the receipt `succeeded` and `failed`).
 
 ### Signal words, not numbers
 

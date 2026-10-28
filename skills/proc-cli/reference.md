@@ -59,7 +59,7 @@ A command that changes processes (`kill`, `stop`, `freeze`, `thaw`, `free`, `uns
 }
 ```
 
-`processes` is what a retry would touch, with CPU measured. `not_found` is on commands that take targets (`kill`, `stop`, `freeze`, `thaw`, `unstick`, `free`) and is `[]` when every target was found. `orphans` and `stuck` take no targets and have no `not_found`. If every target is missing, the result is the plain exit 2 error with no `not_found` (the `error` text names them). With a terminal and no `--json`, the command asks `[y/N]` instead.
+`processes` is what a retry would touch, with CPU measured. Only this case has a `needs_confirmation` key, and it is always `true`: every other error, exit 4 included, has no such key, so `needs_confirmation == true` is how to tell "needs a yes" from invalid input or an unsupported OS. `not_found` is on commands that take targets (`kill`, `stop`, `freeze`, `thaw`, `unstick`, `free`) and is `[]` when every target was found. `orphans` and `stuck` take no targets and have no `not_found`. If every target is missing, the result is the plain exit 2 error with no `not_found` (the `error` text names them). With a terminal and no `--json`, the command asks `[y/N]` instead.
 
 How to respond is in SKILL.md, rule 6: show `processes` to the user, and re-run with `--yes` only after approval, by the PIDs you showed.
 
@@ -215,7 +215,7 @@ A single name gives `results` entries of `{process, ports}` without `target`. Po
 }
 ```
 
-`action` is `"kill"`, `"stop"`, `"freeze"`, `"thaw"`, `"orphans"` or `"stuck"`. If `failed` is non-empty, `success` is `false` and the exit is 1; the entries in `succeeded` were still acted on. A non-empty `not_found` does not change `success`, so compare every target you passed with `succeeded`. `orphans` and `stuck` have no `not_found`.
+`action` is `"kill"`, `"stop"`, `"freeze"`, `"thaw"`, `"orphans"` or `"stuck"`. `succeeded` and `failed` together are the receipt for the preview's `processes`: every process the command acted on, as full entries, so an agent can record exactly what it did. If `failed` is non-empty, `success` is `false` and the exit is 1; the entries in `succeeded` were still acted on. A non-empty `not_found` does not change `success`, so compare every target you passed with `succeeded`. `orphans` and `stuck` have no `not_found`.
 
 ### --dry-run
 
