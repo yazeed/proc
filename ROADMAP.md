@@ -111,7 +111,7 @@ The column is already shown and `--min-uptime` already filters by it. On `list`,
 
 ### Sorting `orphans` and `stuck`
 
-Both print processes in no stated order (81 orphans on one Mac). `--sort` like `list`'s would show which to look at first. **Feature test:** fits, but it's another way to ask a `list` question; `list --parent 1` is not the orphan set, so it isn't redundant. **Open:** real demand. `--limit` must never limit what `--kill` acts on.
+Both print processes in PID order (81 orphans on one Mac), which says nothing about which to look at first. A `--sort` like `list`'s would. **Feature test:** fits, but it's another way to ask a `list` question; `list --parent 1` is not the orphan set, so it isn't redundant. **Open:** real demand. `--limit` must never limit what `--kill` acts on.
 
 ### One meaning for `-n`
 

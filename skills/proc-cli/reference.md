@@ -217,7 +217,7 @@ One port (`proc on :3000`):
 }
 ```
 
-`127.0.0.1:3000` and `[::1]:3000` are different sockets. `processes` lists every holder once. `process` is the first holder, and `protocol` and `address` are that holder's. Read `processes`.
+`127.0.0.1:3000` and `[::1]:3000` are different sockets. `processes` lists every holder once. `process` is the holder with the lowest PID on every OS, and `protocol` and `address` are that holder's. Read `processes`.
 
 One PID (`proc on <pid>`): `{"action": "on", "query_type": "process_to_ports", "success": true, "process": <Process>, "ports": [<Port>, ...]}`.
 

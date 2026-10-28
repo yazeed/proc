@@ -181,8 +181,9 @@ fn is_ascending<T: PartialOrd>(values: &[T]) -> bool {
 fn by_a_name_lists_the_pids_ascending_on_every_run() {
     let _lock = serial();
     let herd = Herd::start(4, 0);
-    let first = run_json(&["by", &herd.name, "--json"]);
-    let second = run_json(&["by", &herd.name, "--json"]);
+    // --sort pid: the default (cpu) is not guaranteed to tie between copies
+    let first = run_json(&["by", &herd.name, "--sort", "pid", "--json"]);
+    let second = run_json(&["by", &herd.name, "--sort", "pid", "--json"]);
     assert_eq!(first.1, 0);
     assert_eq!(pids_in(&first.0, "processes"), herd.pids());
     assert_eq!(pids_in(&second.0, "processes"), herd.pids());
@@ -194,20 +195,13 @@ fn list_with_a_name_and_a_limit_keeps_the_same_rows() {
     let herd = Herd::start(5, 0);
     let pids = herd.pids();
     // every row ties on the name, so which two are kept is down to the tie-break
-    for sort in ["name", "cpu", "mem"] {
-        for _ in 0..2 {
-            let (json, code) =
-                run_json(&["list", &herd.name, "--sort", sort, "--limit", "2", "--json"]);
-            assert_eq!(code, 0);
-            let got = pids_in(&json, "processes");
-            if sort == "name" {
-                assert_eq!(got, pids[..2], "--sort name");
-            } else {
-                // equal CPU and memory (a sleeping copy): same tie-break
-                assert_eq!(got.len(), 2, "--sort {sort}");
-                assert!(is_ascending(&got), "--sort {sort}: {got:?}");
-            }
-        }
+    // (cpu and mem ties are covered by the unit tests: copies need not tie)
+    for _ in 0..2 {
+        let (json, code) = run_json(&[
+            "list", &herd.name, "--sort", "name", "--limit", "2", "--json",
+        ]);
+        assert_eq!(code, 0);
+        assert_eq!(pids_in(&json, "processes"), pids[..2], "--sort name");
     }
 }
 
