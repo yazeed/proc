@@ -212,11 +212,18 @@ fn free_lists_the_ports_that_were_not_found() {
     assert_eq!(json["needs_confirmation"], true, "{json}");
     assert_eq!(json["not_found"], json!([free]), "{json}");
 
-    // the result: only the port the test holds is named with --yes
-    let (json, code) = run_json(&["free", &held, "--yes", "--json"]);
+    // the result, with --yes: it acts on the port the test holds; `:1` is
+    // privileged, so nothing is expected on it. Checked first: if something
+    // does hold it on this machine, skip rather than act on it.
+    let (probe, code) = run_json(&["on", &free, "--json"]);
+    if code != 2 {
+        eprintln!("skipped: something holds {free}: {probe}");
+        return;
+    }
+    let (json, code) = run_json(&["free", &held, &free, "--yes", "--json"]);
     assert_eq!(code, 0, "{json}");
     assert_eq!(json["success"], true, "{json}");
-    assert_eq!(json["not_found"], json!([]), "{json}");
+    assert_eq!(json["not_found"], json!([free]), "{json}");
 }
 
 #[test]
