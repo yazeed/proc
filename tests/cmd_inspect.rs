@@ -1067,7 +1067,7 @@ fn help_and_version_print_and_exit_cleanly() {
     assert_eq!(code, 0);
     assert_eq!(stderr, "");
     assert!(
-        out.contains("Commands:") && out.contains("EXAMPLES:"),
+        out.contains("Commands:") && out.contains("Examples:"),
         "{out}"
     );
 

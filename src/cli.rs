@@ -24,75 +24,150 @@ const VERSION_INFO: &str = concat!(
 /// headers around them.
 pub const STYLES: Styles = Styles::styled();
 
-/// The examples that open the long help; the footer follows them
-const EXAMPLES: &str = "EXAMPLES:
-
-  Port/Process Lookup:
-    proc on :3000                  What's on port 3000?
-    proc on :3000 :8080            What's on several ports?
-    proc on node                   What ports are the processes named node using?
-
-  Find by File:
-    proc for ./server              Processes running this program (or holding it open)
-    proc for /usr/bin/node         Processes running this executable
-    proc for app.log               What has this file open? (not searched on Windows)
-
-  Filter by Name:
-    proc by node                   Processes named 'node' (the whole name)
-    proc by node --cmd             Anything with 'node' in its name or command line
-    proc by node --in .            Node processes in current directory
-    proc by node --min-cpu 5       Node processes using >5% CPU
-
-  Filter by Directory:
-    proc in .                      Processes in current directory
-    proc in . --by node            Node processes in cwd
-
-  List All:
-    proc list                      All processes
-    proc list --min-cpu 10         Processes using >10% CPU
-
-  Info/Kill/Stop (multi-target):
-    proc info :3000 :8080          Info for several targets
-    proc kill :3000 node           Kill port 3000 and the processes named node
-    proc kill serve --cmd          Kill processes with 'serve' in their command line
-    proc kill 1234 5678 :8080      Kill two PIDs and whatever is on 8080
-    proc stop :3000 :8080          Stop several targets gracefully
-
-  Watch (Real-Time):
-    proc watch                     Watch all processes (alias: proc top)
-    proc watch node                Watch the processes named node
-    proc watch :3000               Watch process on port 3000
-    proc watch :3000 :8080 node    Watch several targets
-    proc watch -n 1 --sort mem     1s refresh, sorted by memory
-    proc watch --in . --by node    Node processes in current directory
-
-  Freeze/Thaw:
-    proc freeze node               Pause the processes named node (SIGSTOP)
-    proc freeze :3000 --yes        Freeze by port, skip confirm
-    proc thaw node                 Resume frozen processes (SIGCONT)
-
-  Free Ports:
-    proc free :3000                Kill process, verify port freed
-    proc free :3000 :8080 --yes    Free several ports
-
-  Diagnostics:
-    proc why :3000                 Why is port 3000 busy? (ancestry)
-    proc orphans                   Find orphaned processes
-    proc orphans --kill            Find and kill orphans
-
-  Wait:
-    proc wait node                 Wait until node processes exit
-    proc wait 1234 5678            Wait until both exit
-    proc wait :3000 --timeout 60   Wait up to 60s for port to free
-    proc wait node -n 10 -q        Check every 10s, quiet mode
-
-  Other:
-    proc ports                     List all listening TCP ports
-    proc tree --min-cpu 5          Process tree filtered by CPU
-    proc stuck                     Find hung processes
-    proc unstick --force           Recover or terminate stuck processes
-    proc stop nginx --signal USR1  Send a different first signal (force-killed after --timeout if it lives)
-";
+/// The examples that open the long help, in groups; the footer follows them
+const EXAMPLES: &[(&str, &[(&str, &str)])] = &[
+    (
+        "Port/Process Lookup",
+        &[
+            ("proc on :3000", "What's on port 3000?"),
+            ("proc on :3000 :8080", "What's on several ports?"),
+            (
+                "proc on node",
+                "What ports are the processes named node using?",
+            ),
+        ],
+    ),
+    (
+        "Find by File",
+        &[
+            (
+                "proc for ./server",
+                "Processes running this program (or holding it open)",
+            ),
+            (
+                "proc for /usr/bin/node",
+                "Processes running this executable",
+            ),
+            (
+                "proc for app.log",
+                "What has this file open? (not searched on Windows)",
+            ),
+        ],
+    ),
+    (
+        "Filter by Name",
+        &[
+            ("proc by node", "Processes named 'node' (the whole name)"),
+            (
+                "proc by node --cmd",
+                "Anything with 'node' in its name or command line",
+            ),
+            ("proc by node --in .", "Node processes in current directory"),
+            ("proc by node --min-cpu 5", "Node processes using >5% CPU"),
+        ],
+    ),
+    (
+        "Filter by Directory",
+        &[
+            ("proc in .", "Processes in current directory"),
+            ("proc in . --by node", "Node processes in cwd"),
+        ],
+    ),
+    (
+        "List All",
+        &[
+            ("proc list", "All processes"),
+            ("proc list --min-cpu 10", "Processes using >10% CPU"),
+        ],
+    ),
+    (
+        "Info/Kill/Stop (multi-target)",
+        &[
+            ("proc info :3000 :8080", "Info for several targets"),
+            (
+                "proc kill :3000 node",
+                "Kill port 3000 and the processes named node",
+            ),
+            (
+                "proc kill serve --cmd",
+                "Kill processes with 'serve' in their command line",
+            ),
+            (
+                "proc kill 1234 5678 :8080",
+                "Kill two PIDs and whatever is on 8080",
+            ),
+            ("proc stop :3000 :8080", "Stop several targets gracefully"),
+        ],
+    ),
+    (
+        "Watch (Real-Time)",
+        &[
+            ("proc watch", "Watch all processes (alias: proc top)"),
+            ("proc watch node", "Watch the processes named node"),
+            ("proc watch :3000", "Watch process on port 3000"),
+            ("proc watch :3000 :8080 node", "Watch several targets"),
+            ("proc watch -n 1 --sort mem", "1s refresh, sorted by memory"),
+            (
+                "proc watch --in . --by node",
+                "Node processes in current directory",
+            ),
+        ],
+    ),
+    (
+        "Freeze/Thaw",
+        &[
+            (
+                "proc freeze node",
+                "Pause the processes named node (SIGSTOP)",
+            ),
+            ("proc freeze :3000 --yes", "Freeze by port, skip confirm"),
+            ("proc thaw node", "Resume frozen processes (SIGCONT)"),
+        ],
+    ),
+    (
+        "Free Ports",
+        &[
+            ("proc free :3000", "Kill process, verify port freed"),
+            ("proc free :3000 :8080 --yes", "Free several ports"),
+        ],
+    ),
+    (
+        "Diagnostics",
+        &[
+            ("proc why :3000", "Why is port 3000 busy? (ancestry)"),
+            ("proc orphans", "Find orphaned processes"),
+            ("proc orphans --kill", "Find and kill orphans"),
+        ],
+    ),
+    (
+        "Wait",
+        &[
+            ("proc wait node", "Wait until node processes exit"),
+            ("proc wait 1234 5678", "Wait until both exit"),
+            (
+                "proc wait :3000 --timeout 60",
+                "Wait up to 60s for port to free",
+            ),
+            ("proc wait node -n 10 -q", "Check every 10s, quiet mode"),
+        ],
+    ),
+    (
+        "Other",
+        &[
+            ("proc ports", "List all listening TCP ports"),
+            ("proc tree --min-cpu 5", "Process tree filtered by CPU"),
+            ("proc stuck", "Find hung processes"),
+            (
+                "proc unstick --force",
+                "Recover or terminate stuck processes",
+            ),
+            (
+                "proc stop nginx --signal USR1",
+                "Send a different first signal (force-killed after --timeout if it lives)",
+            ),
+        ],
+    ),
+];
 
 /// One labelled block of the footer: a header, then rows of a literal (what to
 /// type) and what it means. A row with an empty literal continues the line above.
@@ -178,6 +253,29 @@ fn render_sections(sections: &[&Section]) -> String {
     out
 }
 
+/// The examples in the footer's look: one `Examples:` header, each group's
+/// label, then the commands in the literal style with their meanings aligned
+fn render_examples() -> String {
+    let width = EXAMPLES
+        .iter()
+        .flat_map(|(_, rows)| rows.iter())
+        .map(|(command, _)| command.chars().count())
+        .max()
+        .unwrap_or(0);
+    let (header, literal) = (STYLES.get_header(), STYLES.get_literal());
+    let mut out = format!("{header}Examples:{header:#}\n");
+    for (label, rows) in EXAMPLES {
+        out.push_str(&format!("\n  {label}\n"));
+        for (command, meaning) in *rows {
+            let pad = " ".repeat(width - command.chars().count());
+            out.push_str(&format!(
+                "    {literal}{command}{literal:#}{pad}  {meaning}\n"
+            ));
+        }
+    }
+    out
+}
+
 /// The closing line of both helps
 fn more(what: &str) -> String {
     let header = STYLES.get_header();
@@ -194,7 +292,7 @@ fn short_footer() -> StyledStr {
 
 /// The long help's closing text: the examples, then the footer
 fn long_footer() -> StyledStr {
-    let mut out = String::from(EXAMPLES);
+    let mut out = render_examples();
     out.push('\n');
     out.push_str(&render_sections(&[&TARGETS, &NAMES, &NOTES]));
     out.push_str(&more(REPOSITORY));
