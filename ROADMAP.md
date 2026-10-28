@@ -14,6 +14,16 @@ Each candidate lists what it would look like, how it fares against the feature t
 
 ## Candidates
 
+### A reason on every exit 4
+
+Exit 4 means nothing was done, for one of three reasons: the input was invalid, a confirmation is needed, or the OS doesn't support the command. Only the second is machine-readable today (`needs_confirmation: true`). A bad flag and "not supported" both come back as exit 4 with only an `error` message, so an agent has to read prose to tell them apart. The idea: every exit-4 JSON error carries a `reason`:
+
+```json
+{ "action": "orphans", "success": false, "exit_code": 4, "reason": "not_supported", "error": "..." }
+```
+
+**Feature test:** follows the JSON contract (scripts and agents read proc without parsing text), adds a field and changes no behaviour, so it fits a 2.x release. Raised by an agent tester after 2.0.0. **Open:** the names (`invalid_input`, `needs_confirmation`, `not_supported`), and whether exits 1 to 3 get one too.
+
 ### Signal words, not numbers
 
 `-9`, `-15` and `-HUP` are notation people copy without knowing what they mean. proc already takes signal names (`--signal KILL`), but rejects numbers: `proc stop 1234 --signal 9` is an error. The idea: accept the number people already type, act on it, and answer with the word (`9 is SIGKILL`), so a habit turns into knowledge.
