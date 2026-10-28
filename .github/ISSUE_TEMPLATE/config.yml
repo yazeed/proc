@@ -4,5 +4,5 @@ contact_links:
     url: https://github.com/yazeed/proc-cli/discussions
     about: Ask questions and discuss ideas in GitHub Discussions
   - name: Security Vulnerability
-    url: https://github.com/yazeed/proc-cli/security/policy
-    about: Email the maintainer (see SECURITY.md); do not open a public issue
+    url: https://github.com/yazeed/proc-cli/security/advisories/new
+    about: Report it privately through GitHub; do not open a public issue

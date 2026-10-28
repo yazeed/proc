@@ -5,8 +5,9 @@
 | Version | Supported          |
 | ------- | ------------------ |
 | 2.0.x   | :white_check_mark: |
-| 1.14.x  | :white_check_mark: |
-| < 1.14  | :x:                |
+| < 2.0   | :x:                |
+
+1.x is no longer supported. Upgrade to 2.0.x; see the [CHANGELOG](CHANGELOG.md) for what changed.
 
 ## Reporting a Vulnerability
 
@@ -16,7 +17,7 @@ We take security seriously. If you discover a security vulnerability in proc, pl
 
 **DO NOT** create a public GitHub issue for security vulnerabilities.
 
-Instead, please email security concerns to: **me at yazeed.com**
+Instead, report it privately through GitHub: **[Report a vulnerability](https://github.com/yazeed/proc-cli/security/advisories/new)**. Only the maintainer can see the report.
 
 Include the following information:
 - Description of the vulnerability
@@ -97,6 +98,6 @@ We carefully vet all dependencies:
 
 ## Contact
 
-For security concerns: me at yazeed.com
+For security concerns: [report a vulnerability](https://github.com/yazeed/proc-cli/security/advisories/new) (private)
 
 For general questions: [GitHub Issues](https://github.com/yazeed/proc-cli/issues)

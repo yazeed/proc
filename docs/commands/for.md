@@ -8,7 +8,7 @@ permalink: /commands/for
 Find processes running a specific file. Alias: `f`.
 
 ```bash
-proc for ./script.py       # what's running this file?
+proc for ./server          # what's running this program (or holding it open)?
 proc for /usr/bin/node     # processes using this executable
 proc for ~/bin/myapp       # tilde expansion
 ```
@@ -35,8 +35,8 @@ One process gets the same detail view as `proc on :port` (directory, path, liste
 ## Examples
 
 ```bash
-# what's running this script?
-proc for ./app.js
+# what's running this program?
+proc for ./server
 
 # find processes with a data file open
 proc for ./data.json

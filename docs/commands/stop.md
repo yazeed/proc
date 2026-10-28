@@ -23,7 +23,7 @@ Several targets are separate arguments. Comma-separated lists (`:3000,:8080`) st
 | `--yes` | `-y` | Skip confirmation |
 | `--dry-run` | | Show what would be stopped |
 | `--timeout <secs>` | `-t` | Seconds before force kill (default: 10) |
-| `--signal <name>` | `-S` | Send a specific signal instead of SIGTERM (macOS and Linux; exits 4 on Windows) |
+| `--signal <name>` | `-S` | Send a different first signal instead of SIGTERM (macOS and Linux; exits 4 on Windows). A process still running after `--timeout` is force-killed, so this is not a way to send a signal and leave the process running |
 | `--in [<dir>]` | `-i` | Filter by directory. Takes the next word as its directory unless it starts with `-` (bare `--in` is the current directory, `--in=DIR` is explicit) |
 | `--by <name>` | `-b` | Filter by process name (the whole name, ignoring case) |
 | `--cmd` | | Match name targets and `--by` as a substring of the process name or full command line (like `pkill -f`) |
@@ -48,11 +48,9 @@ proc stop :3000 --yes
 # stop two PIDs and whatever is on port 8080
 proc stop 1234 5678 :8080
 
-# send SIGHUP to reload nginx config
-proc stop nginx --signal HUP
-
-# send SIGUSR1 to a worker process
-proc stop worker --signal USR1
+# ask a worker to stop with SIGINT instead of SIGTERM
+# (it is force-killed if it is still running after --timeout)
+proc stop worker --signal INT
 ```
 
 ## See also

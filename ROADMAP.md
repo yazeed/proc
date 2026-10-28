@@ -6,7 +6,7 @@ The goal is not to accumulate features, but to cover the process and port manage
 
 See [PHILOSOPHY.md](PHILOSOPHY.md) for our full manifesto.
 
-## Current Release (v1.14.5)
+## Current Release (v2.0.0)
 
 The core commands are complete, with process lifecycle control, diagnostics, real-time monitoring, the Proc Query Language, shell completions, file lookup, consistent filtering, terminal-adaptive tables, a consistent JSON and exit-code contract, an agent skill, and full CI/CD automation:
 
@@ -24,6 +24,9 @@ The core commands are complete, with process lifecycle control, diagnostics, rea
 - **`--json` is not consent**: commands that change processes need `--yes`; without it they exit 4 with `needs_confirmation`
 - **`not_found` in every action's JSON**, and `:port` means every process listening on the port
 - **Agent skill rewritten** around a safety model for agents
+- **`--wide` and `--version`**: `--wide` prints full directories and arguments; a build that isn't a release says so (`2.0.0-dev (main@abc1234, 3 commits after v2.0.0)`)
+- **Port lookups on Linux read `/proc`** (nothing to install), and CI enforces 100% line coverage across Linux, macOS and Windows
+- **Library API changes** (name matching mode, `Resolved`, new `ProcError` variants): see the CHANGELOG
 
 ### v1.14.5 Highlights
 

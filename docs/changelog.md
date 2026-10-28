@@ -5,6 +5,77 @@ description: "Release history for proc."
 permalink: /changelog
 ---
 
+## 2.0.0 — 2026-10-27
+
+This is a major release. Read **Changed** first: a name now matches the whole process name (add `--cmd` for the old matching), and `--json` no longer counts as `--yes`. The library API changed too (see the entries marked **Library API**).
+
+**Changed**
+
+- **BREAKING: a name matches the whole process name, not any part of the name or command line.** `proc kill node` used to kill every process whose name or full command line contained `node`, ignoring case. On one Mac a dry run matched 193 processes, among them `Claude Helper` and `Obsidian Helper (Renderer)`; with `--yes` all of them would have been killed. A name now equals the process name, the file name of its executable, or the file name of its first argument, ignoring case, as `killall` and `pkill` read it. The executable and first argument count because Linux cuts a process name to 15 characters. On Windows a trailing `.exe` is optional on either side. The same rule applies to every name target and every `--by` filter. A path is not a name: use `--cmd`, or `proc for <file>` for an executable. An empty name used to match every process and now matches nothing.
+  **Migration:** add `--cmd` to keep the old matching (`proc kill node --cmd`), or name the process exactly. A script that passed a part of a name now gets exit 2 (`No process found matching`) where it matched before; one that relied on a command-line match needs `--cmd`
+- **`--json` no longer counts as a yes.** Commands that change processes (`kill`, `stop`, `free`, `freeze`, `thaw`, `unstick`, `orphans --kill`, `stuck --kill`) acted without asking when given `--json`. They now need `--yes` like everywhere else: without it they exit 4 and change nothing, and so does running without a terminal. `--dry-run` still previews without `--yes`. With `--json` the error carries `needs_confirmation: true` and the `processes` the command would have changed, so a caller can show the list before retrying with `--yes`
+- **On macOS the JSON `address` of an IPv6 listener loses its brackets**: `[::1]` is now `::1`, matching Linux and Windows
+- **Action JSON lists the targets that weren't found.** Every command that takes targets puts `not_found` in its JSON, an array that is empty when every target was found. The found processes are still handled, so `success` and the exit codes are unchanged. `proc free` on a port nobody holds is success (exit 0) with the port in `not_found`
+- **"Not supported on this OS" is exit 4.** `freeze` and `thaw` on Windows exited 1, while `stop --signal` exited 4. All three now exit 4
+- **`--version` says when a build isn't a release.** A build from `main` printed the version of the last release. A build from the release tag prints the plain version (`proc 2.0.0`); any other build in a git checkout prints `proc 2.0.0-dev (main@5e94647, 3 commits after v2.0.0)`. Builds without git (crates.io, a Docker context without `.git`) print the plain version
+- **Library API.** Name matching takes a `proc_cli::core::NameMatch` (`Exact` or `Command`) as a last argument in `Process::find_by_name`, `resolve_target`, `resolve_targets`, `resolve_targets_excluding_self`, `matches_by_filter` and `apply_filters`; `resolve_targets` returns a `Resolved { processes, not_found, hints }`. `Process` has two new fields, `argv0` and `raw`. `ProcError` has new variants `NameNotFound`, `FilteredOut` and `ConfirmationRequired`; it is not `#[non_exhaustive]`, so an exhaustive `match` must handle them. `ProcError::NotSupported` exits 4. `PortInfo::find_by_port` is now `PortInfo::holders_of` and returns every holder. New `proc_cli::ui::must_confirm`; `Printer::ask_confirm` no longer treats `--json` as a yes. The command structs changed their fields (`target` is a `Vec<String>`, `ports`' `range` is parsed, new `cmd` and `wide`), and `Process::kill_and_wait` returns `Result<()>`. `proc_cli::cli` and `proc_cli::version` are new modules. See the [full changelog](https://github.com/yazeed/proc-cli/blob/main/CHANGELOG.md) for the list
+- **Help and docs examples never pair `--yes` with a name.** `--yes` appears only with a `:port` or a PID; a name is shown with `--dry-run`, or without `--yes` so it asks first. A test reads the docs and fails on a name next to `--yes`. proc has no wildcards: an unquoted `node*` is expanded by your shell, and `--cmd` is the way to a partial match
+- **CI fails when a line or a flag has no test.** The coverage gate now fails the build below 100% line coverage of `src/`, merged across Linux, macOS and Windows, and when a long flag of a process command has no test
+- **The agent skill is rewritten for 2.0.0** around a safety model: what only reads, what can be undone and what ends a process; ranked rules (a process is yours only if you started it, a name is a search and never approval, preview with `--dry-run --json` and show the user, `--yes` is the user's consent to one list); and what to do on exit 4. It asks before touching what it didn't start. New `evals.md` lists twelve tasks with what the agent must and must never do
+- **A bare `proc` orients you** instead of listing all 19 commands: the idea that a target is the same everywhere, and four commands that run exactly as printed
+- **One process is always one line.** The process table truncates to the terminal width instead of wrapping, long directories keep their root and their tail, and `proc watch` uses the same layout
+- **Website redesign ([proc-cli.com](https://proc-cli.com)).** A new layout and type, light and dark themes, an interactive command reader on the home page, a sidebar of commands, and a changelog sidebar of versions. Page titles, headings and tables use sentence case
+- **`proc wait` notices an exit within a quarter second**, instead of checking only every `--interval`. `--interval` now sets how often the status line is printed
+- **`proc stop` asks every process at once and waits for them together**, so several processes share one `--timeout`
+- **`proc ports` and `proc on :port` show full process names on macOS** (lsof cut them to 9 characters)
+- **`proc stuck` needs a process to stay stuck.** It must have run longer than `--timeout` and, in two readings a second apart, use over 50% CPU or be blocked in uninterruptible sleep. `stuck` now takes about 2 seconds
+- **Port lookups on Linux need nothing installed.** proc reads the kernel's socket tables in `/proc` instead of running `ss`, so they work on minimal systems without iproute2, and the Docker image no longer installs it
+
+**Added**
+
+- **Several targets can be separate arguments.** `proc kill 1234 5678 :8080` works everywhere proc took a comma-separated list: `kill`, `stop`, `freeze`, `thaw`, `free`, `on`, `why`, `wait`, `unstick`, `watch` and the names of `list`. Separate arguments and comma lists mix, and a process named twice is handled once. `--in` takes the next word as its directory unless it starts with `-`, so put it after the targets or write `--in=DIR`
+- **`--cmd` matches names the old way.** `proc kill serve --cmd` matches any process with `serve` in its name or full command line, like `pkill -f`. It is on every command that takes a name target or `--by`, and has no short form. When a name matches nothing but some command lines have it, the not-found message says so
+- **`--wide` / `-w` on `list`, `by`, `in`, `for`, `stuck`, `orphans` and `watch`**: prints directories and arguments in full instead of fitting them to the terminal
+- **[FAQ page](https://proc-cli.com/faq)**: 16 answers to the most searched process and port questions, each with the proc command and the classic alternative
+- **Blog post**: [What's new in proc](https://proc-cli.com/posts/whats-new-in-proc)
+- **Structured data and a favicon** on the website: SoftwareApplication, FAQPage, BreadcrumbList, post authors, social card images, and `favicon.ico`, `favicon.svg` and an `apple-touch-icon.png`
+
+**Deprecated**
+
+- **Comma-separated targets** (`proc kill :3000,:8080`). They still work throughout 2.x and print no warning, since a warning would break `--json` output, but separate arguments are the recommended form and commas will be removed in a future major release
+
+**Removed**
+
+- **Printing helpers and library functions nothing called**: `Printer::error`, `Printer::print_ports`, `Printer::print_port_info`, `Printer::print_kill_result`, `resolve_target_single` and `Process::wait`
+- **Unused dependencies `tokio`, `anyhow` and `indicatif`**; builds are smaller and faster
+
+**Fixed**
+
+- **`proc free` called a port free when a copy of the holder took it back a moment later.** A port now counts as free only when it reads free in two looks a quarter of a second apart
+- **A port held by several processes was handled as if one held it** (for example `127.0.0.1` and `[::1]`, or a master and its forked workers). A `:port` now means every process listening on it, in `kill`, `stop`, `free`, `on`, `info`, `wait`, `tree`, `watch` and `why`. `on :3000 --json` keeps `process` as the first holder and adds `processes`
+- **Windows never listed IPv6 listeners, and macOS reported them differently.** All three systems now report `::1` and `::` (thanks @gtwatts, #1)
+- **`proc kill --graceful` reported success on Windows when nothing happened**, and **`proc unstick --force` on Windows reported an already-gone process as failed**
+- **`proc stuck` never found a stuck process on Windows**, and targeted `unstick` never saw one as stuck. CPU is now measured the way `list` and `info` do on every OS
+- **`proc tree <name>` and `proc watch <name>` listed the shell that launched them.** Name matching now skips proc's ancestors in every command
+- **`--in` found nothing when the path was a symlink or not in the OS's own form** (`/tmp` on macOS, 8.3 short names on Windows)
+- **`proc stuck --timeout N` needed a process to be N+1 seconds old**, and **`proc for <file>` found nothing on Windows**
+- **Not-found messages no longer nest a sentence inside a sentence or put the filter note inside the quotes**: `No process found matching 'node' (no matches with specified filters)`
+- **proc could crash on a non-ASCII path, process name or argument.** Truncation now counts display columns and never splits a character
+- **`proc stop`, `orphans --kill` and `stuck --kill` could hang forever** on a zombie whose parent didn't reap it; waiting after SIGKILL is limited to 5 seconds
+- **Zombies counted as running on Linux and were never listed on macOS**
+- **A reused PID counted as the original process**: `wait`, `stop` and the others now compare the start time too
+- **`wait --timeout`, `free --wait` and `watch --interval` edge cases**: `--timeout 1` took 5 seconds, `--wait` wasn't a maximum, and `nan`, `inf`, a negative number or `0` crashed or busy-looped `watch`; they now exit 4 or are bounded
+- **`proc ports --range` ignored a range it couldn't read**, and **a mistyped port such as `:70000` was searched for as a name**; both now exit 4
+- **IPv6 addresses on Linux came out as `]`**, so `ports --exposed` left out ports listening on `::`
+- **`proc unstick <target>` never tried**, and **CPU readings were wrong** (a process using a whole core showed as about 0.4%). `list`, `by`, `in`, `for`, `info`, `on`, `tree`, `orphans` and `wait -v` now measure CPU over 0.2 s before they show, filter or sort by it
+- **Name matching read escaped text in some places and the raw text in others**, so `--by` could drop a process `find_by_name` found
+
+**Security**
+
+- **Signals can't reach a process that reused the PID.** Every signal first checks that the PID still belongs to the same process, by its start time
+- **Process names from lsof can't inject terminal escapes or crash proc (macOS)**
+- **Process data can't control the terminal.** Names, command lines, working directories, executable paths and users could carry escape sequences that recolour, retitle or rewrite the terminal of whoever ran `proc list`, `info`, `ports` or `watch`. Control characters are now shown as visible escapes, in every view and in JSON
+
 ## 1.14.5 — 2026-10-25
 
 **Changed**

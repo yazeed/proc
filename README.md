@@ -20,7 +20,7 @@ Semantic CLI tool for process management. Target by port, PID, name or path.
 
 ```bash
 proc on :3000                   # what's on port 3000?
-proc for ./script.py            # what's running this file?
+proc for ./server               # what's running this program?
 proc by node --in . --min-cpu 5 # node in cwd using >5% CPU
 proc kill :3000 :8080 node      # kill mixed targets at once
 proc info :3000 1234            # info for port + PID
@@ -41,7 +41,7 @@ proc info :3000 1234            # info for port + PID
 | Node processes in cwd | `proc by node --in .` | `ps aux \| grep node` + manual check |
 | Kill mixed targets | `proc kill :3000 :8080 node` | Three separate commands |
 | Watch in real-time | `proc watch node` | `watch -n2 'ps aux \| grep node'` |
-| What runs this file? | `proc for ./app.js` | `lsof ./app.js` or `fuser ./app.js` |
+| What runs this program? | `proc for ./server` | `lsof ./server` or `fuser ./server` |
 
 One syntax. One tool. [Full comparison &rarr;](https://proc-cli.com/posts/proc-vs-lsof-fuser-killport-fkill/)
 
@@ -121,9 +121,9 @@ proc on :3000
 proc kill :3000
 ```
 
-**What's running this script?**
+**What's running this program?**
 ```bash
-proc for ./script.py
+proc for ./server
 ```
 
 **Find all node processes in current directory using >5% CPU:**
@@ -255,8 +255,8 @@ proc on :3000
 # What ports is node using?
 proc on node
 
-# What's running this file?
-proc for ./script.py
+# What's running this program?
+proc for ./server
 
 # What has this file open?
 proc for /var/log/app.log
@@ -309,7 +309,7 @@ proc wait :3000 --timeout 60   # Wait up to 60s for port process to exit
 proc wait node -n 10 -q        # Check every 10s, quiet mode
 
 # Send custom signal
-proc stop nginx --signal HUP   # Reload config (SIGHUP)
+proc stop worker --signal INT  # Ask with SIGINT instead of SIGTERM (force-killed after --timeout)
 
 # Find and recover stuck processes
 proc stuck

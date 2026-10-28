@@ -59,7 +59,9 @@ Update version in ALL of these files:
 - [ ] `docs/_data/release.yml` — `version` field (the website's header, footer, install page and structured data read it)
 - [ ] `Cargo.lock` — rebuild after the bump so its `proc-cli` entry changes, and commit it
 
-(`pkg/aur/PKGBUILD` is not maintained; the README marks AUR as pending.)
+- [ ] `pkg/aur/PKGBUILD` — `pkgver` (and `pkgrel=1`). Its `sha256sums` is the checksum of the tag's source tarball, which doesn't exist until the tag does, so it can only be updated after step 5 (see "After the tag" below).
+
+The AUR package is published by hand; CI does not touch it. The README marks AUR as pending until the first publish.
 
 ## 4. Documentation
 
@@ -85,6 +87,16 @@ git commit -m "chore: release vX.Y.Z"
 git tag vX.Y.Z
 git push && git push --tags
 ```
+
+### After the tag: AUR (manual)
+
+Once the tag is pushed and its tarball exists, set `sha256sums` in `pkg/aur/PKGBUILD` to the tarball's checksum and publish to the AUR yourself:
+
+```bash
+curl -fsSL https://github.com/yazeed/proc-cli/archive/vX.Y.Z.tar.gz | shasum -a 256   # put this in sha256sums
+```
+
+Commit the PKGBUILD change to `main`. Then update the AUR repository (`ssh://aur@aur.archlinux.org/proc.git`) with the PKGBUILD and a regenerated `.SRCINFO` (`makepkg --printsrcinfo > .SRCINFO` on Arch), and change the README's "(pending)" once it is live.
 
 ## 6. Verify CI
 

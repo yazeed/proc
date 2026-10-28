@@ -48,9 +48,9 @@ groups:
             text: "Traces what holds ports 3000 and 8080, one chain each."
       - verb: for
         examples:
-          - t: "./server.py"
+          - t: "./server"
             kind: path
-            text: "Finds the processes running <code>server.py</code> from this folder."
+            text: "Finds the processes running the program <code>server</code> in this folder, or holding it open."
           - t: "./logs/app.log"
             kind: path
             text: "Finds whatever has <code>app.log</code> open, such as a server that's still writing to it."
@@ -168,9 +168,9 @@ groups:
           - t: "node --in ."
             kind: scope
             text: "Stops only the <code>node</code> processes started in this folder."
-          - t: ":3000 --signal HUP"
+          - t: ":3000 --signal INT"
             rule: "A leading colon means a port. <code>--signal</code> picks the first signal sent."
-            text: "Sends HUP instead of SIGTERM, which many servers take as “reload your config”."
+            text: "Sends INT (like Ctrl+C) instead of SIGTERM, and forces the process to end if it is still running after 10 seconds."
       - verb: free
         examples:
           - t: ":3000"
