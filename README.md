@@ -63,7 +63,7 @@ One syntax. One tool. [Full comparison &rarr;](https://proc-cli.com/posts/proc-v
 | Platform | Method | Command |
 |----------|--------|---------|
 | macOS/Linux | cargo-binstall | `cargo binstall proc-cli` |
-| Arch Linux | AUR | `yay -S proc` (pending) |
+| Arch Linux | AUR (community-maintained) | `yay -S proc-bin` |
 
 **Manual download:**
 

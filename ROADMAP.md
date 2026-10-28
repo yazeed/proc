@@ -98,6 +98,29 @@ One health check after a crash or a messy session: port conflicts, orphans, stuc
 
 `proc on`, `ports` and `free` only see TCP listeners. **Open:** how UDP sockets show up in each command without making TCP output noisier.
 
+### `tree` children in start order
+
+`tree` lists siblings by PID. PIDs wrap and get reused, so PID order isn't spawn order: on one Mac, 9-21% of adjacent siblings had the higher PID as the older process. A tree is read top to bottom as "what started what", so start time (PID as the tie-break) is the natural order.
+
+**Feature test:** deepens proc's command of its domain. **Open:** whether `tree` alone should differ from `list --sort pid`, or a `tree --sort` flag is better than changing the default (a sort flag on a hierarchy only orders siblings, which is easy to misread).
+
+### `--sort uptime`
+
+```bash
+proc by node --sort uptime    # the longest-running first: which duplicate is the stale one
+proc in . --sort uptime
+```
+
+The column is already shown and `--min-uptime` already filters by it. On `list`, `by`, `in`, `for` and `watch`. **Feature test:** fits, one obvious flag value. **Open:** the direction (oldest first matches cpu and mem putting the most extreme first) and the name (`uptime` or `started`).
+
+### Sorting `orphans` and `stuck`
+
+Both print processes in no stated order (81 orphans on one Mac). `--sort` like `list`'s would show which to look at first. **Feature test:** fits, but it's another way to ask a `list` question; `list --parent 1` is not the orphan set, so it isn't redundant. **Open:** real demand. `--limit` must never limit what `--kill` acts on.
+
+### One meaning for `-n`
+
+`-n` is `--limit` in `list`, `by`, `in`, `for` and `ports`, but `--interval` in `watch` and `wait` (where the limit is `-l`). **Feature test:** "Easy to remember" says one spelling means one thing. **Open:** which side moves, and how to deprecate the other without breaking scripts (a major release).
+
 ### The human clock
 
 How long someone who has never used proc takes to get a correct answer. Unlike the machine clock (time per command), nothing measures it yet. **Open:** how to measure it (first-run sessions, agent evals like `skills/proc-cli/evals.md`).

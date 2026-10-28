@@ -72,7 +72,7 @@ Update version in ALL of these files:
 
 - [ ] `pkg/aur/PKGBUILD` — `pkgver` (and `pkgrel=1`). Its `sha256sums` is the checksum of the tag's source tarball, which doesn't exist until the tag does, so it can only be updated after step 5 (see "After the tag" below).
 
-The AUR package is published by hand; CI does not touch it. The README marks AUR as pending until the first publish.
+The AUR package is published by hand; CI does not touch it. Until our own `proc` package is on the AUR, the README points Arch users to `proc-bin`, a community package (maintained by Rafael Dominiquini) that installs the release binaries. It declares `conflicts=proc`, so ours would be its alternative.
 
 ## 4. Documentation
 
@@ -112,7 +112,7 @@ Once the tag is pushed and its tarball exists, set `sha256sums` in `pkg/aur/PKGB
 curl -fsSL https://github.com/yazeed/proc-cli/archive/vX.Y.Z.tar.gz | shasum -a 256   # put this in sha256sums
 ```
 
-Commit the PKGBUILD change to `main`. Then update the AUR repository (`ssh://aur@aur.archlinux.org/proc.git`) with the PKGBUILD and a regenerated `.SRCINFO` (`makepkg --printsrcinfo > .SRCINFO` on Arch), and change the README's "(pending)" once it is live.
+Commit the PKGBUILD change to `main`. Then update the AUR repository (`ssh://aur@aur.archlinux.org/proc.git`) with the PKGBUILD and a regenerated `.SRCINFO` (`makepkg --printsrcinfo > .SRCINFO` on Arch), and, once it is live, add it to the README's Arch Linux row next to `proc-bin`.
 
 ## 6. Verify CI
 
