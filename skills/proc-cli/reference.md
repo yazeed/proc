@@ -31,6 +31,12 @@ A signal the OS refuses, such as `kill` on another user's process, is not exit 3
 
 `"success": false` always comes with a non-zero exit code. Every command prints exactly one JSON document with `--json`, except `watch`, which streams one per refresh.
 
+A signal that ends proc (SIGINT, SIGTERM, SIGHUP, SIGQUIT, or Ctrl+C / Ctrl+Break on Windows) while `watch` has the screen or a prompt is waiting for a key is not one of these codes and not an error: proc puts the terminal back (raw mode off, cursor shown, normal screen, echo and line editing on), prints nothing, and exits with the status a shell shows for a process that signal killed, 128 plus its number: 129 SIGHUP, 130 SIGINT and Ctrl+C (also every Ctrl+C or Ctrl+Break on Windows), 131 SIGQUIT, 143 SIGTERM. A kill still running when the signal came is not undone: the prompt had not been answered, so nothing had been changed.
+
+A prompt (the `[y/N]` question of `kill`, `stop`, `freeze`, `thaw`, `free`, `unstick`, `stuck --kill` and `orphans --kill` without `--yes`) always comes with the list of what would change, shown where the person will see it: on stdout when that is a terminal, on stderr when stdout is a file or a pipe. If the list cannot be written there, proc asks nothing and changes nothing: exit 4, `reason: needs_confirmation`, with the `processes` it would have changed. An agent never needs to answer a prompt: use `--dry-run --json`, then `--yes`.
+
+`watch` without `--json` draws a screen only when both stdin and stdout are terminals; otherwise it prints one snapshot (with a `note:` on stderr when only stdin is missing). `watch --json` stops as soon as its reader leaves on Linux and macOS (on Windows at the next refresh). `wait` is different on purpose: its exit code (0 exited, 1 timed out) is its result, so it keeps waiting after its reader leaves and exits with that code.
+
 If the reader of proc's output goes away (`proc ... | head -n1`), proc stops writing and exits with the code the command's result calls for: a `kill --yes` that worked is still 0 and a not-found is still 2, and nothing is said about the pipe. The action is done either way, so when stdout may be cut short, read the exit code, not the document. A write that fails for another reason (a full disk) is exit 1 with `proc: cannot write to stdout: ...` on stderr.
 
 ## Errors and needs_confirmation

@@ -12,4 +12,10 @@ disallowed-macros = [
 disallowed-methods = [
     { path = "std::io::stdout", reason = "use proc_cli::ui::out::stdout() (or stdout_is_terminal())" },
     { path = "std::io::stderr", reason = "use proc_cli::ui::out::stderr() (or stderr_is_terminal())" },
+    # Every question goes through proc_cli::ui::prompt::ask, which refuses when the
+    # list of what would change cannot be shown, and restores the terminal on a signal.
+    { path = "dialoguer::Confirm::interact", reason = "ask through proc_cli::ui::prompt::ask" },
+    { path = "dialoguer::Confirm::interact_on", reason = "ask through proc_cli::ui::prompt::ask" },
+    { path = "dialoguer::Confirm::interact_opt", reason = "ask through proc_cli::ui::prompt::ask" },
+    { path = "dialoguer::Confirm::interact_on_opt", reason = "ask through proc_cli::ui::prompt::ask" },
 ]

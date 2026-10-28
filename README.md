@@ -239,6 +239,7 @@ proc on :8080 --json | jq '.process | {pid, cwd, uptime_secs}'
 - **Exit 4 means nothing was done**, and the error adds `"reason"`: `"invalid_input"` (a wrong flag, value or argument), `"needs_confirmation"` or `"not_supported"` (this OS cannot do it).
 - **Preview, then confirm.** A command that changes processes, run with `--json` but without `--yes`, exits 4 with `"needs_confirmation": true` and `"processes"` (the ones it would have changed), so a script can show them before running it again with `--yes`.
 - **`not_found`** lists the targets that matched nothing (empty when all were found). It is in the JSON of `on`, `why`, `info`, `kill`, `stop`, `freeze`, `thaw`, `unstick`, `free` and `wait`, and in the exit 4 output above. `list` and `watch` do not have it.
+- **A prompt shows what you would approve.** The list of processes goes to the terminal beside the `[y/N]` question: on stdout, or on stderr when stdout is a file or a pipe. If the list cannot be shown, nothing is asked and nothing is changed (exit 4).
 - **A reader that stops early ends proc quietly.** `proc list | head -n1` exits 0 without an error, and `proc kill 1234 --yes | head -n1` still kills the process and exits with the code of the kill (0 if it worked, 2 if there was nothing to kill): a closed pipe never changes the result, on stdout or stderr. A write that fails for another reason (a full disk) is exit 1, with one line on stderr.
 
 | Exit code | Meaning |
@@ -248,6 +249,7 @@ proc on :8080 --json | jq '.process | {pid, cwd, uptime_secs}'
 | `2` | Process or port not found |
 | `3` | Permission denied: proc itself got an I/O permission error. A signal the OS refuses (another user's process) is a `failed` entry and exit 1 |
 | `4` | Invalid input (unknown flag, bad argument, invalid signal), an action this OS doesn't support (`freeze`, `thaw`, `orphans` and `stop --signal` on Windows), or a command that changes processes run without `--yes` where nobody can confirm (`--json`, or no terminal): nothing was changed |
+| `129`, `130`, `131`, `143` | A signal ended proc (SIGHUP, SIGINT or Ctrl+C, SIGQUIT, SIGTERM) while `watch` had the screen or a prompt was waiting: the terminal is put back first, and nothing was changed by an unanswered prompt |
 
 Full schemas: [`skills/proc-cli/reference.md`](skills/proc-cli/reference.md).
 

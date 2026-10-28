@@ -122,6 +122,10 @@ Both are leads, not verdicts. `stuck` flags any process that has run over 300 se
 
 A signal the OS refuses (a process of another user) is reported in `failed` with exit 1, not as exit 3. Treat it as "this process is not mine": stop and ask.
 
+Exit 129, 130, 131 or 143 is not a result of the command: a signal (SIGHUP, SIGINT, SIGQUIT, SIGTERM) ended proc, after it put the terminal back. Nothing was changed by a prompt that had not been answered; check with `proc info` before assuming anything.
+
+A prompt that cannot show its list of processes (stdout and stderr both unusable) asks nothing and exits 4 with `needs_confirmation`, so a `y` is never given blind. Agents do not answer prompts: preview with `--dry-run --json`, then pass `--yes` for approved PIDs.
+
 With `--json` every command prints one JSON document on stdout, including errors: `{"action", "success": false, "error", "exit_code"}`, plus `reason` on exit 4. `success: false` always comes with a non-zero exit. Use the full schemas in [reference.md](reference.md) before you parse `kill`, `stop` or `free` output.
 
 ## Platform notes

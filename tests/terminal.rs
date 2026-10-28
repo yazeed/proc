@@ -45,6 +45,13 @@ enum Step {
     /// The child has not exited by now
     #[cfg_attr(unix, allow(dead_code))]
     StillRunning,
+    /// Wait until the terminal is in raw mode (line editing off): the child
+    /// has turned it on. Unix only.
+    #[cfg(unix)]
+    Raw,
+    /// Send the child this signal, after noting the terminal's mode. Unix only.
+    #[cfg(unix)]
+    Signal(i32),
 }
 
 /// What a session printed, and how the child ended
@@ -55,6 +62,29 @@ struct PtyRun {
     #[cfg_attr(unix, allow(dead_code))]
     raw: Vec<u8>,
     exit_code: u32,
+    /// The terminal's local mode flags (`ICANON`, `ECHO`, ...) when a `Signal`
+    /// step was about to send its signal
+    #[cfg(unix)]
+    mode_at_signal: Option<u64>,
+    /// ... and once the child had ended
+    #[cfg(unix)]
+    mode_at_end: Option<u64>,
+}
+
+/// The terminal's local mode flags, if they can be read. (`tcflag_t` is 32 bits
+/// on Linux and 64 on macOS, hence the cast.)
+#[cfg(unix)]
+#[allow(clippy::unnecessary_cast)]
+fn local_flags(master: &dyn portable_pty::MasterPty) -> Option<u64> {
+    master.get_termios().map(|t| t.local_flags.bits() as u64)
+}
+
+/// Whether `flags` have line editing (`ICANON`) and echo (`ECHO`) both on
+#[cfg(unix)]
+#[allow(clippy::unnecessary_cast)]
+fn is_cooked(flags: Option<u64>) -> bool {
+    let wanted = (libc::ICANON | libc::ECHO) as u64;
+    flags.is_some_and(|flags| flags & wanted == wanted)
 }
 
 /// The whole session may take this long; then the child is killed and the test fails
@@ -160,6 +190,12 @@ fn run_in_pty(args: &[&str], script: &[Step]) -> PtyRun {
 /// waits for (it timed out, or proc ended without printing it) is an `Err`
 /// with what proc printed, for a caller that may ask again.
 fn try_run_in_pty(args: &[&str], script: &[Step]) -> Result<PtyRun, String> {
+    try_run_program_in_pty(env!("CARGO_BIN_EXE_proc"), args, script)
+}
+
+/// [`try_run_in_pty`] for any program: a shell that redirects what proc
+/// prints, for one
+fn try_run_program_in_pty(program: &str, args: &[&str], script: &[Step]) -> Result<PtyRun, String> {
     let deadline = Instant::now() + SESSION_LIMIT;
     let pair = native_pty_system()
         .openpty(PtySize {
@@ -170,7 +206,7 @@ fn try_run_in_pty(args: &[&str], script: &[Step]) -> Result<PtyRun, String> {
         })
         .expect("open a pseudo-terminal");
 
-    let mut cmd = CommandBuilder::new(env!("CARGO_BIN_EXE_proc"));
+    let mut cmd = CommandBuilder::new(program);
     cmd.args(args);
     cmd.env("TERM", "xterm-256color");
     cmd.env_remove("NO_COLOR");
@@ -206,8 +242,32 @@ fn try_run_in_pty(args: &[&str], script: &[Step]) -> Result<PtyRun, String> {
         answer_cursor_queries(&captured.lock().unwrap(), &mut answered, writer)
     };
     let mut cursor = 0;
+    #[cfg(unix)]
+    let mut mode_at_signal = None;
     for step in script {
         match *step {
+            #[cfg(unix)]
+            Step::Raw => {
+                let until = Instant::now() + Duration::from_secs(5);
+                while is_cooked(local_flags(&*pair.master)) {
+                    if Instant::now() >= until {
+                        return Err(format!(
+                            "the terminal never went raw; proc printed:\n{:?}",
+                            text()
+                        ));
+                    }
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+            }
+            #[cfg(unix)]
+            Step::Signal(signal) => {
+                mode_at_signal = local_flags(&*pair.master);
+                let pid = guard.0.process_id().expect("the child's PID");
+                // SAFETY: signalling the child this session started and has not reaped
+                unsafe {
+                    libc::kill(pid as i32, signal);
+                }
+            }
             Step::Send(keys) => {
                 writer
                     .write_all(keys.as_bytes())
@@ -272,6 +332,8 @@ fn try_run_in_pty(args: &[&str], script: &[Step]) -> Result<PtyRun, String> {
             }
         }
     };
+    #[cfg(unix)]
+    let mode_at_end = local_flags(&*pair.master);
     // Whatever it printed last is still in the pipe: let the reader reach the end.
     // ConPTY keeps the pipe open until the terminal is closed, so on Windows the
     // terminal is closed here (the reader keeps draining while it closes); the
@@ -292,6 +354,10 @@ fn try_run_in_pty(args: &[&str], script: &[Step]) -> Result<PtyRun, String> {
         output: text(),
         raw,
         exit_code: status.exit_code(),
+        #[cfg(unix)]
+        mode_at_signal,
+        #[cfg(unix)]
+        mode_at_end,
     })
 }
 
@@ -1119,4 +1185,321 @@ fn watch_verbose_lists_the_details() {
         );
     }
     assert!(run.output.contains("cmd: "), "{}", run.output);
+}
+
+// ---- signals and redirected output (Unix: they use a shell and signals) ----
+
+/// The signals that end a program, with the status a shell shows for each
+#[cfg(unix)]
+const END_SIGNALS: [(i32, &str, u32); 4] = [
+    (libc::SIGTERM, "SIGTERM", 143),
+    (libc::SIGINT, "SIGINT", 130),
+    (libc::SIGHUP, "SIGHUP", 129),
+    (libc::SIGQUIT, "SIGQUIT", 131),
+];
+
+/// Position of the last `needle` in what the terminal received
+#[cfg(unix)]
+fn last_at(raw: &str, needle: &str) -> Option<usize> {
+    raw.rfind(needle)
+}
+
+/// The terminal got line editing and echo back, and the cursor was shown after
+/// it was last hidden
+#[cfg(unix)]
+fn assert_terminal_back(run: &PtyRun, what: &str) {
+    let raw = String::from_utf8_lossy(&run.raw);
+    assert!(
+        is_cooked(run.mode_at_end),
+        "{what}: ICANON and ECHO are on again at the end: {:x?}\n{raw:?}",
+        run.mode_at_end
+    );
+    let hidden = last_at(&raw, "\x1b[?25l");
+    let shown = last_at(&raw, "\x1b[?25h");
+    assert!(
+        hidden.is_some() && shown > hidden,
+        "{what}: the cursor is shown after it was hidden: {raw:?}"
+    );
+}
+
+/// `proc <args>` with stdin and stderr on the pseudo-terminal and stdout sent
+/// where the shell `redirect` says (`> file`, `| head -c0`). Like [`ask`], a
+/// session that fails is started again for as long as [`BUSY_PATIENCE`]: a
+/// busy process may not have looked stuck yet, and what proc says about it is
+/// on the redirected stdout, out of the test's sight.
+#[cfg(unix)]
+fn ask_with_stdout(redirect: &str, args: &[&str], script: &[Step]) -> PtyRun {
+    let command = format!("\"$@\" {redirect}");
+    let mut shell = vec!["-c", command.as_str(), "sh", env!("CARGO_BIN_EXE_proc")];
+    shell.extend_from_slice(args);
+    let deadline = Instant::now() + BUSY_PATIENCE;
+    loop {
+        match try_run_program_in_pty("sh", &shell, script) {
+            Ok(run) => return run,
+            Err(_) if Instant::now() < deadline => {}
+            Err(why) => panic!("{why}"),
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn watch_puts_the_terminal_back_when_a_signal_ends_it() {
+    for (signal, name, status) in END_SIGNALS {
+        let p = Owned::listener();
+        let run = run_in_pty(
+            &["watch", &p.pid()],
+            &[Step::Expect("Watching"), Step::Raw, Step::Signal(signal)],
+        );
+        assert_eq!(run.exit_code, status, "{name}: {}", run.output);
+        assert!(
+            !is_cooked(run.mode_at_signal),
+            "{name}: watch had turned raw mode on: {:x?}",
+            run.mode_at_signal
+        );
+        let raw = String::from_utf8_lossy(&run.raw);
+        let entered = last_at(&raw, "\x1b[?1049h");
+        let left = last_at(&raw, LEAVE_ALT_SCREEN);
+        assert!(
+            entered.is_some() && left > entered,
+            "{name}: the alternate screen is left: {raw:?}"
+        );
+        assert_terminal_back(&run, name);
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn a_prompt_puts_the_terminal_back_when_a_signal_ends_it() {
+    for (signal, name, status) in END_SIGNALS {
+        let mut p = Owned::listener();
+        let run = run_in_pty(
+            &["kill", &p.pid()],
+            &[
+                Step::Expect("Kill 1 process"),
+                Step::Raw,
+                Step::Signal(signal),
+            ],
+        );
+        assert_eq!(run.exit_code, status, "{name}: {}", run.output);
+        assert!(
+            !is_cooked(run.mode_at_signal),
+            "{name}: the prompt had turned line editing and echo off: {:x?}",
+            run.mode_at_signal
+        );
+        assert_terminal_back(&run, name);
+        assert!(p.alive(), "{name}: the signal killed the target");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn ctrl_c_at_a_prompt_puts_the_terminal_back() {
+    let mut p = Owned::listener();
+    let run = run_in_pty(
+        &["kill", &p.pid()],
+        &[
+            Step::Expect("Kill 1 process"),
+            Step::Raw,
+            Step::Send("\x03"),
+        ],
+    );
+    assert_eq!(run.exit_code, 130, "{}", run.output);
+    assert_terminal_back(&run, "Ctrl+C");
+    assert!(p.alive(), "Ctrl+C killed the target");
+}
+
+/// The list and the question reach the person even though stdout does not:
+/// the list is on the terminal beside the question, and not in stdout
+#[cfg(unix)]
+fn assert_list_beside_the_question(run: &PtyRun, listed: &str, asked: &str, file: &PathBuf) {
+    let list = run.output.find(listed);
+    let question = run.output.find(asked);
+    assert!(
+        list.is_some() && question.is_some() && list < question,
+        "the list ({listed:?}) comes before the question ({asked:?}):\n{}",
+        run.output
+    );
+    let stdout = std::fs::read_to_string(file).unwrap_or_default();
+    assert!(
+        !stdout.contains(listed),
+        "the list is not in stdout, which is the command's output:\n{stdout}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn kill_shows_its_list_on_the_terminal_when_stdout_is_a_file() {
+    let mut p = Owned::listener();
+    let (_tmp, dir) = fresh_dir();
+    let file = dir.join("stdout.txt");
+    let redirect = format!("> '{}'", file.display());
+    let run = ask_with_stdout(
+        &redirect,
+        &["kill", &p.pid()],
+        &[
+            Step::Expect("Found 1 process to kill"),
+            Step::Expect("Kill 1 process"),
+            Step::Send("n"),
+            Step::Send("\r"),
+        ],
+    );
+    assert_ok(&run);
+    assert_list_beside_the_question(&run, "Found 1 process to kill", "Kill 1 process", &file);
+    assert!(p.alive());
+    // the answer to the question is the command's output, so it is in the file
+    let stdout = std::fs::read_to_string(&file).unwrap();
+    assert!(stdout.contains("Cancelled"), "{stdout}");
+}
+
+#[cfg(unix)]
+#[test]
+fn kill_shows_its_list_when_the_reader_of_stdout_has_left() {
+    // `proc kill node | head -n1`: the reader is gone before it prints a thing
+    let mut p = Owned::listener();
+    let run = ask_with_stdout(
+        "| true",
+        &["kill", &p.pid()],
+        &[
+            Step::Expect("Found 1 process to kill"),
+            Step::Expect("Kill 1 process"),
+            Step::Send("n"),
+            Step::Send("\r"),
+        ],
+    );
+    assert_ok(&run);
+    assert!(!run.output.contains("panicked"), "{}", run.output);
+    assert!(p.alive());
+}
+
+#[cfg(unix)]
+#[test]
+fn free_shows_its_list_on_the_terminal_when_stdout_is_a_file() {
+    let mut p = Owned::listener();
+    let target = format!(":{}", p.port());
+    let (_tmp, dir) = fresh_dir();
+    let file = dir.join("stdout.txt");
+    let redirect = format!("> '{}'", file.display());
+    let run = ask_with_stdout(
+        &redirect,
+        &["free", &target],
+        &[
+            Step::Expect("Found 1 process to free"),
+            Step::Expect("Kill 1 process to free 1 port"),
+            Step::Send("n"),
+            Step::Send("\r"),
+        ],
+    );
+    assert_ok(&run);
+    assert_list_beside_the_question(
+        &run,
+        "Found 1 process to free",
+        "Kill 1 process to free 1 port",
+        &file,
+    );
+    assert!(p.alive());
+}
+
+#[cfg(unix)]
+#[test]
+fn unstick_shows_its_list_on_the_terminal_when_stdout_is_a_file() {
+    let mut p = Owned::busy();
+    let dir = p.dir();
+    let (_tmp, out_dir) = fresh_dir();
+    let file = out_dir.join("stdout.txt");
+    let redirect = format!("> '{}'", file.display());
+    let run = ask_with_stdout(
+        &redirect,
+        &["unstick", "--force", "--timeout", "0", "--in", &dir],
+        &[
+            Step::Expect("Found stuck 1 process"),
+            Step::Expect("Unstick 1 process"),
+            Step::Send("n"),
+            Step::Send("\r"),
+        ],
+    );
+    assert_ok(&run);
+    assert_list_beside_the_question(&run, "Found stuck 1 process", "Unstick 1 process", &file);
+    assert!(p.alive());
+}
+
+#[cfg(unix)]
+#[test]
+fn stuck_shows_its_list_on_the_terminal_when_stdout_is_a_file() {
+    let mut p = Owned::busy();
+    let dir = p.dir();
+    let (_tmp, out_dir) = fresh_dir();
+    let file = out_dir.join("stdout.txt");
+    let redirect = format!("> '{}'", file.display());
+    let run = ask_with_stdout(
+        &redirect,
+        &["stuck", "--kill", "--timeout", "0", "--in", &dir],
+        &[
+            Step::Expect("CPU%"),
+            Step::Expect("Kill 1 stuck process"),
+            Step::Send("n"),
+            Step::Send("\r"),
+        ],
+    );
+    assert_ok(&run);
+    assert_list_beside_the_question(&run, "CPU%", "Kill 1 stuck process", &file);
+    assert!(p.alive());
+}
+
+#[cfg(unix)]
+#[test]
+fn orphans_shows_its_list_on_the_terminal_when_stdout_is_a_file() {
+    let o = Orphan::start();
+    let dir = o.dir();
+    let (_tmp, out_dir) = fresh_dir();
+    let file = out_dir.join("stdout.txt");
+    let redirect = format!("> '{}'", file.display());
+    let run = ask_with_stdout(
+        &redirect,
+        &["orphans", "--kill", "--in", &dir],
+        &[
+            Step::Expect("CPU%"),
+            Step::Expect("Kill 1 orphaned process"),
+            Step::Send("n"),
+            Step::Send("\r"),
+        ],
+    );
+    assert_ok(&run);
+    assert_list_beside_the_question(&run, "CPU%", "Kill 1 orphaned process", &file);
+    assert!(o.alive());
+}
+
+#[cfg(unix)]
+#[test]
+fn watch_without_a_terminal_on_stdin_shows_one_snapshot_and_says_so() {
+    let p = Owned::listener();
+    let pid = p.pid();
+    let run = try_run_program_in_pty(
+        "sh",
+        &[
+            "-c",
+            "\"$@\" < /dev/null",
+            "sh",
+            env!("CARGO_BIN_EXE_proc"),
+            "watch",
+            &pid,
+        ],
+        &[
+            Step::Expect("stdin is not a terminal"),
+            Step::Expect("CPU%"),
+        ],
+    )
+    .unwrap_or_else(|why| panic!("{why}"));
+    assert_ok(&run);
+    assert!(run.output.contains(&pid), "{}", run.output);
+    let raw = String::from_utf8_lossy(&run.raw);
+    assert!(
+        !raw.contains("\x1b[?1049h"),
+        "no alternate screen is drawn: {raw:?}"
+    );
+    assert!(
+        !run.output.contains("Failed to initialize"),
+        "{}",
+        run.output
+    );
 }

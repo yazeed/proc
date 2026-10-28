@@ -26,11 +26,10 @@ use crate::core::{
     apply_filters, flatten_targets, resolve_targets_excluding_self, NameMatch, Process, Resolved,
 };
 use crate::error::{ExitCode, ProcError, Result};
-use crate::ui::{format_duration, must_confirm, plural, Printer};
+use crate::ui::{format_duration, must_confirm, plural, prompt, Printer};
 use crate::{out_print, out_println};
 use clap::Args;
 use colored::*;
-use dialoguer::Confirm;
 use serde::Serialize;
 use std::time::Duration;
 
@@ -150,8 +149,14 @@ impl UnstickCommand {
             Process::measure_cpu(&mut stuck);
         }
 
-        // Show stuck processes
-        if !self.json {
+        // Show stuck processes. When a person is about to be asked, the
+        // question shows them, beside the question
+        let asked_below = !self.dry_run
+            && matches!(
+                must_confirm("unstick", self.yes, self.json, &stuck, Some(&not_found)),
+                Ok(true)
+            );
+        if !self.json && !asked_below {
             self.show_processes(&stuck);
         }
 
@@ -199,25 +204,23 @@ impl UnstickCommand {
 
         // Confirm. Same rule everywhere: --yes, or ask; --json never skips it
         if must_confirm("unstick", self.yes, self.json, &stuck, Some(&not_found))? {
-            if self.force {
-                out_println!(
-                    "\n{} With --force: processes will be terminated if recovery fails.\n",
-                    "!".yellow().bold()
-                );
-            } else {
-                out_println!(
-                    "\n{} Will attempt recovery only. Use --force to terminate if needed.\n",
-                    "ℹ".blue().bold()
-                );
-            }
+            let question = format!("Unstick {} process{}?", stuck.len(), plural(stuck.len()));
 
-            let prompt = format!("Unstick {} process{}?", stuck.len(), plural(stuck.len()));
-
-            if !Confirm::new()
-                .with_prompt(prompt)
-                .default(false)
-                .interact()?
-            {
+            let show = || {
+                self.show_processes(&stuck);
+                if self.force {
+                    out_println!(
+                        "\n{} With --force: processes will be terminated if recovery fails.\n",
+                        "!".yellow().bold()
+                    );
+                } else {
+                    out_println!(
+                        "\n{} Will attempt recovery only. Use --force to terminate if needed.\n",
+                        "ℹ".blue().bold()
+                    );
+                }
+            };
+            if !prompt::ask("unstick", &stuck, Some(&not_found), &question, show)? {
                 printer.warning("Aborted");
                 return Ok(());
             }

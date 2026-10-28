@@ -17,7 +17,7 @@ proc watch :3000 :8080 node  # watch several targets together
 
 Several targets are separate arguments. Comma-separated lists (`:3000,:8080`) still work but are deprecated.
 
-Press `q`, `Esc`, or `Ctrl+C` to exit. Terminal is always restored cleanly.
+Press `q`, `Esc`, or `Ctrl+C` to exit. The terminal is always restored cleanly: also when a signal ends watch (`kill`, closing the window) or when it panics. A signal ends proc with the status a shell shows for it: 130 for `Ctrl+C`/SIGINT, 143 for SIGTERM, 129 for SIGHUP and 131 for SIGQUIT (130 for any Ctrl+C, Ctrl+Break or closing console on Windows).
 
 The table has the same columns as `proc list`, including uptime on terminals at least 100 columns wide.
 
@@ -41,9 +41,9 @@ The table has the same columns as `proc list`, including uptime on terminals at 
 
 **Terminal (default)**: Alternate screen with auto-refresh. Adapts to terminal size.
 
-**JSON** (`--json`): Newline-delimited JSON, one object per refresh cycle. Pipe to `jq` or other tools.
+**JSON** (`--json`): Newline-delimited JSON, one object per refresh cycle. Pipe to `jq` or other tools. When the reader leaves (`proc watch --json | head -n1`), watch stops at once on Linux and macOS, and at the next refresh on Windows.
 
-**Non-TTY**: When stdout is not a terminal (piped), prints a single snapshot and exits.
+**No terminal**: When stdout is not a terminal (piped), or stdin is not (nothing to press `q` on), prints a single snapshot and exits. If only stdin is missing, a `note:` on stderr says so.
 
 ## Examples
 

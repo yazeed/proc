@@ -12,10 +12,8 @@ use crate::core::Process;
 use crate::core::{apply_filters, apply_to_each, NameMatch};
 use crate::error::Result;
 #[cfg(unix)]
-use crate::ui::{must_confirm, plural, Printer};
+use crate::ui::{must_confirm, plural, prompt, Printer};
 use clap::Args;
-#[cfg(unix)]
-use dialoguer::Confirm;
 
 /// Find orphaned processes (re-parented to PID 1: init/launchd; includes processes launchd started itself). Not available on Windows
 #[derive(Args, Debug)]
@@ -110,21 +108,23 @@ impl OrphansCommand {
             return Ok(());
         }
 
-        // Kill: JSON prints a single action result; humans see the list first
-        if !self.json {
+        // Same rule everywhere: --yes, or ask; --json never skips it
+        let asking = must_confirm("orphans --kill", self.yes, self.json, &processes, None);
+
+        // Kill: JSON prints a single action result; humans see the list first.
+        // When they are asked, the question shows it, beside the question.
+        if !self.json && !matches!(asking, Ok(true)) {
             printer.print_processes_under_headline("orphans", &processes);
         }
 
-        // Same rule everywhere: --yes, or ask; --json never skips it
-        if must_confirm("orphans --kill", self.yes, self.json, &processes, None)? {
-            let confirmed = Confirm::new()
-                .with_prompt(format!(
-                    "Kill {} orphaned process{}?",
-                    processes.len(),
-                    plural(processes.len())
-                ))
-                .default(false)
-                .interact()?;
+        if asking? {
+            let question = format!(
+                "Kill {} orphaned process{}?",
+                processes.len(),
+                plural(processes.len())
+            );
+            let list = || printer.print_processes_under_headline("orphans", &processes);
+            let confirmed = prompt::ask("orphans --kill", &processes, None, &question, list)?;
 
             if !confirmed {
                 printer.warning("Cancelled");

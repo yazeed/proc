@@ -9,11 +9,10 @@ use crate::ui::format::{
     colorize_status, format_duration, format_memory, plural, process_table_budget, truncate_path,
     truncate_string,
 };
-use crate::ui::out;
+use crate::ui::{out, prompt};
 use colored::*;
 use comfy_table::presets::NOTHING;
 use comfy_table::{Attribute, Cell, CellAlignment, Color, ContentArrangement, Table};
-use dialoguer::Confirm;
 use serde::Serialize;
 use std::io::Write;
 
@@ -699,25 +698,24 @@ impl Printer {
     ///
     /// Returns `Ok(true)` if confirmed or skipped (--yes), `Ok(false)` if the
     /// user declined (prints "Cancelled"), and an error when there's nobody to
-    /// ask (see [`must_confirm`]).
+    /// ask (see [`must_confirm`]) or the list of what would change can't be
+    /// shown to them (see [`prompt`]).
     pub fn ask_confirm(&self, action: &str, processes: &[Process], yes: bool) -> Result<bool> {
         let json = matches!(self.format, OutputFormat::Json);
         if !must_confirm(action, yes, json, processes, self.not_found.as_deref())? {
             return Ok(true);
         }
         // A person is being asked: `must_confirm` never gets here with --json
-        self.print_confirmation(action, processes);
-        let prompt = format!(
+        let question = format!(
             "{}{} {} process{}?",
             action[..1].to_uppercase(),
             &action[1..],
             processes.len(),
             plural(processes.len())
         );
-        let confirmed = Confirm::new()
-            .with_prompt(prompt)
-            .default(false)
-            .interact()?;
+        let list = || self.print_confirmation(action, processes);
+        let not_found = self.not_found.as_deref();
+        let confirmed = prompt::ask(action, processes, not_found, &question, list)?;
         if !confirmed {
             self.warning("Cancelled");
         }

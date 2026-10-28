@@ -21,7 +21,7 @@ use crate::error::Result;
 use crate::ui::format::{
     format_duration, format_memory, process_table_budget, truncate_path, truncate_string,
 };
-use crate::ui::out;
+use crate::ui::{interrupt, out};
 use clap::{Args, ValueEnum};
 use comfy_table::presets::NOTHING;
 use comfy_table::{Attribute, Cell, CellAlignment, Color, ContentArrangement, Table};
@@ -32,7 +32,7 @@ use crossterm::{
 };
 use serde::Serialize;
 use std::collections::HashSet;
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 use std::time::{Duration, Instant};
 use sysinfo::{Pid, System};
 
@@ -142,18 +142,14 @@ fn port_holders(port: u16) -> Vec<u32> {
         .collect()
 }
 
-/// Put the terminal back the way it was: raw mode off, cursor shown, normal screen
-fn restore_terminal(out: &mut impl Write) {
-    let _ = terminal::disable_raw_mode();
-    let _ = execute!(out, cursor::Show, terminal::LeaveAlternateScreen);
-}
-
 /// Restore the terminal if watch panics, so the shell is not left in raw mode
-/// on the alternate screen, then run the hook that was there before
+/// on the alternate screen, then run the hook that was there before. (A signal
+/// is handled by `interrupt`.) The codes are written whether or not an earlier
+/// write failed: the terminal may well still be there.
 fn install_panic_hook() {
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |panic_info| {
-        restore_terminal(&mut out::stdout());
+        interrupt::restore_screen(&mut out::stdout_unrecorded());
         original_hook(panic_info);
     }));
 }
@@ -166,6 +162,18 @@ fn is_quit_key(code: KeyCode, modifiers: KeyModifiers) -> bool {
         KeyCode::Char('c') => modifiers.contains(KeyModifiers::CONTROL),
         _ => false,
     }
+}
+
+/// Draw one frame: clear the screen and write each line, which needs `\r\n`
+/// in raw mode
+fn draw(out: &mut impl Write, frame: &str) -> std::io::Result<()> {
+    execute!(out, cursor::MoveTo(0, 0))?;
+    execute!(out, terminal::Clear(terminal::ClearType::All))?;
+    execute!(out, cursor::MoveTo(0, 0))?;
+    for line in frame.lines() {
+        write!(out, "{}\r\n", line)?;
+    }
+    out.flush()
 }
 
 /// Write one NDJSON line and flush it. Returns false once the reader is gone
@@ -188,10 +196,18 @@ impl WatchCommand {
 
         if self.json {
             self.run_json_loop()
-        } else if is_tty {
+        } else if is_tty && std::io::stdin().is_terminal() {
             self.run_tui_loop()
         } else {
-            // Non-TTY: single snapshot like `list`
+            // Without a terminal on both ends there is no screen to draw on or
+            // key to quit with: one snapshot, like `list`. Say so when stdout
+            // is a terminal, where a person is waiting for a live view.
+            if is_tty {
+                crate::ui::print_note(
+                    "stdin is not a terminal, so there is no live view to quit with a key; \
+                     showing one snapshot (--json streams one line per refresh)",
+                );
+            }
             self.run_snapshot()
         }
     }
@@ -310,6 +326,9 @@ impl WatchCommand {
         let mut stdout = out::stdout();
 
         install_panic_hook();
+        // A signal (kill, closing the window) puts the screen back too; armed
+        // before the screen changes, and dropped once it is back
+        let _interrupts = interrupt::protect_screen();
 
         // Enter alternate screen + raw mode
         execute!(stdout, terminal::EnterAlternateScreen, cursor::Hide)
@@ -326,7 +345,8 @@ impl WatchCommand {
 
         let result = self.tui_event_loop(&mut sys, &mut stdout, interval);
 
-        restore_terminal(&mut stdout);
+        // Whether or not a write failed on the way: the terminal may be fine
+        interrupt::restore_screen(&mut out::stdout_unrecorded());
 
         result
     }
@@ -334,7 +354,7 @@ impl WatchCommand {
     fn tui_event_loop(
         &self,
         sys: &mut System,
-        stdout: &mut out::Out,
+        stdout: &mut impl Write,
         interval: Duration,
     ) -> Result<()> {
         loop {
@@ -347,22 +367,12 @@ impl WatchCommand {
             // Build frame
             let frame = self.render_frame(&processes, width, height);
 
-            // Write frame with \r\n line endings (required in raw mode)
-            execute!(stdout, cursor::MoveTo(0, 0))
-                .map_err(|e| crate::error::ProcError::SystemError(e.to_string()))?;
-            // Clear screen
-            execute!(stdout, terminal::Clear(terminal::ClearType::All))
-                .map_err(|e| crate::error::ProcError::SystemError(e.to_string()))?;
-            execute!(stdout, cursor::MoveTo(0, 0))
-                .map_err(|e| crate::error::ProcError::SystemError(e.to_string()))?;
-
-            for line in frame.lines() {
-                write!(stdout, "{}\r\n", line)
-                    .map_err(|e| crate::error::ProcError::SystemError(e.to_string()))?;
+            // A write that fails ends the watch. `out` has the policy for what
+            // that means: a reader that left changes nothing, and any other
+            // failure it recorded becomes the exit code and the message.
+            if draw(stdout, &frame).is_err() {
+                return Ok(());
             }
-            stdout
-                .flush()
-                .map_err(|e| crate::error::ProcError::SystemError(e.to_string()))?;
 
             // Wait for interval or keypress
             let deadline = Instant::now() + interval;
@@ -663,7 +673,11 @@ impl WatchCommand {
                 return Ok(()); // Broken pipe — exit cleanly
             }
 
-            std::thread::sleep(interval);
+            // Not a plain sleep: a reader that leaves is noticed at once, not a
+            // whole interval later (see `out::reader_gone_within`)
+            if out::reader_gone_within(interval) {
+                return Ok(());
+            }
         }
     }
 
@@ -779,10 +793,44 @@ mod tests {
     // ---- the terminal ----
 
     #[test]
-    fn restoring_shows_the_cursor_and_leaves_the_alternate_screen() {
+    fn a_frame_is_drawn_from_the_top_with_raw_mode_line_ends() {
         let mut out = Vec::new();
-        restore_terminal(&mut out);
-        assert_eq!(String::from_utf8(out).unwrap(), "\x1b[?25h\x1b[?1049l");
+        draw(&mut out, "one\ntwo").unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert!(text.starts_with("\x1b[1;1H\x1b[2J\x1b[1;1H"), "{text:?}");
+        assert!(text.ends_with("one\r\ntwo\r\n"), "{text:?}");
+    }
+
+    #[test]
+    fn a_frame_stops_at_the_first_failed_write() {
+        let frame = "one\ntwo";
+        let mut all = FailsAfter {
+            left: usize::MAX,
+            written: Vec::new(),
+        };
+        draw(&mut all, frame).unwrap();
+        for limit in 0..all.written.len() {
+            let mut out = FailsAfter {
+                left: limit,
+                written: Vec::new(),
+            };
+            let err = draw(&mut out, frame).expect_err(&format!("limit {limit}"));
+            assert_eq!(err.to_string(), "disk full", "limit {limit}");
+            assert_eq!(out.written, all.written[..limit], "limit {limit}");
+        }
+    }
+
+    // Unix only: on Windows crossterm may draw through the console instead of the writer
+    #[cfg(unix)]
+    #[test]
+    fn a_screen_that_cannot_be_written_ends_the_watch_without_an_error() {
+        let mut gone = FailsAfter {
+            left: 0,
+            written: Vec::new(),
+        };
+        let ended = watch_args().tui_event_loop(&mut System::new(), &mut gone, Duration::MAX);
+        assert!(ended.is_ok());
+        assert!(gone.written.is_empty());
     }
 
     #[test]

@@ -27,9 +27,11 @@
 // This module is the one place that may touch the std streams.
 #![allow(clippy::disallowed_macros, clippy::disallowed_methods)]
 
+use std::cell::Cell;
 use std::fmt;
 use std::io::{self, ErrorKind, IsTerminal, Write};
 use std::sync::Mutex;
+use std::time::Duration;
 
 /// What has gone wrong on one stream so far
 #[derive(Default)]
@@ -88,6 +90,13 @@ impl Channel {
         result
     }
 
+    /// Whether nothing has gone wrong on the stream so far: the reader is
+    /// still there and no write has failed
+    fn usable(&self) -> bool {
+        let state = self.lock();
+        !state.broken && state.failure.is_none()
+    }
+
     /// The message of the first write error that was not a broken pipe
     fn failure(&self) -> Option<String> {
         self.lock()
@@ -143,11 +152,88 @@ impl Write for Out {
     }
 }
 
-/// The writer for stdout
+thread_local! {
+    /// Set while [`on_stderr`] runs: what this thread prints to stdout goes to stderr
+    static STDOUT_ON_STDERR: Cell<bool> = const { Cell::new(false) };
+}
+
+/// The writer for stdout (or for stderr, while [`on_stderr`] runs)
 pub fn stdout() -> Out {
     Out {
-        stream: Stream::Stdout,
+        stream: if STDOUT_ON_STDERR.get() {
+            Stream::Stderr
+        } else {
+            Stream::Stdout
+        },
     }
+}
+
+/// Run `show` with everything it prints to stdout going to stderr instead.
+///
+/// For a list that goes with a question: the question is asked on stderr, so
+/// when stdout is a file or a pipe the list must go beside it, or the person
+/// answers without seeing what they approve.
+pub fn on_stderr<T>(show: impl FnOnce() -> T) -> T {
+    /// Puts the routing back even if `show` panics
+    struct Reset(bool);
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            STDOUT_ON_STDERR.set(self.0);
+        }
+    }
+    let _reset = Reset(STDOUT_ON_STDERR.replace(true));
+    show()
+}
+
+/// Whether stdout is still good: its reader is there and no write has failed
+pub fn stdout_usable() -> bool {
+    STDOUT.usable()
+}
+
+/// Whether stderr is still good: its reader is there and no write has failed
+pub fn stderr_usable() -> bool {
+    STDERR.usable()
+}
+
+/// A writer that goes straight to the stream, whatever has failed before.
+///
+/// For putting a terminal back: the escape codes must be tried even after an
+/// earlier write failed (the terminal may well still be there), and nothing
+/// about them is worth recording.
+pub struct Unrecorded {
+    to_stderr: bool,
+}
+
+impl Write for Unrecorded {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.write_all(buf).map(|()| buf.len())
+    }
+
+    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+        if self.to_stderr {
+            io::stderr().write_all(buf)
+        } else {
+            io::stdout().write_all(buf)
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        if self.to_stderr {
+            io::stderr().flush()
+        } else {
+            io::stdout().flush()
+        }
+    }
+}
+
+/// The writer for stdout that ignores earlier failures (see [`Unrecorded`])
+pub fn stdout_unrecorded() -> Unrecorded {
+    Unrecorded { to_stderr: false }
+}
+
+/// The writer for stderr that ignores earlier failures (see [`Unrecorded`])
+pub fn stderr_unrecorded() -> Unrecorded {
+    Unrecorded { to_stderr: true }
 }
 
 /// The writer for stderr
@@ -165,6 +251,71 @@ pub fn stdout_is_terminal() -> bool {
 /// Whether stderr is a terminal
 pub fn stderr_is_terminal() -> bool {
     io::stderr().is_terminal()
+}
+
+/// Wait for `span`, or until nobody reads stdout any more; true in that case.
+///
+/// For a command that prints on a timer (`watch --json`): the broken pipe is
+/// only noticed by a write, and the next one is a whole interval away, so a
+/// reader that left would be waited for that long. On Unix the wait itself
+/// watches the pipe and ends the moment the reader closes it. Windows has no
+/// such wait without more system calls than this is worth: there the reader's
+/// leaving is noticed by the next write, as for any other command.
+pub fn reader_gone_within(span: Duration) -> bool {
+    !STDOUT.usable() || hung_up_within(span)
+}
+
+#[cfg(unix)]
+fn hung_up_within(span: Duration) -> bool {
+    poll_hangup(libc::STDOUT_FILENO, span)
+}
+
+#[cfg(not(unix))]
+fn hung_up_within(span: Duration) -> bool {
+    std::thread::sleep(span);
+    false
+}
+
+/// Wait up to `span` for the other end of `fd` to be closed (`POLLERR` on a
+/// pipe whose reader is gone, `POLLHUP` on a terminal that hung up)
+#[cfg(unix)]
+fn poll_hangup(fd: i32, span: Duration) -> bool {
+    let deadline = std::time::Instant::now() + span;
+    // A wait that a signal interrupts is started again, for what is left
+    let outcome = std::iter::repeat_with(|| poll_once(fd, deadline)).find_map(|done| done);
+    match outcome {
+        Some((0, _, _)) => false,
+        Some((ready, events, _)) if ready > 0 && events & (libc::POLLERR | libc::POLLHUP) != 0 => {
+            true
+        }
+        // Something else (the descriptor is not open, or poll failed): there is
+        // nothing to learn from it, so just sit out the rest of the wait
+        other => {
+            std::thread::sleep(other.map_or(Duration::ZERO, |(_, _, left)| left));
+            false
+        }
+    }
+}
+
+/// One `poll` of `fd` until `deadline`: what it returned, the events it
+/// reported and the time that was left when it started. `None` if a signal
+/// interrupted it.
+#[cfg(unix)]
+fn poll_once(fd: i32, deadline: std::time::Instant) -> Option<(i32, i16, Duration)> {
+    let left = deadline.saturating_duration_since(std::time::Instant::now());
+    // Round up, so a wait of under a millisecond does not become a spin
+    let millis = left.as_micros().div_ceil(1000).min(i32::MAX as u128) as i32;
+    // Linux reports a pipe whose reader left (POLLERR) whatever is asked
+    // for; macOS reports nothing unless POLLHUP is asked for
+    let mut watched = libc::pollfd {
+        fd,
+        events: libc::POLLHUP,
+        revents: 0,
+    };
+    // SAFETY: one valid pollfd, and a count of one
+    let ready = unsafe { libc::poll(&mut watched, 1, millis) };
+    let interrupted = ready < 0 && io::Error::last_os_error().kind() == ErrorKind::Interrupted;
+    (!interrupted).then_some((ready, watched.revents, left))
 }
 
 /// Settle the result of a write whose failure is already recorded on its
@@ -393,6 +544,92 @@ mod tests {
         for mut out in [stdout(), stderr()] {
             assert_eq!(out.write(b"").unwrap(), 0);
             out.flush().unwrap();
+        }
+    }
+
+    #[test]
+    fn a_stream_is_usable_until_something_goes_wrong_on_it() {
+        let channel = Channel::new();
+        assert!(channel.usable());
+        let _ = channel.run(broken);
+        assert!(!channel.usable());
+
+        let channel = Channel::new();
+        let _ = channel.run(full);
+        assert!(!channel.usable());
+    }
+
+    #[test]
+    fn on_stderr_sends_stdout_to_stderr_and_puts_it_back() {
+        let on = || matches!(stdout().stream, Stream::Stderr);
+        assert!(!on());
+        assert!(on_stderr(on));
+        // inside another on_stderr, it stays on when the inner one ends
+        assert!(on_stderr(|| {
+            on_stderr(|| ());
+            on()
+        }));
+        assert!(!on());
+        // and it is put back when the list panics
+        let caught = std::panic::catch_unwind(|| on_stderr(|| panic!("a list that panics")));
+        assert!(caught.is_err());
+        assert!(!on());
+    }
+
+    #[test]
+    fn unrecorded_writers_take_an_empty_write() {
+        for mut out in [stdout_unrecorded(), stderr_unrecorded()] {
+            assert_eq!(out.write(b"").unwrap(), 0);
+            out.flush().unwrap();
+        }
+    }
+
+    #[test]
+    fn a_wait_with_a_reader_still_there_lasts_the_whole_time() {
+        let started = std::time::Instant::now();
+        assert!(!reader_gone_within(Duration::from_millis(40)));
+        assert!(started.elapsed() >= Duration::from_millis(40));
+    }
+
+    #[cfg(unix)]
+    mod hangup {
+        use super::super::*;
+        use std::os::fd::{AsRawFd, IntoRawFd};
+        use std::time::Instant;
+
+        #[test]
+        fn a_pipe_whose_reader_left_ends_the_wait_at_once() {
+            let (reader, writer) = std::io::pipe().unwrap();
+            let fd = writer.as_raw_fd();
+
+            // reader still there: the wait runs its course
+            let started = Instant::now();
+            assert!(!poll_hangup(fd, Duration::from_millis(40)));
+            assert!(started.elapsed() >= Duration::from_millis(40));
+
+            drop(reader);
+            let started = Instant::now();
+            assert!(poll_hangup(fd, Duration::from_secs(30)));
+            assert!(started.elapsed() < Duration::from_secs(5));
+        }
+
+        #[test]
+        fn a_file_has_no_reader_to_lose() {
+            let file = std::fs::File::open("/dev/null").unwrap();
+            let started = Instant::now();
+            assert!(!poll_hangup(file.as_raw_fd(), Duration::from_millis(40)));
+            assert!(started.elapsed() >= Duration::from_millis(40));
+        }
+
+        #[test]
+        fn a_descriptor_that_is_not_open_just_waits() {
+            let (reader, _writer) = std::io::pipe().unwrap();
+            let closed = reader.into_raw_fd();
+            // SAFETY: closing the descriptor taken from `reader` just above
+            unsafe { libc::close(closed) };
+            let started = Instant::now();
+            assert!(!poll_hangup(closed, Duration::from_millis(40)));
+            assert!(started.elapsed() >= Duration::from_millis(40));
         }
     }
 

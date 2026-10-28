@@ -12,10 +12,9 @@ use crate::core::port::PortInfo;
 use crate::core::{flatten_targets, parse_target, Process, TargetType};
 use crate::error::{ExitCode, ProcError, Result};
 use crate::out_println;
-use crate::ui::{must_confirm, plural, Printer};
+use crate::ui::{must_confirm, plural, prompt, Printer};
 use clap::Args;
 use colored::*;
-use dialoguer::Confirm;
 use serde::Serialize;
 
 /// Free port(s) by killing the process and verifying the port is available
@@ -142,9 +141,7 @@ impl FreeCommand {
 
         // Same rule everywhere: --yes, or ask; --json never skips it
         if must_confirm("free", self.yes, self.json, &processes, Some(&not_found))? {
-            printer.print_confirmation("free", &processes);
-
-            let prompt = format!(
+            let question = format!(
                 "Kill {} process{} to free {} port{}?",
                 processes.len(),
                 plural(processes.len()),
@@ -152,11 +149,9 @@ impl FreeCommand {
                 if target_ports.len() == 1 { "" } else { "s" }
             );
 
-            if !Confirm::new()
-                .with_prompt(prompt)
-                .default(false)
-                .interact()?
-            {
+            if !prompt::ask("free", &processes, Some(&not_found), &question, || {
+                printer.print_confirmation("free", &processes)
+            })? {
                 printer.warning("Aborted");
                 return Ok(());
             }

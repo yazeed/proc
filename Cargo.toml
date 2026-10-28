@@ -46,6 +46,13 @@ thiserror = "2.0"
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.31", features = ["process", "signal"] }
 libc = "0.2"
+# Already in the tree through crossterm; used to restore the terminal when a
+# signal ends watch or a prompt
+signal-hook = "0.3"
+
+# Windows: Ctrl-C, Ctrl-Break and a closing console, for the same job
+[target.'cfg(windows)'.dependencies]
+ctrlc = "3.5"
 
 [dev-dependencies]
 tempfile = "3.14"

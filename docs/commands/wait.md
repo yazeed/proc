@@ -7,6 +7,8 @@ permalink: /commands/wait
 
 Block until target process(es) exit. Non-interactive — works in scripts and pipelines.
 
+If the reader of its output leaves (`proc wait node | head -n1`), wait keeps waiting and exits with its own result: 0 when the processes exited, 1 on a timeout. Its exit code is the answer it exists to give, so it does not stop early the way `watch --json` does.
+
 ```bash
 proc wait node                 # wait until the processes named node exit
 proc wait :3000                # wait until port 3000's process exits

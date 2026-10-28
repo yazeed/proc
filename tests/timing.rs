@@ -175,3 +175,102 @@ fn the_missing_yes_error_lists_processes_with_measured_cpu() {
     // CI runner, so 20 tells the two apart without flaking
     assert!(cpu > 20.0, "cpu_percent {cpu} was not measured: {json}");
 }
+
+/// Kills and reaps a proc that the test started, whatever happens
+struct Proc(Child);
+
+impl Drop for Proc {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+/// Wait up to `limit` for the child to end; its exit code if it did
+fn ended_within(child: &mut Proc, limit: Duration) -> Option<Option<i32>> {
+    let deadline = Instant::now() + limit;
+    while Instant::now() < deadline {
+        if let Some(status) = child.0.try_wait().unwrap() {
+            return Some(status.code());
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    None
+}
+
+#[test]
+fn watch_json_ends_soon_after_its_reader_leaves() {
+    use std::io::{BufRead, BufReader};
+    use std::process::Stdio;
+
+    // `proc watch node -j -n 30 | head -n1`. The broken pipe used to be noticed
+    // by the next write, a whole 30-second refresh later
+    let target = TestChild::exiting_after("300");
+    let mut watch = Proc(
+        StdCommand::new(env!("CARGO_BIN_EXE_proc"))
+            .args(["watch", &target.pid(), "--json", "-n", "30"])
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap(),
+    );
+    let mut reader = BufReader::new(watch.0.stdout.take().unwrap());
+    let mut first = String::new();
+    reader.read_line(&mut first).unwrap();
+    assert!(first.contains("\"action\":\"watch\""), "{first}");
+
+    let left = Instant::now();
+    drop(reader);
+    let code = ended_within(&mut watch, Duration::from_secs(5))
+        .unwrap_or_else(|| panic!("still running {:.1}s after its reader left", 5.0));
+    assert_eq!(code, Some(0), "a reader that left is not an error");
+    assert!(
+        left.elapsed() < Duration::from_secs(5),
+        "took {:?} to notice",
+        left.elapsed()
+    );
+}
+
+#[test]
+fn wait_keeps_waiting_when_its_reader_leaves_and_ends_with_its_own_code() {
+    use std::process::Stdio;
+
+    // Unlike a watch, wait has a result: its exit code says whether the
+    // processes ended (0) or it timed out. So a reader that left changes
+    // nothing: it waits for the process and exits 0 when it is gone.
+    let target = TestChild::exiting_after("2");
+    let (reader, writer) = std::io::pipe().unwrap();
+    drop(reader);
+    let started = Instant::now();
+    let mut wait = Proc(
+        StdCommand::new(env!("CARGO_BIN_EXE_proc"))
+            .args(["wait", &target.pid()])
+            .stdout(Stdio::from(writer))
+            .spawn()
+            .unwrap(),
+    );
+    assert_eq!(
+        ended_within(&mut wait, Duration::from_secs(20)),
+        Some(Some(0))
+    );
+    assert!(
+        started.elapsed() >= Duration::from_millis(1500),
+        "wait stopped after {:?}, before the process had ended",
+        started.elapsed()
+    );
+
+    // and a timeout is still a timeout
+    let target = TestChild::exiting_after("300");
+    let (reader, writer) = std::io::pipe().unwrap();
+    drop(reader);
+    let mut wait = Proc(
+        StdCommand::new(env!("CARGO_BIN_EXE_proc"))
+            .args(["wait", &target.pid(), "--timeout", "1"])
+            .stdout(Stdio::from(writer))
+            .spawn()
+            .unwrap(),
+    );
+    assert_eq!(
+        ended_within(&mut wait, Duration::from_secs(20)),
+        Some(Some(1))
+    );
+}

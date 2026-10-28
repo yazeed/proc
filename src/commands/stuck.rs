@@ -13,9 +13,8 @@
 
 use crate::core::{apply_filters, apply_to_each, NameMatch, Process};
 use crate::error::Result;
-use crate::ui::{must_confirm, plural, Printer};
+use crate::ui::{must_confirm, plural, prompt, Printer};
 use clap::Args;
-use dialoguer::Confirm;
 use std::time::Duration;
 
 /// Find stuck/hung processes
@@ -113,21 +112,23 @@ impl StuckCommand {
             return Ok(());
         }
 
-        // Kill: JSON prints a single action result; humans see the list first
-        if !self.json {
+        // Same rule everywhere: --yes, or ask; --json never skips it
+        let asking = must_confirm("stuck --kill", self.yes, self.json, &processes, None);
+
+        // Kill: JSON prints a single action result; humans see the list first.
+        // When they are asked, the question shows it, beside the question.
+        if !self.json && !matches!(asking, Ok(true)) {
             printer.print_processes_under_headline("stuck", &processes);
         }
 
-        // Same rule everywhere: --yes, or ask; --json never skips it
-        if must_confirm("stuck --kill", self.yes, self.json, &processes, None)? {
-            let confirmed = Confirm::new()
-                .with_prompt(format!(
-                    "Kill {} stuck process{}?",
-                    processes.len(),
-                    plural(processes.len())
-                ))
-                .default(false)
-                .interact()?;
+        if asking? {
+            let question = format!(
+                "Kill {} stuck process{}?",
+                processes.len(),
+                plural(processes.len())
+            );
+            let list = || printer.print_processes_under_headline("stuck", &processes);
+            let confirmed = prompt::ask("stuck --kill", &processes, None, &question, list)?;
 
             if !confirmed {
                 printer.warning("Cancelled");

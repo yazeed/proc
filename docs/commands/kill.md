@@ -7,6 +7,8 @@ permalink: /commands/kill
 
 Send SIGKILL to processes. Asks for confirmation unless `--yes`. Alias: `k`.
 
+The question comes with the list of what it would kill, on the terminal. If stdout is a file or a pipe, the list goes to stderr beside the question; if it cannot be shown at all, nothing is asked and nothing is killed (exit 4, `needs_confirmation`). A signal or `Ctrl+C` at the question ends proc with the terminal put back (130 for `Ctrl+C`).
+
 ```bash
 proc kill :3000            # kill every process on port 3000
 proc kill node             # kill the processes named node
