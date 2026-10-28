@@ -5,18 +5,24 @@
 //! reaches the prompt. Every target is a process the test starts, named by PID,
 //! port, or a fresh temp directory.
 //!
-//! Unix only: ConPTY on the Windows runners rewrites escape sequences, which
-//! would make these tests flaky, and the prompt code is shared, so Linux and
-//! macOS cover it.
-#![cfg(unix)]
+//! Windows runs them through ConPTY. It rewrites what a program prints: it
+//! draws with cursor movements instead of line breaks, may leave an unchanged
+//! line out of a redraw, and answers nothing a program asks of the terminal
+//! (conhost asks for the cursor position at start-up, and this harness
+//! answers). So on Windows the output is read with its escape sequences taken
+//! out (`plain`), a repeated frame is not waited for, and the cases that need
+//! signals (`freeze`, `thaw`), a real orphan (Windows has no PID 1 to adopt
+//! one), exact escape sequences, or a resize stay Unix only.
 
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use proc_cli::core::filters::strip_verbatim_prefix;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
+#[cfg(unix)]
 const LEAVE_ALT_SCREEN: &str = "\x1b[?1049l";
 
 // ---- the pseudo-terminal harness ----
@@ -29,6 +35,7 @@ enum Step {
     /// Type this (raw bytes: "\r" is Enter, "\x03" is Ctrl+C, "\x1b" is Esc)
     Send(&'static str),
     /// Resize the terminal to this many columns and rows, as dragging the window does
+    #[cfg_attr(not(unix), allow(dead_code))]
     Resize(u16, u16),
 }
 
@@ -50,6 +57,81 @@ impl Drop for ChildGuard {
     fn drop(&mut self) {
         let _ = self.0.kill();
         let _ = self.0.wait();
+    }
+}
+
+/// What a terminal shows of `raw`, as text: on Windows, ConPTY's output with the
+/// escape sequences taken out (a cursor move forward becomes spaces, a move to
+/// another line becomes a line break, an incomplete sequence at the end is left
+/// for the next read). On Unix the output is read as it is.
+fn plain(raw: &[u8]) -> String {
+    let text = String::from_utf8_lossy(raw).into_owned();
+    if cfg!(unix) {
+        return text;
+    }
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::new();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] != '\x1b' {
+            out.push(chars[i]);
+            i += 1;
+            continue;
+        }
+        match chars.get(i + 1) {
+            // an escape at the very end: the rest has not arrived
+            None => break,
+            Some('[') => {
+                let mut j = i + 2;
+                while j < chars.len() && !('\x40'..='\x7e').contains(&chars[j]) {
+                    j += 1;
+                }
+                if j == chars.len() {
+                    break;
+                }
+                let params: String = chars[i + 2..j].iter().collect();
+                match chars[j] {
+                    'C' => {
+                        let n: usize = params.parse().unwrap_or(1);
+                        out.push_str(&" ".repeat(n));
+                    }
+                    'H' | 'd' | 'B' | 'E' => out.push('\n'),
+                    _ => {}
+                }
+                i = j + 1;
+            }
+            Some(']') => {
+                // a title or hyperlink, ended by BEL or ESC \
+                let mut j = i + 2;
+                while j < chars.len()
+                    && chars[j] != '\u{7}'
+                    && !(chars[j] == '\x1b' && chars.get(j + 1) == Some(&'\\'))
+                {
+                    j += 1;
+                }
+                if j >= chars.len() {
+                    break;
+                }
+                i = if chars[j] == '\u{7}' { j + 1 } else { j + 2 };
+            }
+            Some(_) => i += 2,
+        }
+    }
+    out
+}
+
+/// conhost asks the terminal for the cursor position (`ESC [ 6 n`) when a
+/// session starts and waits for the answer; this is the answer, once for each
+/// time it asked. Nothing on Unix asks.
+#[cfg(windows)]
+fn answer_cursor_queries(raw: &[u8], answered: &mut usize, writer: &mut dyn Write) {
+    let asked = raw.windows(4).filter(|w| *w == b"\x1b[6n").count();
+    while *answered < asked {
+        writer
+            .write_all(b"\x1b[1;1R")
+            .expect("answer the cursor query");
+        writer.flush().expect("flush the pty");
+        *answered += 1;
     }
 }
 
@@ -98,7 +180,13 @@ fn run_in_pty(args: &[&str], script: &[Step]) -> PtyRun {
         }
     });
 
-    let text = || String::from_utf8_lossy(&captured.lock().unwrap()).into_owned();
+    let text = || plain(&captured.lock().unwrap());
+    #[cfg(windows)]
+    let mut answered = 0;
+    #[cfg(windows)]
+    let mut answer = |writer: &mut Box<dyn Write + Send>| {
+        answer_cursor_queries(&captured.lock().unwrap(), &mut answered, writer)
+    };
     let mut cursor = 0;
     for step in script {
         match *step {
@@ -119,6 +207,8 @@ fn run_in_pty(args: &[&str], script: &[Step]) -> PtyRun {
                     .expect("resize the pty");
             }
             Step::Expect(wanted) => loop {
+                #[cfg(windows)]
+                answer(&mut writer);
                 let seen = text();
                 if let Some(at) = seen[cursor..].find(wanted) {
                     cursor += at + wanted.len();
@@ -134,6 +224,8 @@ fn run_in_pty(args: &[&str], script: &[Step]) -> PtyRun {
     }
 
     let status = loop {
+        #[cfg(windows)]
+        answer(&mut writer);
         match guard.0.try_wait().expect("poll the child") {
             Some(status) => break status,
             None => {
@@ -148,8 +240,19 @@ fn run_in_pty(args: &[&str], script: &[Step]) -> PtyRun {
     };
     // Whatever it printed last is still in the pipe: let the reader reach the end
     let drained = Instant::now() + Duration::from_secs(2);
+    // ConPTY keeps the pipe open until the terminal is closed, so on Windows
+    // the end of the output is a quiet spell, not an end of file
+    let mut length = captured.lock().unwrap().len();
+    let mut quiet_since = Instant::now();
     while !reading.is_finished() && Instant::now() < drained {
         std::thread::sleep(Duration::from_millis(5));
+        let now = captured.lock().unwrap().len();
+        if now != length {
+            length = now;
+            quiet_since = Instant::now();
+        } else if cfg!(windows) && quiet_since.elapsed() > Duration::from_millis(400) {
+            break;
+        }
     }
     PtyRun {
         output: text(),
@@ -164,6 +267,8 @@ fn harness_runs_a_script() {
     assert!(run.output.contains("proc"), "{}", run.output);
 }
 
+// Exact escape sequences: ConPTY rewrites them, so Unix only
+#[cfg(unix)]
 #[test]
 fn the_comma_notice_is_coloured_on_a_terminal() {
     // PIDs above every OS maximum: a dry run that finds nothing, exit 2
@@ -184,6 +289,7 @@ static BUSY: Mutex<()> = Mutex::new(());
 
 /// A shell loop that uses a whole core and ends itself after two minutes, so a
 /// test binary killed without running `Drop` cannot leave it spinning for long
+#[cfg(unix)]
 const SPIN: &str = "end=$(( $(date +%s) + 120 )); n=0; \
     while :; do n=$((n+1)); \
     if [ $((n % 50000)) -eq 0 ] && [ \"$(date +%s)\" -ge \"$end\" ]; then exit 0; fi; done";
@@ -194,15 +300,16 @@ struct Owned {
     port: Option<u16>,
     _tmp: tempfile::TempDir,
     dir: PathBuf,
-    /// Set for a busy shell; released after `Drop` has killed it
+    /// Set for a busy process; released after `Drop` has killed it
     _busy: Option<MutexGuard<'static, ()>>,
 }
 
 fn fresh_dir() -> (tempfile::TempDir, PathBuf) {
     let tmp = tempfile::tempdir().unwrap();
     // A process reports its cwd with symlinks resolved (/var is /private/var
-    // on macOS), and `--in` compares paths literally
+    // on macOS) and no Windows `\\?\` prefix, and `--in` compares paths literally
     let dir = tmp.path().canonicalize().unwrap();
+    let dir = PathBuf::from(strip_verbatim_prefix(&dir.to_string_lossy()));
     (tmp, dir)
 }
 
@@ -237,18 +344,31 @@ impl Owned {
         }
     }
 
-    /// A shell spinning in a busy loop in a fresh directory: stuck by proc's
-    /// measure (over half a core in two readings a second apart). Only one
-    /// spins at a time, and it ends itself after two minutes.
+    /// A process spinning in a busy loop in a fresh directory: stuck by proc's
+    /// measure (over half a core in two readings a second apart). A shell on
+    /// Unix, the listener example on Windows. Only one spins at a time, and it
+    /// ends itself after two minutes.
     fn busy() -> Self {
         let guard = BUSY.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let (tmp, dir) = fresh_dir();
-        let child = Command::new("sh")
-            .args(["-c", SPIN])
+        #[cfg(unix)]
+        let mut command = {
+            let mut command = Command::new("sh");
+            command.args(["-c", SPIN]);
+            command
+        };
+        #[cfg(windows)]
+        let mut command = {
+            let mut command = Command::new(listener_path());
+            command.arg("--busy");
+            command
+        };
+        let child = command
             .current_dir(&dir)
             .stdin(Stdio::null())
+            .stdout(Stdio::null())
             .spawn()
-            .expect("spawn a busy shell");
+            .expect("spawn a busy process");
         let busy = Owned {
             child,
             port: None,
@@ -300,6 +420,7 @@ impl Owned {
         self.port.expect("a listener").to_string()
     }
 
+    #[cfg(unix)]
     fn signal(&self, sig: i32) {
         // SAFETY: signalling a child this test started and has not reaped
         unsafe {
@@ -325,6 +446,7 @@ impl Owned {
     }
 
     /// The process state letters from `ps` ("T" while stopped), empty if gone
+    #[cfg(unix)]
     fn state(&self) -> String {
         let out = Command::new("ps")
             .args(["-o", "stat=", "-p", &self.pid()])
@@ -333,6 +455,7 @@ impl Owned {
         String::from_utf8_lossy(&out.stdout).trim().to_string()
     }
 
+    #[cfg(unix)]
     fn wait_state(&self, stopped: bool, limit: Duration) -> bool {
         let deadline = Instant::now() + limit;
         while Instant::now() < deadline {
@@ -353,7 +476,9 @@ impl Drop for Owned {
 }
 
 /// A process whose parent has already exited: a shell starts `sleep` in the
-/// background and ends, so the init process (PID 1) adopts the sleeper
+/// background and ends, so the init process (PID 1) adopts the sleeper. Unix
+/// only: on Windows nothing adopts an orphan, and proc has none to find.
+#[cfg(unix)]
 struct Orphan {
     pid: i32,
     /// Set once the sleeper has been seen gone, so `drop` never signals the PID
@@ -363,6 +488,7 @@ struct Orphan {
     dir: PathBuf,
 }
 
+#[cfg(unix)]
 impl Orphan {
     fn start() -> Self {
         let (tmp, dir) = fresh_dir();
@@ -432,6 +558,7 @@ impl Orphan {
     }
 }
 
+#[cfg(unix)]
 impl Drop for Orphan {
     fn drop(&mut self) {
         if self.gone.get() {
@@ -452,7 +579,7 @@ fn listener_path() -> PathBuf {
     path.pop();
     path.pop();
     path.push("examples");
-    path.push("listener");
+    path.push(format!("listener{}", std::env::consts::EXE_SUFFIX));
     assert!(path.exists(), "build the example first: {}", path.display());
     path
 }
@@ -514,7 +641,9 @@ fn kill_asks_first() {
 #[test]
 fn stop_asks_first() {
     let mut p = Owned::listener();
-    let args = ["stop", &p.pid()];
+    // Windows cannot ask a console program to close, so stop waits out the
+    // timeout before it kills
+    let args = ["stop", &p.pid(), "--timeout", "1"];
     let run = answers_n(&args, "Stop 1 process", "Cancelled");
     assert_ok(&run);
     assert!(p.alive());
@@ -550,6 +679,7 @@ fn free_asks_first() {
     assert!(p.ended_within(WAIT), "answering y freed it: {}", run.output);
 }
 
+#[cfg(unix)]
 #[test]
 fn freeze_asks_first() {
     let p = Owned::listener();
@@ -572,6 +702,7 @@ fn freeze_asks_first() {
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn thaw_asks_first() {
     let p = Owned::listener();
@@ -655,6 +786,7 @@ fn stuck_kill_asks_first() {
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn orphans_kill_asks_first() {
     let o = Orphan::start();
@@ -684,6 +816,7 @@ fn watch_quits_on(keys: &'static str) {
         &[Step::Expect("Watching"), Step::Send(keys)],
     );
     assert_ok(&run);
+    #[cfg(unix)]
     assert!(
         run.output.ends_with(LEAVE_ALT_SCREEN),
         "the screen is left last: {:?}",
@@ -696,11 +829,15 @@ fn watch_quits_on_q() {
     watch_quits_on("q");
 }
 
+// A lone Escape byte is a key only after a timeout in ConPTY, and Ctrl+C is a
+// signal there unless the program has turned that off: Unix only
+#[cfg(unix)]
 #[test]
 fn watch_quits_on_escape() {
     watch_quits_on("\x1b");
 }
 
+#[cfg(unix)]
 #[test]
 fn watch_quits_on_ctrl_c() {
     // A byte typed into raw mode, not a signal
@@ -723,6 +860,9 @@ fn watch_shows_the_pid() {
     assert!(run.output.contains(&pid), "{}", run.output);
 }
 
+// ConPTY leaves a line that did not change out of a redraw, so a repeated
+// frame is not there to wait for: Unix only
+#[cfg(unix)]
 #[test]
 fn watch_redraws_every_interval() {
     let p = Owned::listener();
@@ -744,6 +884,7 @@ fn watch_redraws_every_interval() {
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn watch_keeps_running_when_another_key_is_pressed() {
     let p = Owned::listener();
@@ -762,6 +903,21 @@ fn watch_keeps_running_when_another_key_is_pressed() {
     assert_ok(&run);
 }
 
+/// The same on Windows, where a second frame is not waited for: a key that is
+/// not a quit key is read first, then `q` ends the session
+#[cfg(windows)]
+#[test]
+fn watch_ignores_other_keys_and_quits_on_q() {
+    let p = Owned::listener();
+    let pid = p.pid();
+    let run = run_in_pty(
+        &["watch", &pid, "--interval", "0.2"],
+        &[Step::Expect("Watching"), Step::Send("x"), Step::Send("q")],
+    );
+    assert_ok(&run);
+}
+
+#[cfg(unix)]
 #[test]
 fn watch_draws_the_new_size_after_a_resize() {
     let p = Owned::listener();
@@ -825,10 +981,14 @@ fn watch_verbose_lists_the_details() {
         ],
     );
     assert_ok(&run);
+    // Windows may report the directory in its 8.3 short form
+    #[cfg(unix)]
     assert!(
         run.output.contains(&format!("cwd: {dir}")),
         "{}",
         run.output
     );
+    #[cfg(windows)]
+    let _ = dir;
     assert!(run.output.contains("cmd: "), "{}", run.output);
 }
