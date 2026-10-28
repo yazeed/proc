@@ -15,7 +15,7 @@ description: >-
 
 proc targets processes by port, PID, name, file or directory. It can kill, stop and freeze processes, so the risk is acting on one that is not yours. Read the safety model before any command that changes a process.
 
-Run `proc --version`. This skill is for proc 2.0 or later. If a command here exits 4 with "unexpected argument", the installed proc is older: read "Older versions" in [reference.md](reference.md), or ask the user to upgrade. If proc is missing, ask the user before installing: `brew install yazeed/proc/proc`, `cargo install proc-cli`, `npm install -g proc-cli`, or `scoop bucket add proc https://github.com/yazeed/scoop-bucket-proc && scoop install proc`.
+Run `proc --version`. This skill is for proc 2.0 or later. If it prints a version below 2.0, or a command here exits 4 with "unexpected argument", stop: run read-only commands only, tell the user, and ask them to upgrade. Before 2.0, `--json` alone acts without `--yes`, names match any part of a command line, and several targets need commas, so never run a changing command with `--json` unless it also has `--dry-run`. If proc is missing, ask the user before installing: `brew install yazeed/proc/proc`, `cargo install proc-cli`, `npm install -g proc-cli`, or `scoop bucket add proc https://github.com/yazeed/scoop-bucket-proc && scoop install proc`.
 
 ## Safety model
 
@@ -34,7 +34,7 @@ Rules, in priority order:
 4. **Ask with specifics.** Show the user each process's PID, name, cwd, command, parent and uptime, say what the command will do to it, and wait for a yes. A PID or port the user named is approval only for that target, and only if the preview shows what they described. With nobody to ask, report instead of acting.
 5. **`--yes` is the user's consent to one specific list. It is never a retry flag.** Pass it only on PID or port targets that are yours or were approved from a preview. Never pass it with a name.
 6. **Exit 4 with `needs_confirmation: true` means nothing changed.** `processes` is what the command would have touched. Show it to the user. Do not re-run with `--yes` until rule 4 is met, and then re-run by the PIDs you showed, not by the original name.
-7. **Act by PID and verify.** Add `--in=<dir> --by <name>` as a guard: if the PID was recycled or moved, the command finds nothing and exits 2. Afterwards confirm every PID is gone.
+7. **Act by PID, always guarded, and verify.** Every `stop` or `kill` by PID carries `--by <name>` and `--in=<cwd>` copied from the preview, so a recycled PID matches nothing and exits 2. Use one command per name when PIDs differ. If the preview cwd is `/` or missing (daemons), `--in` never matches: keep `--by` and drop `--in`. Afterwards check each PID with its own `proc info <pid> --json` (exit 2 means gone; a call with several PIDs exits 2 only when all are gone).
 
 Never do these: `--yes` with a name; `orphans --kill` or `stuck --kill`; `kill` before `stop` has been tried; `sudo` without asking; targeting an ancestor of your own process (check `proc tree $$ --ancestors --json`); treating `--in .` as proof of ownership. proc skips itself and its ancestor shells only for name targets. A PID or port target is never protected.
 
@@ -45,7 +45,7 @@ Never do these: `--yes` with a name; `orphans --kill` or `stuck --kill`; `kill` 
 | `:3000` | every process listening on port 3000 (all holders) | Preferred. Port numbers always start with `:`. |
 | `1234` | PID 1234 | Preferred. |
 | `node` | processes whose whole name is `node` (case-insensitive), or whose executable or argv[0] file name is | Search only, with `--dry-run` and `--in=<dir>`. |
-| `node --cmd` | a substring of the name or full command line, like `pkill -f` | Only after a dry run of the exact-name search found nothing or too little. Matches far more. |
+| `node --cmd` | a substring of the name or full command line, like `pkill -f` | Only after the exact-name search found nothing or too little. Preview it read-only (`proc by <name> --cmd --json`, or `--dry-run` on the action). Never with `--yes`. Matches far more. |
 
 Give several targets as separate arguments: `proc stop <pid> <pid> :<port> --dry-run --json`. Commas still work but are deprecated. A path is not a name: `proc kill ./server` finds nothing.
 
@@ -76,12 +76,12 @@ proc on :<port> --json                # who holds it: read processes[]
 proc free :<port> --dry-run --json    # the list free would stop
 ```
 
-If every holder is a process you started, run `proc free :<port> --yes --json`. Otherwise show the holders to the user and ask. Or start your server on another port. Afterwards `proc on :<port> --json` exits 2 when the port is free. `free` stops every holder of the port (IPv4 and IPv6 sockets, workers that share it) with SIGTERM, then SIGKILL after 5 seconds. If it returns `freed: false`, run `proc on :<port> --json` again and report who still holds it. Do not escalate with `kill -9` or `sudo`.
+If every holder is a process you started, run `proc free :<port> --yes --json`. Otherwise show the holders to the user and ask. Or start your server on another port. Afterwards `proc on :<port> --json` exits 2 when the port is free. `free` stops every holder of the port (IPv4 and IPv6 sockets, workers that share it) with SIGTERM, then SIGKILL after 5 seconds. If it returns `freed: false`, run `proc on :<port> --json` again and list every entry of `processes` (a port can have several holders: IPv4 and IPv6 sockets, workers, a supervisor that restarts it). Show each one to the user and ask before stopping any. Do not assume one holder, and do not escalate with `kill -9` or `sudo`. If the holder is a service the user wants to keep (nginx, a database), `free` ends it: offer another port first. `proc stop <pid> --signal HUP` only reloads config and does not free the port.
 
 ### Stop a server or job you started
 
 ```bash
-proc stop <pid> --in=<dir> --by <name> --yes --json
+proc stop <pid> --in=<cwd> --by <name> --yes --json
 proc info <pid> --json                # exit 2 means gone
 ```
 
@@ -91,10 +91,10 @@ proc info <pid> --json                # exit 2 means gone
 
 ```bash
 proc kill <name> --in=<dir> --dry-run --json     # a search, not an action
-proc stop <pid> <pid> --yes --json               # only after the user approves these PIDs
+proc stop <pid> --in=<cwd> --by <name> --yes --json   # per approved PID, values from the preview
 ```
 
-Run the first line with `stop` or `kill`, whichever the user asked for. Show the preview (rule 4). If the user approves, act by the PIDs you showed. If the preview is empty with exit 2 and the error says "N processes have '<name>' in their command line", show that hint to the user. Run `--cmd` only after a dry run of it.
+Run the first line with `stop` or `kill`, whichever the user asked for. Show the preview (rule 4). If the user approves, act by the PIDs you showed. If the preview is empty with exit 2 and the error says "N processes have '<name>' in their command line", show that hint to the user. To see `--cmd` matches, run `proc by <name> --cmd --json` (read-only) or add `--dry-run` to the action. Never combine `--cmd` with `--yes`.
 
 ### Clean up before you finish
 
