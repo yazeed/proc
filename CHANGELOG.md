@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The README leads the way the website does**: one install line and the demo first, then what a command replaces, then the safety rules (it asks first, `--json` is not a yes, a name is the whole name), and the commands grouped by what they do. Six claims that were false or outdated for 2.0.1 are fixed: filters like `--min-cpu` do not combine with `kill` and the other changing commands, `ports --sort` takes port, pid or name, `list` and `watch` have no `not_found`, `free` stops with SIGTERM before SIGKILL, `wait` notices an exit within a quarter second, and the community `proc-bin` AUR package can lag behind releases
+
 ## [2.0.1] - 2026-10-28
 
 ### Added

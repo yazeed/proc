@@ -1,69 +1,92 @@
 # proc
 
+Semantic CLI tool for process management. Target by port, PID, name or path.
+
+Find what's on a port, why it's there, and stop it, in one command you'd guess on the first try. On macOS, Linux and Windows.
+
+```bash
+brew install yazeed/proc/proc
+```
+
+Also on [npm, cargo, Scoop, Nix and Docker](#install).
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/yazeed/proc-cli/main/demo.gif" alt="proc demo: npm run dev fails because port 3000 is taken; proc on, why and free find the old tmux session holding it and free the port; proc orphans finds and cleans up leftover processes" width="800" />
 </p>
 
+A dev server won't start because port 3000 is taken. proc finds the old tmux session holding it, frees the port, then cleans up what else was left running.
+
 [![CI](https://github.com/yazeed/proc-cli/workflows/CI/badge.svg)](https://github.com/yazeed/proc-cli/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Crates.io](https://img.shields.io/crates/v/proc-cli.svg)](https://crates.io/crates/proc-cli)
-[![Docker](https://img.shields.io/docker/v/yazeed/proc-cli?label=docker)](https://hub.docker.com/r/yazeed/proc-cli)
 [![npm](https://img.shields.io/npm/v/proc-cli)](https://www.npmjs.com/package/proc-cli)
-[![Changelog](https://img.shields.io/crates/v/proc-cli?label=changelog&color=blue)](CHANGELOG.md)
-[![Downloads](https://img.shields.io/crates/d/proc-cli.svg)](https://crates.io/crates/proc-cli)
+[![Docker](https://img.shields.io/docker/v/yazeed/proc-cli?label=docker)](https://hub.docker.com/r/yazeed/proc-cli)
 [![Open Collective](https://img.shields.io/opencollective/all/proc-cli?label=backers)](https://opencollective.com/proc-cli)
-[![SafeSkill](https://safeskill.dev/api/badge/proc-cli)](https://safeskill.dev/scan/proc-cli)
-[![Socket](https://badge.socket.dev/npm/package/proc-cli)](https://socket.dev/npm/package/proc-cli)
 [![Website](https://img.shields.io/website?url=https%3A%2F%2Fproc-cli.com%2F&label=website)](https://proc-cli.com/)
 
-Semantic CLI tool for process management. Target by port, PID, name or path.
+**Docs:** [commands](https://proc-cli.com/commands) · [install](https://proc-cli.com/install) · [FAQ](https://proc-cli.com/faq) · [agent skill](https://proc-cli.com/skill) · [changelog](CHANGELOG.md)
 
-```bash
-proc on :3000                   # what's on port 3000?
-proc for ./server               # what's running this program?
-proc by node --in . --min-cpu 5 # node in cwd using >5% CPU
-proc kill :3000 :8080 node      # kill mixed targets at once
-proc info :3000 1234            # info for port + PID
-```
-
-### Why proc?
+## One command instead of a pipeline
 
 | Task | proc | Without proc |
 |------|------|-------------|
 | What's on port 3000? | `proc on :3000` | `lsof -i :3000 -P -n` |
+| Why is it there? | `proc why :3000` | `lsof -i :3000` + `ps -o ppid=` chain |
 | Kill it | `proc kill :3000` | `lsof -i :3000 -t \| xargs kill -9` |
-| Free port 3000 | `proc free :3000` | `lsof -i :3000 -t \| xargs kill && sleep 1 && lsof -i :3000` |
-| Why is port busy? | `proc why :3000` | `lsof -i :3000` + `ps -o ppid=` chain |
-| Pause a process | `proc freeze node` | `kill -STOP $(pgrep node)` |
-| Find orphans (macOS, Linux) | `proc orphans --in .` | No standard tool |
-| Wait for process | `proc wait node` | `while ps aux \| grep node \| grep -v grep; do sleep 5; done` |
-| Ports used by node | `proc on node` | `lsof -i -P -n \| grep node` |
-| Node processes in cwd | `proc by node --in .` | `ps aux \| grep node` + manual check |
-| Kill mixed targets | `proc kill :3000 :8080 node` | Three separate commands |
-| Watch in real-time | `proc watch node` | `watch -n2 'ps aux \| grep node'` |
+| Free the port and check | `proc free :3000` | `lsof -i :3000 -t \| xargs kill && sleep 1 && lsof -i :3000` |
+| What ports is node using? | `proc on node` | `lsof -i -P -n \| grep node` |
 | What runs this program? | `proc for ./server` | `lsof ./server` or `fuser ./server` |
+| Node processes in this project | `proc by node --in .` | `ps aux \| grep node` + manual check |
+| Pause a process | `proc freeze node` | `kill -STOP $(pgrep node)` |
+| Wait for it to exit | `proc wait node` | `while ps aux \| grep node \| grep -v grep; do sleep 5; done` |
+| Watch in real time | `proc watch node` | `watch -n2 'ps aux \| grep node'` |
+| Find leftovers (macOS, Linux) | `proc orphans --in .` | No standard tool |
 
-One syntax. One tool. [Full comparison &rarr;](https://proc-cli.com/posts/proc-vs-lsof-fuser-killport-fkill/)
+[Full comparison &rarr;](https://proc-cli.com/posts/proc-vs-lsof-fuser-killport-fkill/)
+
+## It asks before it changes anything
+
+- **Looking is free.** `on`, `for`, `by`, `in`, `list`, `info`, `ports`, `tree`, `why`, `stuck` and `orphans` only read.
+- **Changing asks first.** `kill`, `stop`, `freeze`, `thaw`, `free`, `unstick`, `orphans --kill` and `stuck --kill` show what they will touch and wait for a yes. `--dry-run` shows the list and does nothing else; `--yes` skips the question.
+- **`--json` is not a yes.** A script or agent that runs a changing command with `--json` and no `--yes` gets exit 4, nothing changed, and the list of processes it would have touched. The same goes for running without a terminal.
+- **A name means the whole name.** `proc kill node` stops processes named `node` and leaves `Claude Helper` alone. Add `--cmd` for the looser, `pkill -f` style match.
+- **A name is a search, not an approval.** Preview a name with `--dry-run`, and use `--yes` only with a `:port` or a PID you have seen.
+
+```bash
+proc kill node --in . --dry-run   # what would stop, in this project only
+proc kill :3000                   # asks first
+proc free :3000 --yes             # a port target: no question
+```
 
 ## Install
 
 | Platform | Command |
 |----------|---------|
-| macOS | `brew install yazeed/proc/proc` |
+| macOS | `brew install yazeed/proc/proc`, or the install script below |
+| Linux | `curl -fsSL https://raw.githubusercontent.com/yazeed/proc-cli/main/install.sh \| bash`, or `brew install yazeed/proc/proc` |
 | Windows | `scoop bucket add proc https://github.com/yazeed/scoop-bucket-proc && scoop install proc` |
-| Rust | `cargo install proc-cli` |
-| npm/bun | `npm install -g proc-cli` |
+| npm / bun | `npm install -g proc-cli` |
+| Rust | `cargo install proc-cli` (or `cargo binstall proc-cli` for the pre-built binary) |
 | Nix | `nix profile install github:yazeed/proc-cli` |
 | Docker | `docker run --rm -it --pid=host --net=host yazeed/proc-cli` |
-| Shell | `curl -fsSL https://raw.githubusercontent.com/yazeed/proc-cli/main/install.sh \| bash` |
+
+`--pid=host` lets proc in Docker see the host's processes, and `--net=host` its ports (for `on :port`, `ports` and `free`).
+
+Check it works:
+
+```bash
+proc --version
+proc ports
+```
 
 <details>
-<summary>More options</summary>
+<summary>More options: Arch Linux, manual download</summary>
 
 | Platform | Method | Command |
 |----------|--------|---------|
-| macOS/Linux | cargo-binstall | `cargo binstall proc-cli` |
 | Arch Linux | AUR (community-maintained) | `yay -S proc-bin` |
+
+The AUR package is not published by this project and can lag behind releases. Check `proc --version` after installing: before 2.0, a name matched any part of a command line and `--json` counted as `--yes`.
 
 **Manual download:**
 
@@ -84,7 +107,7 @@ sudo mv proc-linux-x86_64 /usr/local/bin/proc
 curl -fsSL https://github.com/yazeed/proc-cli/releases/latest/download/proc-linux-aarch64.tar.gz | tar xz
 sudo mv proc-linux-aarch64 /usr/local/bin/proc
 
-# Windows (PowerShell)
+# Windows (PowerShell, run as administrator to write to System32)
 Invoke-WebRequest -Uri https://github.com/yazeed/proc-cli/releases/latest/download/proc-windows-x86_64.exe.zip -OutFile proc.zip
 Expand-Archive proc.zip -DestinationPath .
 Move-Item proc-windows-x86_64.exe C:\Windows\System32\proc.exe
@@ -92,9 +115,144 @@ Move-Item proc-windows-x86_64.exe C:\Windows\System32\proc.exe
 
 </details>
 
-### Agent Skill
+## Nineteen commands, three jobs
 
-Teach your coding agent (Claude Code, Codex, Cursor, Gemini CLI and others) to use proc with structured JSON output:
+Every command takes the same targets, and almost all take `--in` to stay inside one project, `--json` for scripts, and `--dry-run` before anything changes (the changing ones).
+
+### Find out
+
+Read-only. Nothing is touched.
+
+| Command | Alias | What it does |
+|---------|-------|--------------|
+| `on <target>` | `:` | What's on a port, or which ports a process uses |
+| `why <target>` | | Trace what started a process (why is this port busy?) |
+| `for <file>` | `f` | Processes running a program or holding a file open |
+| `by <name>` | `b` | Processes with this name |
+| `in <path>` | | Processes whose working directory is this path |
+| `list` | `l`, `ps` | All processes |
+| `info <target>` | `i`, `inspect` | Everything about one process |
+| `ports` | `p` | All listening TCP ports |
+| `tree` | `t` | Parents and children |
+| `stuck` | `x` | Hung processes: busy or blocked for 2 seconds, running longer than `--timeout` (default 300) |
+| `orphans` | `o` | Processes whose parent has exited (Unix only: exits 4 on Windows) |
+
+### Change it
+
+Asks first, or previews with `--dry-run`.
+
+| Command | Alias | What it does |
+|---------|-------|--------------|
+| `stop <target>` | `s` | Ask it to exit (SIGTERM, or `--signal`), force-kill after `--timeout` (default 10) |
+| `kill <target>` | `k` | End it now (SIGKILL; `--graceful` sends SIGTERM) |
+| `free <:port>` | | Stop what holds the port (SIGTERM, SIGKILL after up to 5 seconds) and check the port is free |
+| `freeze <target>` | | Pause it (SIGSTOP; Unix only: exits 4 on Windows) |
+| `thaw <target>` | | Resume it (SIGCONT; Unix only: exits 4 on Windows) |
+| `unstick` | `u` | Try to recover stuck processes; `--force` ends them if recovery fails |
+
+### Keep watching
+
+| Command | Alias | What it does |
+|---------|-------|--------------|
+| `watch` | `w`, `top` | Live process table (`--json` streams one document per refresh) |
+| `wait <target>` | | Block until the process(es) exit |
+
+```bash
+proc on :3000                   # what's on port 3000?
+proc by node --in . --min-cpu 5 # node in this directory using >5% CPU
+proc info :3000 1234            # info for a port and a PID
+proc tree --min-cpu 5           # process tree, busy processes only
+proc watch node -n 1            # node processes, refreshed every second
+proc wait :3000 --timeout 60    # wait up to 60s for the process on port 3000 to exit
+proc stop worker --signal INT   # ask with SIGINT; force-killed after --timeout
+proc orphans --in .             # leftovers from this project
+```
+
+## Targets
+
+All commands accept the same targets:
+
+| Target | Example | Matches |
+|--------|---------|---------|
+| Port | `:3000` | Every process listening on port 3000 |
+| PID | `1234` | The process with ID 1234 |
+| Name | `node` | Processes named "node" (the whole name, ignoring case) |
+| Several | `:3000 :8080 node` | Separate arguments, any mix of the three |
+
+A process named twice is handled once, except by the read-only `on` and `why`, which answer each target under its own header. Comma-separated targets (`:3000,:8080,node`) still work but are deprecated and will be removed in a future major release: a command that gets one prints a `note:` on stderr with the separate-argument form (human output only; `--json` is unchanged).
+
+**Names.** A name matches the whole process name, ignoring case, the way `killall` and `pkill -x` read it. `proc kill node` stops the processes named `node` and leaves `Claude Helper` alone, and `--by` follows the same rule. The file name of the executable and of the first argument count as names too, so a long name that Linux cuts to 15 characters still matches, and on Windows a trailing `.exe` is optional. Add `--cmd` to match any part of the name or the full command line instead, like `pkill -f`: `proc kill serve --cmd`. A path is not a name: `proc kill ./server` finds nothing, so use `--cmd`, or `proc for <file>` for an executable. proc doesn't expand wildcards; an unquoted `node*` is expanded by your shell into file names, so use `--cmd` for partial matches.
+
+**`--in`.** `--in` (short `-i`) takes the next word as its directory unless that word starts with `-`; a bare `--in` is the current directory. Put it after the targets (`proc kill 1234 5678 --in .`) or write `--in=DIR`.
+
+## Filters
+
+Not every filter is on every command. `--in`, `--by` (short `-b`) and `--cmd` work on nearly all of them, including the ones that change processes. The rest narrow what the finding commands show:
+
+| Filter | Description | On |
+|--------|-------------|----|
+| `--in [<path>]`, `-i` | Working directory (bare `--in` is the current directory) | nearly every command |
+| `--by <name>`, `-b` | Process name (the whole name, like a name target) | nearly every command |
+| `--cmd` | Match names and `--by` as a substring of the name or full command line (like `pkill -f`) | every command that takes a name or `--by` |
+| `--path <path>`, `-p` | Executable path | `list` |
+| `--min-cpu <n>` | Processes using >n% CPU | `by`, `in`, `for`, `list`, `tree`, `watch` |
+| `--min-mem <n>` | Processes using >n MB memory | `by`, `in`, `for`, `list`, `tree`, `watch` |
+| `--min-uptime <s>` | Processes running longer than s seconds | `by`, `in`, `for`, `list`, `tree` |
+| `--status <s>` | running, sleeping, stopped, zombie | `by`, `in`, `for`, `list`, `tree` |
+| `--parent <pid>` | Children of a specific parent PID | `by`, `in`, `list` |
+| `--exposed`, `-e` / `--local`, `-l` | Only network-exposed / localhost ports | `ports` |
+| `--range <s-e>`, `-r` | Ports in a range (e.g. `3000-9000`) | `ports` |
+| `--sort`, `-s <key>` | `list`, `by`, `in`, `for`, `watch`: cpu, mem (biggest first); pid, name (ascending). `ports`: port, pid, name (ascending). Ties come by PID | see left |
+| `--limit`, `-n <n>` | Limit the number of results (`-l` on `watch`, where `-n` is `--interval`) | `list`, `by`, `in`, `for`, `ports`, `watch` |
+| `--ancestors`, `-a` | Show the ancestry path up to the root | `tree` |
+| `--depth`, `-d <n>` | Maximum tree depth (default 10) | `tree` |
+| `--compact`, `-C` | PIDs only | `tree` |
+| `--timeout`, `-t <s>` | Only processes running longer than this (default 300) | `stuck`, `unstick` |
+
+## Options
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--json` | `-j` | JSON output |
+| `--verbose` | `-v` | Show paths, cwd, full commands |
+| `--wide` | `-w` | Full directories and arguments instead of fitting the terminal (`list`, `by`, `in`, `for`, `stuck`, `orphans`, `watch`) |
+| `--yes` | `-y` | Skip confirmation; required with `--json` or without a terminal, where nobody can be asked |
+| `--dry-run` | | Preview without executing |
+| `--force` | `-f` | Force termination if recovery fails (`unstick`) |
+| `--graceful` | `-g` | Send SIGTERM instead of SIGKILL (`kill`) |
+| `--signal` | `-S` | First signal: HUP, INT, USR1, etc. (`stop`) |
+| `--kill` | `-k` | Kill the processes found (`stuck`, `orphans`) |
+| `--wait` | | Max seconds to wait for the port to free (`free`, default 10) |
+| `--interval` | `-n` | Seconds between status lines (`wait`, default 5) or refreshes (`watch`, default 2) |
+| `--timeout` | `-t` | Max seconds before giving up (`wait`, default 0 = no limit; `stop`, default 10 before force-kill) |
+| `--quiet` | `-q` | Suppress the periodic still-running lines (`wait`) |
+
+## For scripts and coding agents
+
+Every process and port command prints JSON with `--json`: one document per command, with `action` (the command name) and `success`. `proc watch --json` streams one per refresh. Exit codes always mean the same thing.
+
+```bash
+proc on :8080 --json | jq '.process | {pid, cwd, uptime_secs}'
+```
+
+- **Errors are JSON too**, including invalid flags: `{"action", "success": false, "error", "exit_code"}`. `"success": false` always comes with a non-zero exit code.
+- **Exit 4 means nothing was done**, and the error adds `"reason"`: `"invalid_input"` (a wrong flag, value or argument), `"needs_confirmation"` or `"not_supported"` (this OS cannot do it).
+- **Preview, then confirm.** A command that changes processes, run with `--json` but without `--yes`, exits 4 with `"needs_confirmation": true` and `"processes"` (the ones it would have changed), so a script can show them before running it again with `--yes`.
+- **`not_found`** lists the targets that matched nothing (empty when all were found). It is in the JSON of `on`, `why`, `info`, `kill`, `stop`, `freeze`, `thaw`, `unstick`, `free` and `wait`, and in the exit 4 output above. `list` and `watch` do not have it.
+
+| Exit code | Meaning |
+|-----------|---------|
+| `0` | Success |
+| `1` | Error, or not fully successful: a process failed, a port stayed busy, `wait` timed out |
+| `2` | Process or port not found |
+| `3` | Permission denied: proc itself got an I/O permission error. A signal the OS refuses (another user's process) is a `failed` entry and exit 1 |
+| `4` | Invalid input (unknown flag, bad argument, invalid signal), an action this OS doesn't support (`freeze`, `thaw`, `orphans` and `stop --signal` on Windows), or a command that changes processes run without `--yes` where nobody can confirm (`--json`, or no terminal): nothing was changed |
+
+Full schemas: [`skills/proc-cli/reference.md`](skills/proc-cli/reference.md).
+
+### Agent skill
+
+Teach your coding agent (Claude Code, Codex, Cursor, Gemini CLI and others) when to reach for proc and how to use it safely, with structured JSON output:
 
 ```bash
 npx skills add yazeed/proc-cli
@@ -109,229 +267,23 @@ In Claude Code you can also install it as a plugin:
 
 The skill lives in [`skills/proc-cli/`](skills/proc-cli/SKILL.md) and follows the [Agent Skills](https://agentskills.io) standard. [What it teaches, how to update it, and prompts to try &rarr;](https://proc-cli.com/skill)
 
-## Quick Start
+[![SafeSkill](https://safeskill.dev/api/badge/proc-cli)](https://safeskill.dev/scan/proc-cli)
+[![Socket](https://badge.socket.dev/npm/package/proc-cli)](https://socket.dev/npm/package/proc-cli)
 
-**What's using port 3000?**
-```bash
-proc on :3000
-```
-
-**Kill it:**
-```bash
-proc kill :3000
-```
-
-**What's running this program?**
-```bash
-proc for ./server
-```
-
-**Find all node processes in current directory using >5% CPU:**
-```bash
-proc by node --in . --min-cpu 5
-```
-
-**Kill multiple targets at once:**
-```bash
-proc kill :3000 :8080 node
-```
-
-**Watch processes in real-time:**
-```bash
-proc watch node --in .
-```
-
-## Target Syntax
-
-All commands accept the same target syntax:
-
-| Target | Example | Description |
-|--------|---------|-------------|
-| Port | `:3000` | Every process listening on port 3000 |
-| PID | `1234` | Process with ID 1234 |
-| Name | `node` | Processes named "node" (the whole name, ignoring case) |
-| Multi | `:3000 :8080 node` | Separate arguments |
-
-Give several targets as separate arguments, and mix the three kinds freely: `proc kill 1234 :3000 node`. A process named twice is handled once, except by the read-only `on` and `why`, which answer each target under its own header. Comma-separated targets (`:3000,:8080,node`) still work but are deprecated, and will be removed in a future major release: a command that gets one prints a `note:` on stderr with the separate-argument form (human output only; `--json` is unchanged).
-
-A name matches the whole process name, ignoring case, the way `killall` and `pkill` read it. `proc kill node` stops the processes named `node` and leaves `Claude Helper` alone, and `--by` follows the same rule. The file name of the executable and of the first argument count as names too, so a long name that Linux cuts to 15 characters still matches, and on Windows a trailing `.exe` is optional. Add `--cmd` to match any part of the name or the full command line instead, like `pkill -f`: `proc kill serve --cmd`. A path is not a name: `proc kill ./server` finds nothing, so use `--cmd`, or `proc for <file>` for an executable. proc doesn't expand wildcards; an unquoted `node*` is expanded by your shell into file names; use `--cmd` for partial matches.
-
-`--in` takes the next word as its directory unless that word starts with `-`, so put it after the targets (`proc kill 1234 5678 --in .`) or write `--in=DIR`.
-
-## Commands
-
-### Discovery
-
-| Command | Alias | Description |
-|---------|-------|-------------|
-| `on <target>` | `:` | Bidirectional port/process lookup |
-| `for <file>` | `f` | Find processes by file path |
-| `by <name>` | `b` | Filter processes by name |
-| `in <path>` | | Filter processes by working directory |
-| `list` | `l`, `ps` | List all processes |
-| `info <target>` | `i`, `inspect` | Detailed process information |
-| `ports` | `p` | List all listening ports |
-| `tree` | `t` | Process hierarchy |
-| `watch` | `w`, `top` | Real-time process monitoring |
-| `why <target>` | | Trace process ancestry (why is this port busy?) |
-| `orphans` | `o` | Find orphaned processes (Unix only: exits 4 on Windows) |
-| `stuck` | `x` | Find hung processes |
-
-### Lifecycle
-
-| Command | Alias | Description |
-|---------|-------|-------------|
-| `kill <target>` | `k` | Force kill (SIGKILL) |
-| `stop <target>` | `s` | Graceful stop (SIGTERM, `--signal` for custom) |
-| `freeze <target>` | | Pause process (SIGSTOP) |
-| `thaw <target>` | | Resume frozen process (SIGCONT) |
-| `free <:port>` | | Kill process and verify port freed |
-| `wait <target>` | | Block until process(es) exit |
-| `unstick` | `u` | Recover stuck processes |
-
-### Filters
-
-Filters can be combined with discovery and lifecycle commands:
-
-| Filter | Description |
-|--------|-------------|
-| `--in <path>` | Filter by working directory |
-| `--by <name>` | Filter by process name (the whole name, like a name target) |
-| `--cmd` | Match names and `--by` as a substring of the process name or full command line (like `pkill -f`) |
-| `--path <path>` | Filter by executable path (`list`) |
-| `--min-cpu <n>` | Processes using >n% CPU |
-| `--min-mem <n>` | Processes using >n MB memory |
-| `--min-uptime <s>` | Processes running longer than s seconds |
-| `--parent <pid>` | Children of a specific parent PID |
-| `--status <s>` | Filter by status: running, sleeping, stopped, zombie |
-| `--exposed` | Only network-exposed ports (`ports`) |
-| `--local` | Only localhost ports (`ports`) |
-| `--range <s-e>` | Filter ports by range (e.g., `3000-9000`) |
-| `--sort/-s <key>` | Sort by: cpu, mem (biggest first); pid, name (ascending). Ties come by PID |
-| `--limit/-n <n>` | Limit number of results (`-l` on `watch`, where `-n` is `--interval`) |
-| `--ancestors/-a` | Show ancestry path to root (`tree`) |
-| `--depth/-d <n>` | Maximum tree depth (default: 10) |
-| `--compact/-C` | Show PIDs only in compact view (`tree`) |
-| `--timeout/-t <s>` | `stuck`, `unstick`: only processes running longer than this (default: 300); stuck means busy or blocked for 2 seconds |
-
-### Options
-
-| Option | Short | Description |
-|--------|-------|-------------|
-| `--json` | `-j` | JSON output |
-| `--verbose` | `-v` | Show paths, cwd, full commands |
-| `--wide` | `-w` | Print full directories and arguments instead of fitting the terminal (`list`, `by`, `in`, `for`, `stuck`, `orphans`, `watch`) |
-| `--yes` | `-y` | Skip confirmation; required with `--json` or without a terminal, where nobody can be asked |
-| `--dry-run` | | Preview without executing |
-| `--force` | `-f` | Force termination if recovery fails (`unstick`) |
-| `--graceful` | `-g` | Send SIGTERM instead of SIGKILL (`kill`) |
-| `--signal` | `-S` | Custom signal: HUP, INT, USR1, etc. (`stop`) |
-| `--kill` | `-k` | Kill found processes (`stuck`, `orphans`) |
-| `--wait` | | Max seconds to wait for port to free (`free`) |
-| `--interval` | `-n` | Seconds between status lines (`wait`) or refreshes (`watch`) |
-| `--timeout` | `-t` | Max seconds to wait before giving up (`wait`, `stop`) |
-| `--quiet` | `-q` | Suppress periodic status messages (`wait`) |
-
-### Scripting
-
-With `--json`, every command prints one JSON document with `action` (the command name) and `success`. `proc watch --json` streams one per refresh. Errors, including invalid flags, are JSON too: `{"action", "success": false, "error", "exit_code"}`. Exit 4 means nothing was done, and its error adds `"reason"`: `"invalid_input"` (a wrong flag, value or argument), `"needs_confirmation"` or `"not_supported"` (this OS cannot do it). A command that changes processes run with `--json` but without `--yes` exits 4 and adds `"needs_confirmation": true` and `"processes"` (the ones it would have changed), so a script can show them before running it again with `--yes`. Every command that takes targets also has a `"not_found"` array in its JSON (the targets that matched nothing, empty when all were found), and it appears in that exit 4 output too.
-
-| Exit code | Meaning |
-|-----------|---------|
-| `0` | Success |
-| `1` | Error, or not fully successful: a process failed, a port stayed busy, `wait` timed out |
-| `2` | Process or port not found |
-| `3` | Permission denied: proc itself got an I/O permission error. A signal the OS refuses (another user's process) is a `failed` entry and exit 1 |
-| `4` | Invalid input (unknown flag, bad argument, invalid signal), an action this OS doesn't support (`freeze`, `thaw`, `orphans` and `stop --signal` on Windows), or a command that changes processes run without `--yes` where nobody can confirm (`--json`, or no terminal): nothing was changed |
-
-`"success": false` always comes with a non-zero exit code. Full schemas: [`skills/proc-cli/reference.md`](skills/proc-cli/reference.md).
-
-## Examples
-
-```bash
-# What's on port 3000?
-proc on :3000
-
-# What ports is node using?
-proc on node
-
-# What's running this program?
-proc for ./server
-
-# What has this file open?
-proc for /var/log/app.log
-
-# Node processes in current directory
-proc by node --in .
-
-# Processes using >10% CPU
-proc list --min-cpu 10
-
-# Kill everything on ports 3000 and 8080
-proc kill :3000 :8080
-
-# Kill only node processes in current directory
-proc kill node --in . --dry-run
-
-# Process tree filtered by CPU usage
-proc tree --min-cpu 5
-
-# Watch all processes sorted by CPU (alias: proc top)
-proc watch
-
-# Watch node processes with 1s refresh
-proc watch node -n 1
-
-# Watch process on port 3000
-proc watch :3000
-
-# Watch processes in cwd sorted by memory
-proc watch --in . --sort mem
-
-# Freeze/thaw (pause and resume)
-proc freeze node               # Pause all node processes
-proc thaw node                 # Resume them
-
-# Free a port (kill + verify available)
-proc free :3000                # Kill and confirm port 3000 is free
-proc free :3000 :8080 --yes    # Free multiple ports
-
-# Why is port 3000 busy?
-proc why :3000                 # Show ancestry chain with port context
-
-# Find orphaned processes
-proc orphans                   # List orphans
-proc orphans --in . --kill     # Kill orphans in current directory
-
-# Wait for processes to exit
-proc wait node                 # Block until all node processes exit
-proc wait :3000 --timeout 60   # Wait up to 60s for port process to exit
-proc wait node -n 10 -q        # Check every 10s, quiet mode
-
-# Send custom signal
-proc stop worker --signal INT  # Ask with SIGINT instead of SIGTERM (force-killed after --timeout)
-
-# Find and recover stuck processes
-proc stuck
-proc unstick --force
-```
-
-## Platform Support
+## Platform support
 
 | Platform | Architecture | Status |
 |----------|--------------|--------|
-| macOS | Apple Silicon (ARM64) | ✅ |
-| macOS | Intel (x86_64) | ✅ |
-| Linux | x86_64 | ✅ |
-| Linux | ARM64 | ✅ |
-| Windows | x86_64 | ✅ |
+| macOS | Apple Silicon (ARM64), Intel (x86_64) | ✅ |
+| Linux | x86_64, ARM64 | ✅ |
+| Windows | x86_64 | ✅ (no `freeze`, `thaw`, `orphans`, `stop --signal`) |
 | Docker | linux/amd64, linux/arm64 | ✅ |
 
 The Linux binaries are statically linked (musl) and need no particular glibc version, so they also run on Alpine and on older releases such as Debian 10, Ubuntu 20.04 and Amazon Linux 2.
 
-## Shell Completions
+proc is for processes and ports on the machine it runs on. It is not for containers, system services or remote hosts (see [PHILOSOPHY.md](PHILOSOPHY.md)).
 
-Generate completions for your shell:
+## Shell completions and man page
 
 ```bash
 # Bash
@@ -342,17 +294,14 @@ proc completions zsh > ~/.zsh/completions/_proc
 
 # Fish
 proc completions fish > ~/.config/fish/completions/proc.fish
-```
 
-## Man Page
+# Elvish and PowerShell: proc completions elvish, proc completions powershell
 
-Generate and install the man page:
-
-```bash
+# Man page
 proc manpage | sudo tee /usr/local/share/man/man1/proc.1 > /dev/null
 ```
 
-## Building from Source
+## Building from source
 
 ```bash
 git clone https://github.com/yazeed/proc-cli
@@ -362,9 +311,13 @@ cargo build --release
 
 The binary will be at `target/release/proc`.
 
+## Use as a library
+
+proc is also a Rust crate, `proc_cli`: see the [API docs on docs.rs](https://docs.rs/proc-cli) and the `Library API` entries in the [changelog](CHANGELOG.md).
+
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md). The principles behind the commands are in [PHILOSOPHY.md](PHILOSOPHY.md).
 
 ## License
 
