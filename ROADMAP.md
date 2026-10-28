@@ -54,8 +54,9 @@ When a guess is wrong, the error should say the right command:
 
 - `proc kil node` is "unrecognized subcommand 'kil'", with no suggestion of `kill`.
 - `proc kill 3000 --dry-run`, with no process 3000 but a listener on port 3000, could ask "did you mean :3000?".
+- Flags people reach for from other tools: an agent tester typed `proc kill --name worker` and got "unexpected argument '--name' found". The error could say "to filter by name, use --by". Likewise `--port` (a target is `:3000`) and `--pid` (a PID is a plain number).
 
-**Feature test:** obvious, explicit (proc says which reading it took). **Open:** how far suggestions go before they become guesses.
+**Feature test:** obvious, explicit (proc says which reading it took), and it keeps one spelling per intent. **Alternative considered:** hidden aliases (`--name` meaning `--by`). They fix the typo silently but give one flag two spellings and teach nothing, which "Easy to remember" argues against. **Open:** how far suggestions go before they become guesses, and which borrowed flags are common enough to name.
 
 ### Hog
 
