@@ -47,8 +47,10 @@ fn a_bad_value_says_invalid_input_whether_clap_or_proc_finds_it() {
     let (json, code) = run_json(&["list", "--sort", "bogus", "--json"]);
     assert_eq!(code, 4, "{json}");
     assert_eq!(json["reason"], "invalid_input", "{json}");
-    // proc rejects it after parsing
-    let (json, code) = run_json(&["stop", MISSING_PID, "--signal", "BOGUS", "--yes", "--json"]);
+    // proc rejects it after parsing (a missing directory: invalid on every OS,
+    // unlike a bad --signal name, which Windows rejects as not supported)
+    let missing = std::env::temp_dir().join("proc-test-no-such-directory");
+    let (json, code) = run_json(&["in", missing.to_str().unwrap(), "--json"]);
     assert_eq!(code, 4, "{json}");
     assert_eq!(json["reason"], "invalid_input", "{json}");
 }
