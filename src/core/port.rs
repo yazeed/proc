@@ -206,27 +206,31 @@ impl PortInfo {
         let mut ports = Vec::new();
         let mut seen = std::collections::HashSet::new();
         for (inode, port, address) in sockets {
-            let Some(&pid) = owners.get(&inode) else {
+            let Some(pids) = owners.get(&inode) else {
                 continue;
             };
-            // Same port on IPv4 and IPv6 is listed once, as on macOS
-            if !seen.insert((port, pid)) {
-                continue;
+            // every process with the socket open holds the port (a master and
+            // its forked workers share one listen socket)
+            for &pid in pids {
+                // Same port on IPv4 and IPv6 is listed once, as on macOS
+                if !seen.insert((port, pid)) {
+                    continue;
+                }
+                // any process can set its own comm (prctl), escape sequences included
+                let process_name = std::fs::read_to_string(procs.join(format!("{pid}/comm")))
+                    .map(|name| {
+                        let name = name.strip_suffix('\n').unwrap_or(&name);
+                        escape_control(name).into_owned()
+                    })
+                    .unwrap_or_else(|_| "unknown".to_string());
+                ports.push(PortInfo {
+                    port,
+                    protocol: Protocol::Tcp,
+                    pid,
+                    process_name,
+                    address: Some(address.clone()),
+                });
             }
-            // any process can set its own comm (prctl), escape sequences included
-            let process_name = std::fs::read_to_string(procs.join(format!("{pid}/comm")))
-                .map(|name| {
-                    let name = name.strip_suffix('\n').unwrap_or(&name);
-                    escape_control(name).into_owned()
-                })
-                .unwrap_or_else(|_| "unknown".to_string());
-            ports.push(PortInfo {
-                port,
-                protocol: Protocol::Tcp,
-                pid,
-                process_name,
-                address: Some(address),
-            });
         }
         Ok(ports)
     }
@@ -269,13 +273,13 @@ impl PortInfo {
         Some((inode, port, address))
     }
 
-    /// Map socket inodes to the PID that has them open, by reading the
+    /// Map socket inodes to the PIDs that have them open, by reading the
     /// "socket:[inode]" links in /proc/<pid>/fd. Unreadable processes are skipped.
     #[cfg(target_os = "linux")]
     fn socket_owners(
         wanted: &std::collections::HashSet<u64>,
         procs: &Path,
-    ) -> std::collections::HashMap<u64, u32> {
+    ) -> std::collections::HashMap<u64, Vec<u32>> {
         let mut owners = std::collections::HashMap::new();
         let Ok(procs) = std::fs::read_dir(procs) else {
             return owners;
@@ -301,11 +305,16 @@ impl PortInfo {
                     .and_then(|t| t.strip_suffix(']'))
                     .and_then(|t| t.parse::<u64>().ok());
                 if let Some(inode) = inode.filter(|i| wanted.contains(i)) {
-                    // the first process seen keeps it; a forked child sharing
-                    // the socket usually comes later in PID order
-                    owners.entry(inode).or_insert(pid);
+                    // a process with the socket open on several fds counts once
+                    let pids = owners.entry(inode).or_insert_with(Vec::new);
+                    if !pids.contains(&pid) {
+                        pids.push(pid);
+                    }
                 }
             }
+        }
+        for pids in owners.values_mut() {
+            pids.sort_unstable();
         }
         owners
     }
@@ -704,6 +713,24 @@ mod tests {
                 (9000, 4243, "unknown", Some("0.0.0.0")),
             ]
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn every_process_with_a_listen_socket_open_holds_the_port() {
+        let fake = FakeProc::new();
+        fake.table("tcp", &[("0100007F:1F90", 100)]);
+        // a master and two forked workers share the socket; the master has it
+        // open twice; another process has nothing to do with it
+        fake.process("4242", Some("nginx\n"), &["socket:[100]", "socket:[100]"]);
+        fake.process("4250", Some("nginx\n"), &["socket:[100]"]);
+        fake.process("4251", Some("nginx\n"), &["socket:[100]"]);
+        fake.process("4300", Some("other\n"), &["socket:[555]"]);
+        let ports = fake.listening().unwrap();
+        let mut pids: Vec<u32> = ports.iter().map(|p| p.pid).collect();
+        pids.sort_unstable();
+        assert_eq!(pids, vec![4242, 4250, 4251]);
+        assert!(ports.iter().all(|p| p.port == 8080));
     }
 
     #[cfg(target_os = "linux")]

@@ -14,6 +14,10 @@
 //!   `[::1]` instead of `127.0.0.1`. Two copies, one of each, hold one port
 //!   number through two different sockets.
 //!
+//! - `--share` (Unix only) forks after binding and prints `CHILD <pid>`. Both
+//!   processes keep the listening socket open, as an nginx master and its
+//!   workers do, so both hold the port.
+//!
 //! Whatever the flags, the process (and a forked copy) exits by itself after
 //! two minutes: long enough for any test, short enough that a test binary
 //! killed with SIGKILL, which runs no cleanup, cannot leave a spinner behind.
@@ -44,6 +48,9 @@ fn main() {
     std::io::stdout().flush().expect("flush stdout");
 
     let deadline = Instant::now() + LIFETIME;
+    if flag("--share") {
+        share_socket();
+    }
     let listener = if flag("--respawn") {
         match respawn_when_free(listener, port, deadline) {
             Some(listener) => listener,
@@ -76,6 +83,23 @@ fn ignore_term() {
 
 #[cfg(not(unix))]
 fn ignore_term() {}
+
+/// Fork; the parent prints the child's pid and both carry on holding the
+/// socket, each until the lifetime cap.
+#[cfg(unix)]
+fn share_socket() {
+    // SAFETY: the process is single-threaded here, so fork is safe, and both
+    // sides only go on to sleep.
+    let pid = unsafe { libc::fork() };
+    assert!(pid >= 0, "fork failed");
+    if pid > 0 {
+        println!("CHILD {pid}");
+        std::io::stdout().flush().expect("flush stdout");
+    }
+}
+
+#[cfg(not(unix))]
+fn share_socket() {}
 
 /// Fork. The parent prints the child's pid and gets its `listener` back. The
 /// child closes its copy and waits for the port to be free, then binds it and

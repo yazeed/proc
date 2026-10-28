@@ -112,11 +112,16 @@ struct Pair {
 }
 
 impl Pair {
-    fn start() -> Self {
+    /// `None`, with the reason printed, when this machine can't bind `[::1]`
+    fn start() -> Option<Self> {
+        if let Err(e) = std::net::TcpListener::bind("[::1]:0") {
+            eprintln!("skipped: no IPv6 loopback on this machine ({e})");
+            return None;
+        }
         let v4 = Holder::start(&[]);
         let v6 = Holder::start(&["--v6", "--port", &v4.port.to_string()]);
         assert_eq!(v4.port, v6.port, "both listeners hold one port number");
-        Pair { v4, v6 }
+        Some(Pair { v4, v6 })
     }
 
     fn target(&self) -> String {
@@ -144,7 +149,9 @@ fn pids_in(value: &Value) -> Vec<u64> {
 
 #[test]
 fn on_lists_every_holder_and_keeps_process_as_the_first() {
-    let pair = Pair::start();
+    let Some(pair) = Pair::start() else {
+        return;
+    };
     let (json, code) = run_json(&["on", &pair.target(), "--json"]);
     assert_eq!(code, 0, "{json}");
     assert_eq!(json["query_type"], "port_to_process", "{json}");
@@ -161,7 +168,9 @@ fn on_lists_every_holder_and_keeps_process_as_the_first() {
 
 #[test]
 fn on_prints_every_holder() {
-    let pair = Pair::start();
+    let Some(pair) = Pair::start() else {
+        return;
+    };
     let (out, code) = run_text(&["on", &pair.target()]);
     assert_eq!(code, 0, "{out}");
     assert!(
@@ -178,7 +187,9 @@ fn on_prints_every_holder() {
 
 #[test]
 fn on_several_targets_json_has_a_result_per_holder() {
-    let pair = Pair::start();
+    let Some(pair) = Pair::start() else {
+        return;
+    };
     let other = Holder::start(&[]);
     let other_target = format!(":{}", other.port);
     let (json, code) = run_json(&["on", &pair.target(), &other_target, "--json"]);
@@ -194,7 +205,9 @@ fn on_several_targets_json_has_a_result_per_holder() {
 
 #[test]
 fn free_dry_run_lists_every_holder() {
-    let mut pair = Pair::start();
+    let Some(mut pair) = Pair::start() else {
+        return;
+    };
     let (json, code) = run_json(&["free", &pair.target(), "--dry-run", "--json"]);
     assert_eq!(code, 0, "{json}");
     assert_eq!(pids_in(&json["processes"]), pair.pids(), "{json}");
@@ -211,7 +224,9 @@ fn free_dry_run_lists_every_holder() {
 
 #[test]
 fn free_kills_every_holder_and_reports_the_port_freed() {
-    let mut pair = Pair::start();
+    let Some(mut pair) = Pair::start() else {
+        return;
+    };
     let (json, code) = run_json(&["free", &pair.target(), "--yes", "--json"]);
     assert_eq!(code, 0, "{json}");
     assert_eq!(json["success"], true, "{json}");
@@ -223,7 +238,9 @@ fn free_kills_every_holder_and_reports_the_port_freed() {
 
 #[test]
 fn kill_and_stop_by_port_reach_every_holder() {
-    let mut pair = Pair::start();
+    let Some(mut pair) = Pair::start() else {
+        return;
+    };
     for action in ["kill", "stop"] {
         let (json, code) = run_json(&[action, &pair.target(), "--dry-run", "--json"]);
         assert_eq!(code, 0, "{action}: {json}");
@@ -238,7 +255,9 @@ fn kill_and_stop_by_port_reach_every_holder() {
 
 #[test]
 fn info_by_port_describes_every_holder() {
-    let pair = Pair::start();
+    let Some(pair) = Pair::start() else {
+        return;
+    };
     let (json, code) = run_json(&["info", &pair.target(), "--json"]);
     assert_eq!(code, 0, "{json}");
     assert_eq!(pids_in(&json["processes"]), pair.pids(), "{json}");
@@ -246,7 +265,9 @@ fn info_by_port_describes_every_holder() {
 
 #[test]
 fn why_traces_every_holder() {
-    let pair = Pair::start();
+    let Some(pair) = Pair::start() else {
+        return;
+    };
     let (json, code) = run_json(&["why", &pair.target(), "--json"]);
     assert_eq!(code, 0, "{json}");
     let results = json["results"].as_array().unwrap();
@@ -269,7 +290,9 @@ fn why_traces_every_holder() {
 
 #[test]
 fn wait_and_tree_by_port_take_every_holder() {
-    let pair = Pair::start();
+    let Some(pair) = Pair::start() else {
+        return;
+    };
     // nothing exits, so the wait times out; the report counts both holders
     let (json, code) = run_json(&["wait", &pair.target(), "--timeout", "1", "--json"]);
     assert_eq!(code, 1, "{json}");
@@ -292,11 +315,112 @@ fn wait_and_tree_by_port_take_every_holder() {
 
 #[test]
 fn watch_by_port_follows_every_holder() {
-    let pair = Pair::start();
+    let Some(pair) = Pair::start() else {
+        return;
+    };
     // without a terminal, watch prints one snapshot like `list`
     let output = proc_cmd().args(["watch", &pair.target()]).output().unwrap();
     let out = String::from_utf8(output.stdout).unwrap();
     for pid in pair.pids() {
         assert!(out.contains(&pid.to_string()), "{pid} missing: {out}");
     }
+}
+
+/// A listener and the copy it forked, both holding one listen socket (as an
+/// nginx master and its workers do)
+#[cfg(unix)]
+struct Shared {
+    parent: Holder,
+    child_pid: u32,
+    group: i32,
+}
+
+#[cfg(unix)]
+impl Shared {
+    fn start() -> Self {
+        use std::os::unix::process::CommandExt;
+        let mut child = std::process::Command::new(listener_path())
+            .arg("--share")
+            .process_group(0)
+            .stdout(Stdio::piped())
+            .stdin(Stdio::null())
+            .spawn()
+            .expect("spawn the listener example");
+        let group = i32::try_from(child.id()).unwrap();
+        let mut stdout = BufReader::new(child.stdout.take().unwrap());
+        let mut port_line = String::new();
+        let mut child_line = String::new();
+        let _ = stdout.read_line(&mut port_line);
+        let _ = stdout.read_line(&mut child_line);
+        let port = port_line
+            .trim()
+            .strip_prefix("PORT ")
+            .and_then(|p| p.parse().ok());
+        let child_pid = child_line
+            .trim()
+            .strip_prefix("CHILD ")
+            .and_then(|p| p.parse().ok());
+        let parent = Holder {
+            child,
+            port: port.unwrap_or(0),
+        };
+        // `parent` already owns the group: a failed check below kills both
+        let (Some(_), Some(child_pid)) = (port, child_pid) else {
+            panic!("expected `PORT <n>` and `CHILD <pid>`, got {port_line:?} {child_line:?}");
+        };
+        Shared {
+            parent,
+            child_pid,
+            group,
+        }
+    }
+
+    fn target(&self) -> String {
+        format!(":{}", self.parent.port)
+    }
+
+    fn pids(&self) -> Vec<u64> {
+        let mut pids = vec![u64::from(self.parent.pid()), u64::from(self.child_pid)];
+        pids.sort_unstable();
+        pids
+    }
+}
+
+#[cfg(unix)]
+impl Drop for Shared {
+    fn drop(&mut self) {
+        // SAFETY: the group is the one this test made for the listener and its
+        // copy; once both are gone the call just fails
+        unsafe {
+            libc::kill(-self.group, libc::SIGKILL);
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn processes_sharing_one_listen_socket_are_all_holders() {
+    let mut shared = Shared::start();
+    let (json, code) = run_json(&["on", &shared.target(), "--json"]);
+    assert_eq!(code, 0, "{json}");
+    assert_eq!(pids_in(&json["processes"]), shared.pids(), "{json}");
+
+    let (json, code) = run_json(&["free", &shared.target(), "--dry-run", "--json"]);
+    assert_eq!(code, 0, "{json}");
+    assert_eq!(pids_in(&json["processes"]), shared.pids(), "{json}");
+
+    let (json, code) = run_json(&["free", &shared.target(), "--yes", "--json"]);
+    assert_eq!(code, 0, "{json}");
+    assert_eq!(json["results"][0]["freed"], true, "{json}");
+    assert!(shared.parent.ended_within(Duration::from_secs(5)), "{json}");
+    let gone = Instant::now() + Duration::from_secs(5);
+    // the copy was not our child: it is gone once the port can be listed empty
+    while Instant::now() < gone {
+        let (json, _) = run_json(&["on", &shared.target(), "--json"]);
+        if json["success"] == false {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    panic!("the forked copy still holds the port");
 }
