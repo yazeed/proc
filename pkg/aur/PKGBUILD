@@ -10,7 +10,7 @@ license=('MIT')
 depends=('gcc-libs')
 makedepends=('rust' 'cargo')
 source=("$pkgname-$pkgver.tar.gz::https://github.com/yazeed/proc-cli/archive/v$pkgver.tar.gz")
-sha256sums=('a88b28e19be812447a3c850e27e5e502a10a0ae0492d04ea8a68ab94bd8020f5')
+sha256sums=('3720b30d25c256a7b537c707bc75dc3ae3c92b8dc41eca5ad704a9e2a6f29691')
 
 build() {
   cd "$_repo-$pkgver"
