@@ -1424,9 +1424,11 @@ fn a_command_that_fails_without_json_prints_the_error_on_stderr() {
     assert_eq!(code, 4);
     assert_eq!(out, "");
     assert!(
-        stderr.starts_with("Invalid input: stop asks before changing processes"),
+        stderr.starts_with("stop asks before changing processes"),
         "{stderr}"
     );
+    // the call is valid; it only needs a yes
+    assert!(!stderr.contains("Invalid input"), "{stderr}");
     assert!(
         owned.child.try_wait().unwrap().is_none(),
         "the listener was stopped"
@@ -1444,6 +1446,15 @@ fn a_missing_yes_with_json_lists_the_processes_that_would_change() {
     assert_eq!(json["needs_confirmation"], true);
     assert_eq!(json["processes"][0]["pid"], owned.pid());
     assert!(json["error"].as_str().unwrap().contains("--yes"), "{json}");
+    // `reason` carries the classification; the text does not call the call invalid
+    assert_eq!(json["reason"], "needs_confirmation", "{json}");
+    assert!(
+        json["error"]
+            .as_str()
+            .unwrap()
+            .starts_with("stop changes processes"),
+        "{json}"
+    );
     assert!(
         owned.child.try_wait().unwrap().is_none(),
         "the listener was stopped"

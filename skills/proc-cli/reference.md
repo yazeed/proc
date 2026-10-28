@@ -54,7 +54,7 @@ A command that changes processes (`kill`, `stop`, `freeze`, `thaw`, `free`, `uns
 {
   "action": "stop",
   "success": false,
-  "error": "Invalid input: stop changes processes, so it needs --yes, with --json too (or --dry-run to preview)",
+  "error": "stop changes processes, so it needs --yes, with --json too (or --dry-run to preview)",
   "exit_code": 4,
   "needs_confirmation": true,
   "processes": [<Process>, ...],
@@ -85,6 +85,8 @@ Every exit-4 error carries `reason`, one of three strings. Exit 4 always means n
   "reason": "invalid_input"
 }
 ```
+
+For a usage error, `error` is clap's whole message on one line: its lines joined with a space, without the `Usage:` block, the `--help` pointer and the `tip:` lines. A missing argument reads `the following required arguments were not provided: <TARGET>...` and a bad value reads `invalid value 'bogus' for '--sort <SORT>' [possible values: cpu, mem, pid, name]`. A suggestion or hint follows on its own indented line after `\n`: `\n  Try: did you mean '--json'?`, or, when a command that needs targets got `--by` or `--in` and no target, `\n  kill needs at least one target; --by filters the targets, it doesn't select them`. An argument that is not valid UTF-8 is `invalid_input` too, with the bad bytes shown as U+FFFD in `error`.
 
 Errors with exit 1, 2 or 3 have no `reason`: the exit code already says what happened.
 

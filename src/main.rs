@@ -10,7 +10,7 @@ use proc_cli::core::{comma_notice, Process};
 use proc_cli::error::{ExitCode, ProcError, REASON_INVALID_INPUT};
 use proc_cli::ui::out;
 use proc_cli::ui::print_note;
-use proc_cli::{err_print, err_println, out_println};
+use proc_cli::{err_println, out_println};
 use std::process;
 
 /// What a bare `proc` prints.
@@ -132,6 +132,20 @@ fn main() -> process::ExitCode {
 /// Run the command and return its exit code. Writing goes through `out`, which
 /// records a failed write instead of panicking; `main` folds that into the code.
 fn run() -> u8 {
+    // An argument that is not UTF-8 is invalid input, said before clap sees it:
+    // clap's own message for it does not name the argument
+    if let Some(arg) = first_non_utf8_arg() {
+        let message =
+            format!("argument '{arg}' is not valid UTF-8; proc takes its arguments as UTF-8");
+        let exit_code = ExitCode::InvalidInput;
+        if wants_json() {
+            print_json_error(&message, exit_code as i32, Some(REASON_INVALID_INPUT), None);
+        } else {
+            err_println!("error: {message}");
+        }
+        return exit_code as u8;
+    }
+
     let cli = match Cli::try_parse() {
         Ok(cli) => cli,
         Err(e) => {
@@ -159,8 +173,8 @@ fn run() -> u8 {
                 e.kind(),
                 ErrorKind::UnknownArgument | ErrorKind::InvalidValue
             ) {
-                let args: Vec<String> = std::env::args().collect();
-                let subcmd = args.iter().skip(1).find(|a| !a.starts_with('-'));
+                let args = raw_args();
+                let subcmd = args.iter().find(|a| !a.starts_with('-'));
                 let unknown = extract_unknown_arg(&msg);
                 if let (Some(subcmd), Some(unknown)) = (subcmd, unknown) {
                     suggestion = suggest_flag(&unknown, subcmd);
@@ -170,22 +184,25 @@ fn run() -> u8 {
             // Usage errors are invalid input, same as runtime validation errors
             let exit_code = ExitCode::InvalidInput as i32;
 
+            // No target, but a filter: say that the filter does not select
+            let hint = missing_target_hint(&e, &msg);
+
             if wants_json() {
-                let mut error = cleaned
-                    .trim()
-                    .trim_start_matches("error: ")
-                    .lines()
-                    .next()
-                    .unwrap_or_default()
-                    .to_string();
+                let mut error = one_line(&msg);
                 if let Some(ref suggestion) = suggestion {
                     error.push_str(&format!("\n  Try: did you mean '{}'?", suggestion));
                 }
+                if let Some(ref hint) = hint {
+                    error.push_str(&format!("\n  {hint}"));
+                }
                 print_json_error(&error, exit_code, Some(REASON_INVALID_INPUT), None);
             } else {
-                err_print!("{}", cleaned);
+                err_println!("{}", cleaned);
                 if let Some(suggestion) = suggestion {
                     err_println!("\n  tip: did you mean '{}'?", suggestion);
+                }
+                if let Some(hint) = hint {
+                    err_println!("\n  tip: {hint}");
                 }
             }
 
@@ -311,7 +328,7 @@ fn print_json_error(
 /// Canonical command name for the JSON `action` field, resolving aliases
 /// (e.g. `proc k` → "kill"). Falls back to the raw argument, or "proc".
 fn action_name() -> String {
-    let first = std::env::args().skip(1).find(|a| !a.starts_with('-'));
+    let first = raw_args().into_iter().find(|a| !a.starts_with('-'));
     match first {
         Some(arg) => Cli::command()
             .find_subcommand(&arg)
@@ -323,10 +340,83 @@ fn action_name() -> String {
 
 /// Check if --json or -j was passed in the command line arguments
 fn wants_json() -> bool {
-    std::env::args()
-        .skip(1)
+    raw_args()
+        .into_iter()
         .take_while(|a| a != "--")
         .any(|a| is_json_flag(&a))
+}
+
+/// The arguments after the program name, as text. A byte that is not UTF-8
+/// shows as U+FFFD. `std::env::args()` would panic on one; this never does.
+fn raw_args() -> Vec<String> {
+    std::env::args_os()
+        .skip(1)
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect()
+}
+
+/// The first argument that is not valid UTF-8, in lossy form
+fn first_non_utf8_arg() -> Option<String> {
+    std::env::args_os()
+        .skip(1)
+        .find(|arg| arg.to_str().is_none())
+        .map(|arg| arg.to_string_lossy().into_owned())
+}
+
+/// clap's message as one line for the JSON `error`: its meaningful lines
+/// joined with a space, without the `error: ` prefix, the `Usage:` block, the
+/// `tip:` lines and the `--help` pointer. clap puts the detail (the missing
+/// `<TARGET>...`, the `[possible values: ...]`) on lines after the first.
+fn one_line(msg: &str) -> String {
+    let mut parts: Vec<&str> = Vec::new();
+    for line in msg.lines().map(str::trim) {
+        if line.starts_with("Usage:") {
+            break;
+        }
+        if line.is_empty() || line.starts_with("tip:") || line.starts_with("For more information") {
+            continue;
+        }
+        parts.push(line.strip_prefix("error: ").unwrap_or(line));
+    }
+    parts.join(" ")
+}
+
+/// The `--by` or `--in` flag given on the command line, if any (`-b`, `-i`,
+/// their `=` forms and short-flag clusters count)
+fn filter_flag_given() -> Option<&'static str> {
+    for arg in raw_args().iter().take_while(|a| *a != "--") {
+        if arg == "--by" || arg.starts_with("--by=") {
+            return Some("--by");
+        }
+        if arg == "--in" || arg.starts_with("--in=") {
+            return Some("--in");
+        }
+        let Some(cluster) = arg.strip_prefix('-').filter(|c| !c.starts_with('-')) else {
+            continue;
+        };
+        for c in cluster.chars() {
+            match c {
+                'b' => return Some("--by"),
+                'i' => return Some("--in"),
+                'd' | 'l' | 'n' | 'p' | 'r' | 's' | 'S' | 't' => break,
+                _ => {}
+            }
+        }
+    }
+    None
+}
+
+/// What to add when a command that needs targets got a filter but no target:
+/// the filter narrows the targets, it does not pick them.
+fn missing_target_hint(e: &clap::Error, msg: &str) -> Option<String> {
+    if e.kind() != clap::error::ErrorKind::MissingRequiredArgument || !msg.contains("<TARGET>") {
+        return None;
+    }
+    let flag = filter_flag_given()?;
+    Some(format!(
+        "{} needs at least one target; {flag} filters the targets, it doesn't select them",
+        action_name()
+    ))
 }
 
 /// Matches `--json`, `-j`, and short-flag clusters such as `-yj`.

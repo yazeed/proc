@@ -49,7 +49,10 @@ pub enum ProcError {
     /// A command that changes processes was run without `--yes` where nobody
     /// can be asked (`--json`, or no terminal). Carries the processes it would
     /// have changed so `--json` callers can see them in the error.
-    #[error("Invalid input: {message}")]
+    ///
+    /// Not shown as invalid input: the call is valid, it only needs a yes, and
+    /// the JSON `reason` (`needs_confirmation`) says so.
+    #[error("{message}")]
     ConfirmationRequired {
         /// What to pass to proceed
         message: String,
@@ -272,7 +275,7 @@ mod tests {
                 "Invalid input: bad",
                 4,
             ),
-            (confirmation, "Invalid input: Pass --yes", 4),
+            (confirmation, "Pass --yes", 4),
             (
                 ProcError::SystemError("boom".to_string()),
                 "System error: boom",
