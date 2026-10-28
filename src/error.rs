@@ -96,6 +96,17 @@ pub enum ProcError {
     },
 }
 
+/// The `reason` of an exit-4 JSON error caused by bad flags, values or
+/// arguments, including clap's own usage errors
+pub const REASON_INVALID_INPUT: &str = "invalid_input";
+
+/// The `reason` of an exit-4 JSON error for a command that changes processes
+/// and was not given `--yes`
+pub const REASON_NEEDS_CONFIRMATION: &str = "needs_confirmation";
+
+/// The `reason` of an exit-4 JSON error for a command this OS does not support
+pub const REASON_NOT_SUPPORTED: &str = "not_supported";
+
 /// The hint for a name that matched nothing by name but is in some command lines
 pub fn command_line_hint(name: &str, count: usize) -> String {
     let (who, has, its) = if count == 1 {
@@ -114,6 +125,17 @@ impl ProcError {
                 name,
                 in_command_line,
             } => Some(command_line_hint(name, *in_command_line)),
+            _ => None,
+        }
+    }
+
+    /// Why this error is exit 4 (nothing was done), as the `reason` of the JSON
+    /// error. `None` for every error with another exit code.
+    pub fn reason(&self) -> Option<&'static str> {
+        match self {
+            ProcError::InvalidInput(_) => Some(REASON_INVALID_INPUT),
+            ProcError::ConfirmationRequired { .. } => Some(REASON_NEEDS_CONFIRMATION),
+            ProcError::NotSupported(_) => Some(REASON_NOT_SUPPORTED),
             _ => None,
         }
     }
@@ -290,8 +312,32 @@ mod tests {
         assert_eq!(ExitCode::Success as i32, 0);
         for (err, message, code) in cases {
             assert_eq!(err.to_string(), message);
+            // exit 4 always says why, and no other exit code does
+            assert_eq!(err.reason().is_some(), code == 4, "{message}");
             assert_eq!(exit_code(err), code, "{message}");
         }
+    }
+
+    #[test]
+    fn each_exit_4_error_has_its_own_reason() {
+        let confirmation = ProcError::ConfirmationRequired {
+            message: "Pass --yes".to_string(),
+            processes: Vec::new(),
+            not_found: None,
+        };
+        assert_eq!(
+            ProcError::InvalidInput("bad".to_string()).reason(),
+            Some("invalid_input")
+        );
+        assert_eq!(confirmation.reason(), Some("needs_confirmation"));
+        assert_eq!(
+            ProcError::NotSupported("freeze".to_string()).reason(),
+            Some("not_supported")
+        );
+        // the constants are what clap's usage errors use too
+        assert_eq!(REASON_INVALID_INPUT, "invalid_input");
+        assert_eq!(REASON_NEEDS_CONFIRMATION, "needs_confirmation");
+        assert_eq!(REASON_NOT_SUPPORTED, "not_supported");
     }
 
     #[test]

@@ -63,7 +63,7 @@ A name matches the whole process name, ignoring case, the way `killall` and `pki
 
 ## Scripting
 
-With `--json`, every command prints one JSON document with `action` (the command name) and `success`. `proc watch --json` streams one per refresh. Errors, including invalid flags, are JSON too. A command that changes processes run with `--json` but without `--yes` exits 4 and adds `"needs_confirmation": true` and `"processes"` (the ones it would have changed). Every command that takes targets also puts `"not_found"` in its JSON, an array of the targets that matched nothing (empty when all were found); the found ones are still handled, and when every target is missing the command exits 2 (`free` exits 0: a port nobody holds is already free).
+With `--json`, every command prints one JSON document with `action` (the command name) and `success`. `proc watch --json` streams one per refresh. Errors, including invalid flags, are JSON too. Exit 4 means nothing was done, and its error adds `"reason"`: `"invalid_input"` (a wrong flag, value or argument), `"needs_confirmation"` or `"not_supported"` (this OS cannot do it). A command that changes processes run with `--json` but without `--yes` exits 4 and adds `"needs_confirmation": true` and `"processes"` (the ones it would have changed). Every command that takes targets also puts `"not_found"` in its JSON, an array of the targets that matched nothing (empty when all were found); the found ones are still handled, and when every target is missing the command exits 2 (`free` exits 0: a port nobody holds is already free).
 
 | Exit code | Meaning |
 |-----------|---------|

@@ -29,6 +29,42 @@ fn usage_error_exits_invalid_input_with_json() {
     assert_eq!(json["success"], false);
     assert_eq!(json["exit_code"], 4);
     assert!(json["error"].as_str().unwrap().contains("--bogus-flag"));
+    assert_eq!(json["reason"], "invalid_input", "{json}");
+}
+
+#[test]
+fn a_wrong_flag_says_invalid_input() {
+    // What an agent tester hit: `--name` is not a flag of `kill`
+    let (json, code) = run_json(&["kill", "--name", "wispworker", "-j"]);
+    assert_eq!(code, 4, "{json}");
+    assert_eq!(json["reason"], "invalid_input", "{json}");
+    assert!(json.get("needs_confirmation").is_none(), "{json}");
+}
+
+#[test]
+fn a_bad_value_says_invalid_input_whether_clap_or_proc_finds_it() {
+    // clap rejects the value while parsing
+    let (json, code) = run_json(&["list", "--sort", "bogus", "--json"]);
+    assert_eq!(code, 4, "{json}");
+    assert_eq!(json["reason"], "invalid_input", "{json}");
+    // proc rejects it after parsing
+    let (json, code) = run_json(&["stop", MISSING_PID, "--signal", "BOGUS", "--yes", "--json"]);
+    assert_eq!(code, 4, "{json}");
+    assert_eq!(json["reason"], "invalid_input", "{json}");
+}
+
+#[test]
+fn errors_with_exit_1_to_3_have_no_reason() {
+    let (json, code) = run_json(&["kill", MISSING_PID, "--json"]);
+    assert_eq!(code, 2, "{json}");
+    assert!(json.get("reason").is_none(), "{json}");
+
+    // a wait that times out prints its own result, exit 1; the process it
+    // waits for is this test, which is still running
+    let pid = std::process::id().to_string();
+    let (json, code) = run_json(&["wait", &pid, "--timeout", "1", "--json"]);
+    assert_eq!(code, 1, "{json}");
+    assert!(json.get("reason").is_none(), "{json}");
 }
 
 #[test]
@@ -475,6 +511,7 @@ mod unix {
             assert_eq!(code, 4, "{command} --json without --yes: {json}");
             assert!(json["error"].as_str().unwrap().contains("--yes"), "{json}");
             assert_eq!(json["needs_confirmation"], true, "{command}: {json}");
+            assert_eq!(json["reason"], "needs_confirmation", "{command}: {json}");
             let listed = json["processes"].as_array().unwrap();
             assert_eq!(listed.len(), 1, "{command}: {json}");
             assert_eq!(
@@ -507,6 +544,7 @@ mod unix {
         assert_ne!(code, 0, "{json}");
         assert!(json.get("needs_confirmation").is_none(), "{json}");
         assert!(json.get("processes").is_none(), "{json}");
+        assert!(json.get("reason").is_none(), "{json}");
     }
 
     #[test]
@@ -695,5 +733,18 @@ mod windows {
         assert_eq!(code, 4, "{json}");
         assert_eq!(json["action"], "stop");
         assert!(json["error"].as_str().unwrap().contains("Windows"));
+        assert_eq!(json["reason"], "not_supported", "{json}");
+    }
+
+    #[test]
+    fn freeze_and_orphans_say_not_supported_on_windows() {
+        let pid = std::process::id().to_string();
+        for args in [&["freeze", &pid, "--dry-run"][..], &["orphans"][..]] {
+            let mut full = args.to_vec();
+            full.push("--json");
+            let (json, code) = run_json(&full);
+            assert_eq!(code, 4, "{args:?}: {json}");
+            assert_eq!(json["reason"], "not_supported", "{args:?}: {json}");
+        }
     }
 }

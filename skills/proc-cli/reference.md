@@ -33,7 +33,7 @@ A signal the OS refuses, such as `kill` on another user's process, is not exit 3
 
 ## Errors and needs_confirmation
 
-On failure with `--json`, stdout carries the four fields below. `action` is the canonical command name even when an alias was used (`proc k` gives `"kill"`). Unknown flags and arguments produce the same document with exit 4. Without `--json` the message goes to stderr.
+On failure with `--json`, stdout carries the four fields below. `action` is the canonical command name even when an alias was used (`proc k` gives `"kill"`). Unknown flags and arguments produce the same document with exit 4, plus `reason` (see below). Without `--json` the message goes to stderr.
 
 ```json
 {
@@ -60,9 +60,31 @@ A command that changes processes (`kill`, `stop`, `freeze`, `thaw`, `free`, `uns
 }
 ```
 
-`processes` is what a retry would touch, with CPU measured. Only this case has a `needs_confirmation` key, and it is always `true`: every other error, exit 4 included, has no such key, so `needs_confirmation == true` is how to tell "needs a yes" from invalid input or an unsupported OS. `not_found` is on commands that take targets (`kill`, `stop`, `freeze`, `thaw`, `unstick`, `free`) and is `[]` when every target was found. `orphans` and `stuck` take no targets and have no `not_found`. If every target is missing, the result is the plain exit 2 error with no `not_found` (the `error` text names them). With a terminal and no `--json`, the command asks `[y/N]` instead.
+`processes` is what a retry would touch, with CPU measured. Only this case has a `needs_confirmation` key, and it is always `true`: every other error, exit 4 included, has no such key. To tell the exit-4 cases apart, read `reason` (next section) instead; `needs_confirmation` stays for agents written against 2.0.0. `not_found` is on commands that take targets (`kill`, `stop`, `freeze`, `thaw`, `unstick`, `free`) and is `[]` when every target was found. `orphans` and `stuck` take no targets and have no `not_found`. If every target is missing, the result is the plain exit 2 error with no `not_found` (the `error` text names them). With a terminal and no `--json`, the command asks `[y/N]` instead.
 
 How to respond is in SKILL.md, rule 6: show `processes` to the user, and re-run with `--yes` only after approval, by the PIDs you showed.
+
+### reason
+
+Every exit-4 error carries `reason`, one of three strings. Exit 4 always means nothing was done:
+
+| `reason` | Meaning | What to do |
+|----------|---------|------------|
+| `invalid_input` | A flag, value or argument is wrong: an unknown flag (`kill --name node`), a bad value (`--sort bogus`, `--signal BOGUS`), a missing argument, a directory or file that does not exist. | Fix the command from `error`. Retrying unchanged fails the same way. |
+| `needs_confirmation` | The command changes processes and did not get `--yes`. The error also has `needs_confirmation: true` and `processes`. | SKILL.md, rule 6. |
+| `not_supported` | This OS cannot do it: `freeze`, `thaw`, `orphans` and `stop --signal` on Windows. | Do not retry; use another approach. |
+
+```json
+{
+  "action": "kill",
+  "success": false,
+  "error": "unexpected argument '--name' found",
+  "exit_code": 4,
+  "reason": "invalid_input"
+}
+```
+
+Errors with exit 1, 2 or 3 have no `reason`: the exit code already says what happened.
 
 ## Commands and flags
 

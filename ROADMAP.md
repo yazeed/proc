@@ -14,15 +14,11 @@ Each candidate lists what it would look like, how it fares against the feature t
 
 ## Candidates
 
-### A reason on every exit 4
+### One word for the preview and the receipt
 
-Exit 4 means nothing was done, for one of three reasons: the input was invalid, a confirmation is needed, or the OS doesn't support the command. Only the second is machine-readable today: the confirmation error is the only one with a `needs_confirmation` key (always `true`). A bad flag and "not supported" both come back as exit 4 with only an `error` message, so an agent has to read prose to tell them apart. The idea: every exit-4 JSON error carries a `reason`:
+A command that changes processes lists them as `processes` in its preview (`--dry-run --json`, and the `needs_confirmation` error) and as `succeeded` and `failed` in its receipt. A script that previews and then acts has to know both names for the same set of processes. The idea: settle on one word, or make the receipt carry the preview's `processes` too, so the list that was approved and the list that was changed read the same way.
 
-```json
-{ "action": "orphans", "success": false, "exit_code": 4, "reason": "not_supported", "error": "..." }
-```
-
-**Feature test:** follows the JSON contract (scripts and agents read proc without parsing text), adds a field and changes no behaviour, so it fits a 2.x release. Raised by an agent tester after 2.0.0. **Open:** the names (`invalid_input`, `needs_confirmation`, `not_supported`), whether exits 1 to 3 get one too, and whether the success receipt should use the preview's word too (today the preview lists `processes` and the receipt `succeeded` and `failed`).
+**Feature test:** follows the JSON contract and adds keys without changing any. **Open:** whether to add a key to the receipt or rename one (a rename breaks 2.0 scripts, so only in a major release).
 
 ### Signal words, not numbers
 

@@ -234,7 +234,7 @@ Filters can be combined with discovery and lifecycle commands:
 
 ### Scripting
 
-With `--json`, every command prints one JSON document with `action` (the command name) and `success`. `proc watch --json` streams one per refresh. Errors, including invalid flags, are JSON too: `{"action", "success": false, "error", "exit_code"}`. A command that changes processes run with `--json` but without `--yes` exits 4 and adds `"needs_confirmation": true` and `"processes"` (the ones it would have changed), so a script can show them before running it again with `--yes`. Every command that takes targets also has a `"not_found"` array in its JSON (the targets that matched nothing, empty when all were found), and it appears in that exit 4 output too.
+With `--json`, every command prints one JSON document with `action` (the command name) and `success`. `proc watch --json` streams one per refresh. Errors, including invalid flags, are JSON too: `{"action", "success": false, "error", "exit_code"}`. Exit 4 means nothing was done, and its error adds `"reason"`: `"invalid_input"` (a wrong flag, value or argument), `"needs_confirmation"` or `"not_supported"` (this OS cannot do it). A command that changes processes run with `--json` but without `--yes` exits 4 and adds `"needs_confirmation": true` and `"processes"` (the ones it would have changed), so a script can show them before running it again with `--yes`. Every command that takes targets also has a `"not_found"` array in its JSON (the targets that matched nothing, empty when all were found), and it appears in that exit 4 output too.
 
 | Exit code | Meaning |
 |-----------|---------|

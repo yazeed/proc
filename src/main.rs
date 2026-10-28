@@ -7,7 +7,7 @@ use clap_complete::generate;
 use colored::Colorize;
 use proc_cli::cli::{Cli, Commands};
 use proc_cli::core::{comma_notice, Process};
-use proc_cli::error::{ExitCode, ProcError};
+use proc_cli::error::{ExitCode, ProcError, REASON_INVALID_INPUT};
 use proc_cli::ui::print_note;
 use std::io;
 use std::process;
@@ -172,7 +172,7 @@ fn main() -> process::ExitCode {
                 if let Some(ref suggestion) = suggestion {
                     error.push_str(&format!("\n  Try: did you mean '{}'?", suggestion));
                 }
-                print_json_error(&error, exit_code, None);
+                print_json_error(&error, exit_code, Some(REASON_INVALID_INPUT), None);
             } else {
                 eprint!("{}", cleaned);
                 if let Some(suggestion) = suggestion {
@@ -253,7 +253,7 @@ fn main() -> process::ExitCode {
                 } => Some((processes.as_slice(), not_found.as_deref())),
                 _ => None,
             };
-            print_json_error(&e.to_string(), exit_code as i32, confirmation);
+            print_json_error(&e.to_string(), exit_code as i32, e.reason(), confirmation);
         } else {
             eprintln!("{}", e);
         }
@@ -266,12 +266,15 @@ fn main() -> process::ExitCode {
 
 /// Print an error as the standard JSON error object on stdout.
 ///
+/// `reason` is `Some` exactly for exit 4: why nothing was done.
+///
 /// `confirmation` is `Some((processes, not_found))` only for a missing `--yes`:
 /// the object then also says `needs_confirmation`, lists what would have been
 /// changed and, for a command that takes targets, the targets that were not found.
 fn print_json_error(
     error: &str,
     exit_code: i32,
+    reason: Option<&str>,
     confirmation: Option<(&[Process], Option<&[String]>)>,
 ) {
     let mut error_json = serde_json::json!({
@@ -280,6 +283,9 @@ fn print_json_error(
         "error": error,
         "exit_code": exit_code
     });
+    if let Some(reason) = reason {
+        error_json["reason"] = serde_json::json!(reason);
+    }
     if let Some((processes, not_found)) = confirmation {
         error_json["needs_confirmation"] = serde_json::json!(true);
         error_json["processes"] = serde_json::json!(processes);
