@@ -5,7 +5,7 @@ description: "Release history for proc."
 permalink: /changelog
 ---
 
-## 2.0.0 — 2026-10-27
+## 2.0.0 — 2026-10-28
 
 This is a major release. Read **Changed** first: a name now matches the whole process name (add `--cmd` for the old matching), and `--json` no longer counts as `--yes`. The library API changed too (see the entries marked **Library API**).
 
