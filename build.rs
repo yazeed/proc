@@ -7,6 +7,10 @@
 //! and tested there; this file only runs git. A failure to run git is never a
 //! build failure: it gives the plain version.
 
+// The `cargo:` lines go to cargo, not to a user: this is not proc's output, so
+// the print macros that `clippy.toml` bans in proc itself are fine here.
+#![allow(clippy::disallowed_macros)]
+
 #[path = "src/version.rs"]
 #[allow(dead_code)]
 mod version;
