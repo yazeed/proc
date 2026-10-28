@@ -5,8 +5,8 @@
 //!   proc freeze node --cmd        # ... or with node anywhere in their command line
 //!   proc freeze :3000             # Freeze process on port 3000
 //!   proc freeze :3000 :8080       # Freeze several targets: separate arguments
-//!   proc freeze node --yes        # Skip confirmation
 //!   proc freeze node --dry-run    # Show what would be frozen
+//!   proc freeze :3000 --yes       # Skip confirmation (a port or PID, not a name)
 //!
 //! Commas still work (`proc freeze :3000,:8080`) but are deprecated.
 

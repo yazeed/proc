@@ -108,6 +108,9 @@ fn in_command_line(pattern: &str, names: &Names<'_>) -> bool {
 /// names follow Windows rules (an optional `.exe`, `\` in paths)
 pub fn classify_with(pattern: &str, names: &Names<'_>, mode: NameMatch, windows: bool) -> Hit {
     match mode {
+        // nothing is named "": it is not a name, and not worth counting
+        // command lines for, since every one contains it
+        NameMatch::Exact if pattern.is_empty() => Hit::No,
         NameMatch::Exact if is_exact(pattern, names, windows) => Hit::Match,
         NameMatch::Exact if in_command_line(pattern, names) => Hit::CommandLineOnly,
         NameMatch::Command if in_command_line(pattern, names) => Hit::Match,
@@ -171,6 +174,19 @@ mod tests {
         assert_eq!(unix("node", &helper, EXACT), Hit::No);
         assert_eq!(unix("node", &node_server(), EXACT), Hit::Match);
         assert_eq!(unix("nod", &node_server(), EXACT), Hit::CommandLineOnly);
+    }
+
+    #[test]
+    fn an_empty_name_matches_nothing_and_hints_at_nothing() {
+        // every command line contains the empty string, so by default it must
+        // not count as "in the command line" for a hint to count them
+        assert_eq!(unix("", &node_server(), EXACT), Hit::No);
+        assert_eq!(windows("", &node_server(), EXACT), Hit::No);
+        // an empty process name is not the empty pattern's either
+        let unnamed = Names::default();
+        assert_eq!(unix("", &unnamed, EXACT), Hit::No);
+        // --cmd is the substring comparison of `pkill -f`, which any text is in
+        assert_eq!(unix("", &node_server(), CMD), Hit::Match);
     }
 
     #[test]

@@ -236,6 +236,7 @@ fn zombies_in(buf: &[u8], known: &std::collections::HashSet<u32>) -> Vec<Process
                 cwd: None,
                 command: None,
                 argv0: None,
+                raw: None,
                 cpu_percent: 0.0,
                 memory_mb: 0.0,
                 status: ProcessStatus::Zombie,
@@ -315,9 +316,17 @@ pub struct Process {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
     /// The first word of the command line, kept whole (a path with spaces in
-    /// it stays one piece), for matching names; not part of the JSON
+    /// it stays one piece) and exactly as the OS gave it, for matching names;
+    /// never printed, and not part of the JSON
     #[serde(skip)]
     pub argv0: Option<String>,
+    /// The name, executable and command line exactly as the OS gave them, when
+    /// escaping control characters for display changed any of them. Matching
+    /// reads these, so a name matches the same way whether it is looked up in
+    /// the process list or against a record; `None` when nothing was escaped
+    /// (the fields above are then the raw text). Not part of the JSON.
+    #[serde(skip)]
+    pub raw: Option<Box<RawText>>,
     /// CPU usage percentage (0.0 - 100.0+)
     pub cpu_percent: f32,
     /// Memory usage in megabytes
@@ -336,6 +345,37 @@ pub struct Process {
     /// Seconds the process has been running
     #[serde(skip_serializing_if = "Option::is_none")]
     pub uptime_secs: Option<u64>,
+}
+
+/// This process and its ancestors, as far up as ten levels (proc → shell →
+/// shell wrapper → IDE → ...). A name lookup skips them all: their command
+/// lines hold proc's own arguments (`zsh -c 'proc by node'`).
+pub(crate) fn self_and_ancestors(sys: &System) -> std::collections::HashSet<Pid> {
+    let self_pid = Pid::from_u32(std::process::id());
+    let mut pids = std::collections::HashSet::new();
+    pids.insert(self_pid);
+    let mut current = self_pid;
+    for _ in 0..10 {
+        if let Some(parent) = sys.process(current).and_then(|p| p.parent()) {
+            pids.insert(parent);
+            current = parent;
+        } else {
+            break;
+        }
+    }
+    pids
+}
+
+/// The text of a process that name matching reads, as the OS gave it: control
+/// characters unescaped, unlike the fields a process is displayed from
+#[derive(Debug, Clone)]
+pub struct RawText {
+    /// The process name
+    pub name: String,
+    /// Path of the executable
+    pub exe_path: Option<String>,
+    /// The full command line
+    pub command: Option<String>,
 }
 
 /// How a name relates to a process sysinfo listed, under `mode`. Reads the
@@ -368,11 +408,19 @@ pub(crate) fn classify_sysinfo(pattern: &str, proc: &sysinfo::Process, mode: Nam
 impl Process {
     /// The names a name target is compared with
     pub fn names(&self) -> Names<'_> {
-        Names {
-            name: &self.name,
-            exe: self.exe_path.as_deref(),
-            argv0: self.argv0.as_deref(),
-            command: self.command.as_deref(),
+        match &self.raw {
+            Some(raw) => Names {
+                name: &raw.name,
+                exe: raw.exe_path.as_deref(),
+                argv0: self.argv0.as_deref(),
+                command: raw.command.as_deref(),
+            },
+            None => Names {
+                name: &self.name,
+                exe: self.exe_path.as_deref(),
+                argv0: self.argv0.as_deref(),
+                command: self.command.as_deref(),
+            },
         }
     }
 
@@ -386,24 +434,9 @@ impl Process {
         let mut sys = System::new_all();
         sys.refresh_all();
 
-        let self_pid = sysinfo::Pid::from_u32(std::process::id());
         // Exclude the entire ancestor chain — their command lines contain proc's
-        // arguments (e.g. "zsh -c proc by node"), causing false positives.
-        // Walk up to 10 levels (covers: proc → shell → shell wrapper → IDE → ...)
-        let ancestor_pids = {
-            let mut pids = std::collections::HashSet::new();
-            pids.insert(self_pid);
-            let mut current = self_pid;
-            for _ in 0..10 {
-                if let Some(parent) = sys.process(current).and_then(|p| p.parent()) {
-                    pids.insert(parent);
-                    current = parent;
-                } else {
-                    break;
-                }
-            }
-            pids
-        };
+        // arguments (e.g. "zsh -c proc by node"), causing false positives
+        let ancestor_pids = self_and_ancestors(&sys);
         let mut in_command_line_only = 0;
         let processes: Vec<Process> = sys
             .processes()
@@ -874,21 +907,35 @@ impl Process {
     pub(crate) fn from_sysinfo(pid: Pid, proc: &sysinfo::Process) -> Self {
         let cmd_vec = proc.cmd();
         // Every text field is set by whoever runs the process: escape control
-        // characters before anything prints them
-        let command = if cmd_vec.is_empty() {
-            None
-        } else {
-            let joined = cmd_vec
+        // characters before anything prints them. Name matching reads the raw
+        // text (`raw`, kept only when escaping changed something).
+        let raw_command = (!cmd_vec.is_empty()).then(|| {
+            cmd_vec
                 .iter()
                 .map(|s| s.to_string_lossy())
                 .collect::<Vec<_>>()
-                .join(" ");
-            Some(escape_control(&joined).into_owned())
-        };
+                .join(" ")
+        });
+        let raw_name = proc.name().to_string_lossy();
+        let raw_exe = proc.exe().map(|p| p.to_string_lossy());
+        let changed = |text: &str| matches!(escape_control(text), std::borrow::Cow::Owned(_));
+        let raw = (changed(&raw_name)
+            || raw_exe.as_deref().is_some_and(changed)
+            || raw_command.as_deref().is_some_and(changed))
+        .then(|| {
+            Box::new(RawText {
+                name: raw_name.to_string(),
+                exe_path: raw_exe.as_ref().map(|exe| exe.to_string()),
+                command: raw_command.clone(),
+            })
+        });
+        let command = raw_command
+            .as_deref()
+            .map(|joined| escape_control(joined).into_owned());
 
-        let exe_path = proc
-            .exe()
-            .map(|p| escape_control(&p.to_string_lossy()).into_owned());
+        let exe_path = raw_exe
+            .as_deref()
+            .map(|exe| escape_control(exe).into_owned());
         let cwd = proc.cwd().map(|p| {
             let path = strip_deleted_marker(p.to_string_lossy().to_string());
             escape_control(&path).into_owned()
@@ -896,13 +943,14 @@ impl Process {
 
         Process {
             pid: pid.as_u32(),
-            name: escape_control(&proc.name().to_string_lossy()).into_owned(),
+            name: escape_control(&raw_name).into_owned(),
             exe_path,
             cwd,
             command,
             argv0: cmd_vec
                 .first()
-                .map(|arg| escape_control(&arg.to_string_lossy()).into_owned()),
+                .map(|arg| arg.to_string_lossy().into_owned()),
+            raw,
             cpu_percent: proc.cpu_usage(),
             memory_mb: proc.memory() as f64 / 1024.0 / 1024.0,
             status: ProcessStatus::from(proc.status()),
@@ -1118,6 +1166,54 @@ mod tests {
         assert!(matches!(sig, Err(ProcError::ProcessNotFound(_))), "{sig:?}");
     }
 
+    /// A control character in a process's name, executable or command line is
+    /// shown escaped, but name matching reads what the OS gave: a process found
+    /// by `find_by_name` is also kept by `--by`, and the other way round
+    #[cfg(unix)]
+    #[test]
+    fn text_with_control_characters_matches_as_typed_and_displays_escaped() {
+        use crate::core::matches_by_filter;
+        use std::os::unix::process::CommandExt;
+
+        let word = format!("zz\u{7}ctl{}x", std::process::id());
+        let mut child = std::process::Command::new("sleep")
+            .arg0(&word)
+            .arg("300")
+            .spawn()
+            .unwrap();
+        let record = Process::find_by_pid(child.id()).unwrap().unwrap();
+        let pid = child.id();
+        let part = format!("\u{7}ctl{}", std::process::id());
+
+        let found = |pattern: &str, mode| {
+            Process::find_by_name(pattern, mode)
+                .map(|found| found.iter().any(|p| p.pid == pid))
+                .unwrap_or(false)
+        };
+        let named = found(&word, NameMatch::Exact);
+        let named_in_command = found(&part, NameMatch::Command);
+        let _ = child.kill();
+        let _ = child.wait();
+
+        assert!(named, "find_by_name read the escaped first argument");
+        assert!(
+            named_in_command,
+            "find_by_name read the escaped command line"
+        );
+        assert!(
+            matches_by_filter(&record, &word, NameMatch::Exact),
+            "--by read the escaped first argument"
+        );
+        assert!(
+            matches_by_filter(&record, &part, NameMatch::Command),
+            "--by --cmd read the escaped command line"
+        );
+        // what is shown is escaped
+        let shown = record.command.as_deref().unwrap();
+        assert!(shown.contains("\\x07ctl"), "{shown}");
+        assert!(!shown.contains('\u{7}'), "{shown:?}");
+    }
+
     #[test]
     fn test_strip_deleted_marker() {
         assert_eq!(
@@ -1199,6 +1295,7 @@ mod tests {
             cwd: cwd.map(String::from),
             command: None,
             argv0: None,
+            raw: None,
             cpu_percent: 0.0,
             memory_mb: 0.0,
             status: ProcessStatus::Running,
@@ -1324,6 +1421,7 @@ mod tests {
             cwd: None,
             command: None,
             argv0: None,
+            raw: None,
             cpu_percent: 0.0,
             memory_mb: 0.0,
             status: ProcessStatus::Running,
@@ -1346,6 +1444,7 @@ mod tests {
             cwd: None,
             command: None,
             argv0: None,
+            raw: None,
             cpu_percent: 0.0,
             memory_mb: 0.0,
             status: ProcessStatus::Running,

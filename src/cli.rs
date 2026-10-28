@@ -97,8 +97,10 @@ Run 'proc --help' for examples or visit https://github.com/yazeed/proc-cli"
 Targets: :port, PID, or process name. Give several as separate arguments.
 A name matches the whole process name, ignoring case, like killall and pkill:
 'node' does not match 'Claude Helper'. Add --cmd to match any part of the name
-or the full command line instead (like pkill -f). proc has no wildcards: an
-unquoted node* is expanded by your shell into several targets, so quote it.
+or the full command line instead (like pkill -f). A path is not a name: use
+--cmd, or 'proc for <file>' for an executable. proc doesn't expand wildcards;
+an unquoted node* is expanded by your shell into file names; use --cmd for
+partial matches.
 Comma-separated targets (:3000,:8080) still work but are deprecated and will be
 removed in a future major release.
 --in takes the next word as its directory unless that word starts with '-':

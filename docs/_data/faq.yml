@@ -87,11 +87,12 @@
 - q: How do I kill all Node processes?
   id: kill-all-node-processes
   a: |
-    Preview first, then confirm. `--in .` limits it to the current project, so editors and other projects' servers are left alone.
+    Preview first, then confirm at the prompt. `--in .` limits it to the current project, so editors and other projects' servers are left alone. A script with nobody to ask passes the PIDs from the preview with `--yes`, so what it kills is what you saw.
 
     ```bash
     proc kill node --in . --dry-run
-    proc kill node --in . --yes
+    proc kill node --in .
+    proc kill 1234 5678 --yes
     ```
 
     Without proc: `pkill node` (or `pkill -f node` to match the full command line), which kills every match without asking.

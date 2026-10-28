@@ -9,7 +9,6 @@
 use assert_cmd::Command;
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader};
-use std::net::TcpListener;
 use std::path::PathBuf;
 use std::process::{Child, Stdio};
 
@@ -95,10 +94,13 @@ fn run_text(args: &[&str]) -> (String, i32) {
     )
 }
 
-/// A port nothing listens on: one the OS just handed out and took back
+/// A port nothing listens on: a privileged one, which a test running at the
+/// same time can't be handed as an ephemeral port (one the OS just took back
+/// from another test can still be held for a moment by a child it forked).
+/// Only dry runs and refusals name it: nothing is killed on a port the test
+/// does not hold.
 fn unused_port_target() -> String {
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    format!(":{}", listener.local_addr().unwrap().port())
+    ":1".to_string()
 }
 
 #[test]
@@ -210,10 +212,11 @@ fn free_lists_the_ports_that_were_not_found() {
     assert_eq!(json["needs_confirmation"], true, "{json}");
     assert_eq!(json["not_found"], json!([free]), "{json}");
 
-    let (json, code) = run_json(&["free", &held, &free, "--yes", "--json"]);
+    // the result: only the port the test holds is named with --yes
+    let (json, code) = run_json(&["free", &held, "--yes", "--json"]);
     assert_eq!(code, 0, "{json}");
     assert_eq!(json["success"], true, "{json}");
-    assert_eq!(json["not_found"], json!([free]), "{json}");
+    assert_eq!(json["not_found"], json!([]), "{json}");
 }
 
 #[test]

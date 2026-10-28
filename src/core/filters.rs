@@ -340,6 +340,7 @@ mod match_tests {
             cwd: None,
             command: None,
             argv0: None,
+            raw: None,
             cpu_percent: 0.0,
             memory_mb: 0.0,
             status: ProcessStatus::Sleeping,

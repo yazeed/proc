@@ -12,7 +12,7 @@
 //!
 //! Commas still work (`proc watch :3000,:8080`) but are deprecated.
 
-use crate::core::process::classify_sysinfo;
+use crate::core::process::{classify_sysinfo, self_and_ancestors};
 use crate::core::{
     flatten_targets, parse_target, resolve_in_dir, sort_processes, Hit, NameMatch, Process,
     ProcessStatus, SortKey, TargetType,
@@ -205,6 +205,9 @@ impl WatchCommand {
     /// has not seen
     fn collect_with(&self, sys: &System, port_holders: impl Fn(u16) -> Vec<u32>) -> Vec<Process> {
         let self_pid = Pid::from_u32(std::process::id());
+        // a name never finds proc's ancestor shells, whose command lines hold
+        // proc's own arguments (`sh -c 'proc watch node'`)
+        let ancestors = self_and_ancestors(sys);
         let in_dir_filter = resolve_in_dir(&self.in_dir);
         let mode = NameMatch::from_flag(self.cmd);
 
@@ -250,7 +253,7 @@ impl WatchCommand {
                     }
                     TargetType::Name(name) => {
                         for (pid, proc) in sys.processes() {
-                            if *pid == self_pid || crate::core::is_thread(proc) {
+                            if ancestors.contains(pid) || crate::core::is_thread(proc) {
                                 continue;
                             }
                             if classify_sysinfo(name, proc, mode) == Hit::Match
@@ -712,6 +715,7 @@ mod tests {
             cwd: None,
             command: None,
             argv0: None,
+            raw: None,
             cpu_percent: 1.5,
             memory_mb: 12.0,
             status: ProcessStatus::Sleeping,
@@ -1160,6 +1164,28 @@ mod tests {
         assert!(unseen.is_empty(), "{unseen:?}");
         let nobody = cmd.collect_with(&sys, |_| Vec::new());
         assert!(nobody.is_empty(), "{nobody:?}");
+    }
+
+    #[test]
+    fn a_name_never_finds_the_processes_that_ran_watch() {
+        let mut sys = System::new_all();
+        sys.refresh_all();
+        let me = Pid::from_u32(std::process::id());
+        let parent = sys.process(me).and_then(|p| p.parent()).expect("a parent");
+        let parent_name = sys
+            .process(parent)
+            .unwrap()
+            .name()
+            .to_string_lossy()
+            .into_owned();
+
+        let mut cmd = watch_args();
+        cmd.target = vec![parent_name];
+        let found = cmd.collect_processes(&sys);
+        assert!(
+            found.iter().all(|p| p.pid != parent.as_u32()),
+            "listed the parent: {found:?}"
+        );
     }
 
     #[test]

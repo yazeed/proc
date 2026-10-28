@@ -5,7 +5,8 @@
 //!   proc thaw node --cmd        # ... or with node anywhere in their command line
 //!   proc thaw :3000             # Resume process on port 3000
 //!   proc thaw :3000 :8080       # Resume several targets: separate arguments
-//!   proc thaw node --yes        # Skip confirmation
+//!   proc thaw node --dry-run    # Show what would be resumed
+//!   proc thaw :3000 --yes       # Skip confirmation (a port or PID, not a name)
 //!
 //! Commas still work (`proc thaw :3000,:8080`) but are deprecated.
 

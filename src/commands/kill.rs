@@ -7,7 +7,8 @@
 //!   proc kill 1234              # Kill specific PID
 //!   proc kill 1234 5678         # Kill several targets: separate arguments
 //!   proc kill :3000 :8080 node  # Mixed targets (port + port + name)
-//!   proc kill node --yes        # Skip confirmation
+//!   proc kill node --dry-run    # Show what would be killed, kill nothing
+//!   proc kill :3000 --yes       # Skip confirmation (a port or PID, not a name)
 //!
 //! Commas still work (`proc kill :3000,:8080`) but are deprecated.
 

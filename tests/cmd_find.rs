@@ -359,6 +359,19 @@ fn by_ignores_a_word_only_in_the_command_line_and_says_cmd_would_find_it() {
 }
 
 #[test]
+fn by_an_empty_name_finds_nothing_and_does_not_count_command_lines() {
+    // every command line contains the empty string: no hint about them
+    let output = proc_cmd().args(["by", ""]).output().unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    let err = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        err.contains("No process found matching ''"),
+        "stderr: {err}"
+    );
+    assert!(!err.contains("command line"), "stderr: {err}");
+}
+
+#[test]
 fn by_finds_a_long_name_that_linux_cuts_through_the_executable_name() {
     // Linux reports only the first 15 characters of the name; the executable's
     // file name has the rest

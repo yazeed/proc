@@ -797,22 +797,11 @@ mod tests {
     fn the_refusal_carries_the_targets_that_were_not_found() {
         let missing = ["99999999".to_string()];
         let refused = must_confirm("kill", false, true, &[], Some(&missing)).unwrap_err();
-        assert!(
-            matches!(&refused, ProcError::ConfirmationRequired { not_found: Some(n), .. } if *n == missing),
-            "{refused:?}"
-        );
+        let shown = format!("{refused:?}");
+        assert!(shown.contains(r#"not_found: Some(["99999999"])"#));
         // a command without targets has nothing to say about them
         let refused = must_confirm("stuck", false, true, &[], None).unwrap_err();
-        assert!(
-            matches!(
-                &refused,
-                ProcError::ConfirmationRequired {
-                    not_found: None,
-                    ..
-                }
-            ),
-            "{refused:?}"
-        );
+        assert!(format!("{refused:?}").contains("not_found: None"));
     }
 
     use crate::core::ProcessStatus;
@@ -841,6 +830,7 @@ mod tests {
             cwd: None,
             command: None,
             argv0: None,
+            raw: None,
             cpu_percent: 0.0,
             memory_mb: 0.0,
             status: ProcessStatus::Running,
