@@ -95,7 +95,7 @@ proc kill <name> --in=<dir> --dry-run --json     # a search, not an action
 proc stop <pid> --in=<cwd> --by <name> --yes --json   # per approved PID, values from the preview
 ```
 
-Run the first line with `stop` or `kill`, whichever the user asked for. Show the preview (rule 4). If the user approves, act by the PIDs you showed. If the preview exits 2, the name may still appear in some command lines, but the JSON error of `kill` and `stop` does not say so. Run `proc by <name> --json`: its error reads "N processes have '<name>' in their command line (add --cmd to match those)". Show that to the user. To see `--cmd` matches, run `proc by <name> --cmd --json` (read-only) or add `--dry-run` to the action. Never combine `--cmd` with `--yes`.
+Run the first line with `stop` or `kill`, whichever the user asked for. Show the preview (rule 4). If the user approves, act by the PIDs you showed. The preview, the prompt and the receipt list the same processes in the same order (targets as typed, then PID ascending), so the receipt can be checked against what the user approved line by line. If the preview exits 2, the name may still appear in some command lines, but the JSON error of `kill` and `stop` does not say so. Run `proc by <name> --json`: its error reads "N processes have '<name>' in their command line (add --cmd to match those)". Show that to the user. To see `--cmd` matches, run `proc by <name> --cmd --json` (read-only) or add `--dry-run` to the action. Never combine `--cmd` with `--yes`.
 
 ### Clean up before you finish
 

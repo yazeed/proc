@@ -8,6 +8,7 @@ Everything here is for lookup. The safety model, the playbooks and the exit-code
 - [Errors and needs_confirmation](#errors-and-needs_confirmation)
 - [Commands and flags](#commands-and-flags)
 - [Target and filter semantics](#target-and-filter-semantics)
+- [Order of results](#order-of-results)
 - [Process and port objects](#process-and-port-objects)
 - [Output shapes](#output-shapes)
 - [Heuristics: stuck and orphans](#heuristics-stuck-and-orphans)
@@ -101,7 +102,7 @@ Filters (a command takes only those its `--help` lists):
 | `--status <s>` (running, sleeping, stopped, zombie), `--min-uptime <secs>` | `list`, `by`, `in`, `for`, `tree` |
 | `--parent <pid>` | `list`, `by`, `in` |
 | `--path <path>` (`-p`) | `list` |
-| `--sort`: cpu, mem, pid, name (`ports`: port, pid, name) | `list`, `by`, `in`, `for`, `watch`, `ports` |
+| `--sort`: cpu, mem (biggest first), pid, name (`ports`: port, pid, name; ascending) | `list`, `by`, `in`, `for`, `watch`, `ports` |
 | `--limit <n>` (`-n`; `-l` on `watch`) | `list`, `by`, `in`, `for`, `ports`, `watch` |
 | `--wide` (`-w`) | `list`, `by`, `in`, `for`, `watch`, `stuck`, `orphans` |
 | `--exposed` (0.0.0.0, `::`), `--local` (127.0.0.1, `::1`), `--range <from>-<to>` | `ports` |
@@ -121,6 +122,16 @@ Filters (a command takes only those its `--help` lists):
 - **`--in` with a missing directory:** `in` exits 4 (`Directory not found`), `kill` exits 2 (nothing matched), `by` exits 0 with `count: 0`.
 - **A PID with `--in <its cwd> --by <its name>`** is a guard: a mismatch exits 2 with the PID in the error.
 - **Plain patterns** for `list` are exact names (or substrings with `--cmd`), never regular expressions.
+
+## Order of results
+
+The same machine gives the same order on every run, so a list can be compared with an earlier one and `--limit` returns the same rows.
+
+- **Processes** from a name, `list`, `by`, `in`, `for`, `orphans`, `stuck` and `tree` start PID ascending.
+- **`--sort`** (`list`, `by`, `in`, `for`, `watch`): `cpu` and `mem` put the biggest first, `pid` and `name` go ascending. Ties come by PID.
+- **Ports** (`ports`): port ascending, ties by PID. `--sort pid` and `--sort name` break ties by port, then PID. A process's `ports` array (`on`, `for`, `why`) is ascending, and the holders of one port are by PID.
+- **The list a command asks you to approve** (`kill`, `stop`, `freeze`, `thaw`, `free`, `unstick`, `orphans --kill`, `stuck --kill`) is the targets in the order typed, then PID ascending within each target. A process that two targets name is listed once, under the first. The preview, the prompt, `--dry-run --json` `processes`, the `processes` of `needs_confirmation` and the receipt (`succeeded`, `failed`) all use this order, `stop`'s `failed` included.
+- **`tree`**: roots and every parent's children are PID ascending, in the human tree and in `--json` alike. With `--ancestors` the targets of a name are PID ascending.
 
 ## Process and port objects
 
