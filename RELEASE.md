@@ -27,11 +27,17 @@ cargo check --target x86_64-pc-windows-msvc --all-targets
 
 ### Oldest Supported Rust
 
-`rust-version` in Cargo.toml is the oldest Rust proc builds with, and `cargo update` can pull in a dependency that needs a newer one. Check it with that version (1.88 at the time of writing), and raise `rust-version` (and CONTRIBUTING.md) if a dependency now needs more:
+`rust-version` in Cargo.toml is the oldest Rust that builds proc. It matters to people who build from source (`cargo install`, distro packages) and to library users; the prebuilt binaries don't depend on it. It is raised only when something proc builds needs a newer Rust:
+
+- **When:** a dependency update needs a newer Rust (the highest `rust_version` among the dependencies goes above ours, or the check below fails), or we decide to use a language or standard-library feature that needs one and it is worth more than the way we have. Never because a new stable came out.
+- **To what:** the lowest version that builds, which is the highest one the dependencies declare (command below) or the version that stabilized the feature. Never to the latest stable.
+- **How:** in the same commit, `rust-version` in Cargo.toml, the version in CONTRIBUTING.md's prerequisites and in the commands below, and a CHANGELOG entry ("building from source needs Rust 1.NN"). Any release may carry it.
 
 ```bash
 rustup toolchain install 1.88 --profile minimal  # One-time setup, the version in Cargo.toml
-cargo +1.88 check --all-targets
+cargo +1.88 check --all-targets                  # The declared floor still builds
+# The highest Rust the dependencies declare; above ours means a raise
+cargo metadata --format-version 1 | jq -r '.packages[].rust_version // empty' | sort -V | tail -1
 ```
 
 ## 2. Manual Testing
