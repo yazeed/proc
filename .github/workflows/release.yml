@@ -269,7 +269,7 @@ jobs:
           cat > Formula/proc.rb << EOF
           class Proc < Formula
             desc "Semantic CLI tool for process management"
-            homepage "https://github.com/yazeed/proc-cli"
+            homepage "https://proc-cli.com"
             version "${VERSION}"
             license "MIT"
 
@@ -343,7 +343,7 @@ jobs:
           {
               "version": "VERSION_PLACEHOLDER",
               "description": "Semantic CLI tool for process management. Target by port, PID, name or path.",
-              "homepage": "https://github.com/yazeed/proc-cli",
+              "homepage": "https://proc-cli.com",
               "license": "MIT",
               "architecture": {
                   "64bit": {

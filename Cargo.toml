@@ -7,11 +7,11 @@ rust-version = "1.88"
 authors = ["Yazeed Al Oyoun <me@yazeed.com>"]
 description = "Semantic CLI tool for process management. Target by port, PID, name or path."
 repository = "https://github.com/yazeed/proc-cli"
-homepage = "https://github.com/yazeed/proc-cli"
+homepage = "https://proc-cli.com"
 documentation = "https://docs.rs/proc-cli"
 license = "MIT"
-keywords = ["process", "management", "port", "pid", "cli"]
-categories = ["command-line-utilities"]
+keywords = ["kill", "lsof", "port", "process", "eaddrinuse"]
+categories = ["command-line-utilities", "development-tools"]
 readme = "README.md"
 
 [[bin]]

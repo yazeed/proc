@@ -4,14 +4,21 @@
   "description": "Semantic CLI tool for process management. Target by port, PID, name or path.",
   "keywords": [
     "process",
-    "management",
     "port",
     "pid",
+    "kill",
+    "kill-port",
+    "lsof",
+    "eaddrinuse",
+    "taskkill",
+    "pkill",
+    "netstat",
+    "process-management",
     "cli"
   ],
   "author": "Yazeed Al Oyoun <me@yazeed.com>",
   "license": "MIT",
-  "homepage": "https://github.com/yazeed/proc-cli",
+  "homepage": "https://proc-cli.com",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/yazeed/proc-cli.git"
