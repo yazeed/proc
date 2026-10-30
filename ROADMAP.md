@@ -12,7 +12,7 @@ Each candidate lists what it would look like, how it fares against the feature t
 
 **Open:** what a comma does once removed: an error that shows the separate-argument form, or treating the whole word as one name.
 
-## Decided: after 2.0.2
+## Decided: before 2.1.0
 
 ### Nix as an official install method
 
@@ -136,14 +136,14 @@ How long someone who has never used proc takes to get a correct answer. Unlike t
 
 ### More ways to install
 
-Each of these puts proc one command away for people who don't use the channels proc has today. nixpkgs is decided (see "Nix as an official install method" above: `nix run nixpkgs#proc-cli` once merged). In order of how soon they can happen:
+Each of these puts proc one command away for people who don't use the channels proc has today. nixpkgs is decided (see "Nix as an official install method" above: `nix run nixpkgs#proc-cli` once merged). winget, `.deb`/`.rpm` and PyPI are decided for after 2.1.0, in this order:
 
-1. **winget**, the package manager that ships with Windows. Its contributing guide sets no popularity bar, and the release's `proc-windows-x86_64.exe` (or its zip) fits as a portable installer. One manifest PR (`wingetcreate` or Komac); after it merges, the `winget-releaser` action submits each release, which needs a fork of winget-pkgs and a classic token (`public_repo`, `workflow`).
-2. **`.deb` and `.rpm` files on GitHub Releases.** No gatekeeper: they are release assets, not a repository. `cargo-deb` builds a `.deb` from the static musl builds; an `.rpm` tool still has to be chosen and tested.
-3. **PyPI as `proc-cli`** (the name is free; `proc` is taken), built with maturin's `bin` bindings so `pip`, `pipx` and `uvx` put `proc` on PATH. Not yet tried in a build.
+1. **winget**, the package manager that ships with Windows. Its contributing guide sets no popularity bar, and the identifier `yazeed.proc-cli` is free. The manifest uses the release's `proc-windows-x86_64.exe.zip` as a zip with a nested portable installer and the command alias `proc` (the shape `sharkdp.fd` uses); a Windows CI job checks it with `winget validate` and `winget install --manifest`. The first version is one hand-written PR to microsoft/winget-pkgs (Microsoft's CLA is signed on it); after it merges, a `winget-releaser` job in release.yml submits each release, which needs a fork of winget-pkgs and a classic token (`public_repo`, `workflow`). winget scans installers with several antivirus engines, which can flag a tool that kills processes.
+2. **`.deb` and `.rpm` files on GitHub Releases.** No gatekeeper: they are release assets, not a repository. nfpm builds both from the static musl binaries in one job, with the man page and completions `proc` prints; each is tested with `dpkg -i` or `rpm -i` in Debian, Ubuntu and Fedora containers on amd64 and arm64. Before shipping, check that no distro package already installs a `/usr/bin/proc`. Without an apt or dnf repository (which needs a signing key) users get no updates.
+3. **PyPI as `proc-cli`** (the name is free; `proc` is a 2020 library that installs no command), built with maturin's `bin` bindings, as crate-ci/typos does, so `pip`, `pipx` and `uv tool` put `proc` on PATH. Wheels for manylinux and musllinux (x86_64, aarch64), macOS (two) and Windows, published with PyPI trusted publishing, which needs a one-time setup on pypi.org. A TestPyPI run comes first.
 4. **homebrew-core**, later: `brew install proc` with no tap, and Linuxbrew. A new formula needs 75 stars when someone else submits it, 225 when the repo's owner does (or 30 / 90 forks or watchers), and must build from source with a `livecheck`. The repo had 62 stars when this was written.
 
-**Feature test:** install, not a feature; it makes the common case (getting proc) one command on each platform. **Open:** none of these builds has been run yet; which `.rpm` tool; whether PyPI is worth a release step of its own.
+**Feature test:** install, not a feature; it makes the common case (getting proc) one command on each platform. **Open:** none of these builds has been run yet; whether winget's antivirus scan accepts proc; whether a distro already ships `/usr/bin/proc`.
 
 ## Proposed changes to PHILOSOPHY.md
 

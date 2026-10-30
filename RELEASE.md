@@ -87,9 +87,7 @@ Update version in ALL of these files:
 - [ ] `docs/_data/release.yml` — `version` field (the website's header, footer, install page and structured data read it)
 - [ ] `Cargo.lock` — rebuild after the bump so its `proc-cli` entry changes, and commit it
 
-- [ ] `pkg/aur/PKGBUILD` — `pkgver` (and `pkgrel=1`). Its `sha256sums` is the checksum of the tag's source tarball, which doesn't exist until the tag does, so it can only be updated after step 5 (see "After the tag" below).
-
-The AUR package is published by hand; CI does not touch it. Until our own `proc` package is on the AUR, the README points Arch users to `proc-bin`, a community package (maintained by Rafael Dominiquini) that installs the release binaries. It declares `conflicts=proc`, so ours would be its alternative.
+`pkg/aur/PKGBUILD` is not bumped. Both AUR packages are community packages maintained by Rafael Dominiquini: `proc` (built from source) and `proc-bin` (the release binaries). The project has no AUR account yet, so the README points Arch users to his packages, and the PKGBUILD stays in the repo for the day the project can co-maintain them (see "After the tag: AUR" below).
 
 ## 4. Documentation
 
@@ -125,15 +123,9 @@ git push origin main vX.Y.Z              # main and this one tag (not --tags, wh
 
 The tag must be `v` + Cargo.toml's version: both the release and Docker workflows stop before publishing anything otherwise. A repository ruleset stops `v*` tags from being moved or deleted once pushed, and `main` from being force-pushed or deleted. If a tag must be redone because nothing was published from it, switch the tag ruleset off (Settings → Rules → Rulesets) for that one fix, then back on.
 
-### After the tag: AUR (manual)
+### After the tag: AUR
 
-Once the tag is pushed and its tarball exists, set `sha256sums` in `pkg/aur/PKGBUILD` to the tarball's checksum and publish to the AUR yourself:
-
-```bash
-curl -fsSL https://github.com/yazeed/proc-cli/archive/vX.Y.Z.tar.gz | shasum -a 256   # put this in sha256sums
-```
-
-Commit the PKGBUILD change to `main`. Then update the AUR repository (`ssh://aur@aur.archlinux.org/proc.git`) with the PKGBUILD and a regenerated `.SRCINFO` (`makepkg --printsrcinfo > .SRCINFO` on Arch), and, once it is live, add it to the README's Arch Linux row next to `proc-bin`.
+Nothing to publish: the AUR's `proc` and `proc-bin` are Rafael Dominiquini's. Step 7 checks that they caught up with the release. Once the project has an AUR account and co-maintains them, this step goes back to updating the AUR repositories with a PKGBUILD whose `sha256sums` is the tag tarball's checksum (`curl -fsSL https://github.com/yazeed/proc-cli/archive/vX.Y.Z.tar.gz | shasum -a 256`) and a regenerated `.SRCINFO` (`makepkg --printsrcinfo > .SRCINFO` on Arch).
 
 ## 6. Verify CI
 
@@ -157,6 +149,9 @@ npm install --prefix /tmp/proc-npm-check proc-cli && /tmp/proc-npm-check/node_mo
 brew update && brew info yazeed/proc/proc # Homebrew
 brew upgrade yazeed/proc/proc && proc --version  # upgrades only proc, nothing else
 docker pull yazeed/proc-cli               # Docker (the same image is also pushed as yazeed/proc)
+
+# AUR (Rafael Dominiquini's packages): both should reach the new version within a few days
+curl -s 'https://aur.archlinux.org/rpc/v5/info?arg[]=proc&arg[]=proc-bin' | jq -r '.results[] | "\(.Name) \(.Version)"'
 
 # Linux binaries are static (musl): they must run on an older distro and on Alpine
 mkdir -p /tmp/proc-linux && cd /tmp/proc-linux
