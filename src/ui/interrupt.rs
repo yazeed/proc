@@ -55,7 +55,7 @@ fn needs() -> MutexGuard<'static, Option<Restore>> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-/// Keeps the terminal state in [`NEEDS`] for as long as it is alive
+/// Keeps the terminal state in `NEEDS` for as long as it is alive
 pub struct Guard(());
 
 impl Guard {

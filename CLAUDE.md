@@ -181,7 +181,15 @@ Pre-commit hook runs `cargo fmt --check` automatically.
 
 ## Unreleased Work
 
-Work is committed and pushed to `main` without a tag, and every change goes under `## [Unreleased]` in `CHANGELOG.md` in the same commit. Docs (`README.md`, `skills/`, `docs/`) are updated with the change, so `main` describes the next release. Nothing is tagged or version-bumped until the maintainer decides to ship; the release then turns `[Unreleased]` into the new version (see RELEASE.md).
+Work is committed and pushed to `main` without a tag, and every change goes under `## [Unreleased]` in `CHANGELOG.md` in the same commit. Every place that describes proc is updated with the change, so `main` describes the next release:
+
+- `README.md`, and `pkg/npm/README.md` (the npm page)
+- `skills/proc-cli/` (`SKILL.md`, `reference.md`) and `.claude-plugin/marketplace.json` descriptions
+- the website, `docs/`: `index.html`, `install.md`, `faq.md`, `skill.md`, `commands/` (`index.md` and each command's page) and `_data/`
+- the Rust docs on docs.rs: `src/lib.rs` and the doc comments of public items
+- `--help`, the man page and completions, which come from the doc comments in `src/cli.rs` and `src/commands/`
+
+To find them, search for what the change makes untrue (the old flag, message, exit code or behaviour) across all of these, not only the file you changed. Nothing is tagged or version-bumped until the maintainer decides to ship; the release then turns `[Unreleased]` into the new version (see RELEASE.md).
 
 ## Releasing
 

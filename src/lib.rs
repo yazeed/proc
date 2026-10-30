@@ -86,7 +86,9 @@
 //! `2` not found, `3` permission denied, `4` invalid input (including unknown flags),
 //! an action this OS does not support, or a command that changes processes run
 //! without `--yes` where nobody can confirm (`--json`, or no terminal): nothing
-//! was changed.
+//! was changed. A signal that ends proc while `watch` has the screen or a
+//! prompt is waiting (SIGINT, SIGTERM, SIGHUP, SIGQUIT) puts the terminal back,
+//! then ends proc by that signal, so a shell shows 128 plus its number.
 
 pub mod cli;
 pub mod commands;

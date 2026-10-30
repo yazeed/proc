@@ -29,6 +29,8 @@ This package downloads the native `proc` binary for your platform from the GitHu
 
 The package has no install script. The download happens the first time you run `proc`, so that run needs network access. To download ahead of time, for example in an image that will run offline, run `node install.js` in the package directory. If the package directory isn't writable, the binary is stored in `~/.cache/proc-cli/<version>` (`%LOCALAPPDATA%\proc-cli\<version>` on Windows).
 
+The `proc` command ends the way the binary did: with its exit code, or, when a signal ended it, by the same signal, so a shell and a script see what they would without npm.
+
 ## License
 
 MIT

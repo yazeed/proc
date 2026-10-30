@@ -15,8 +15,9 @@
 //!   command that already failed keeps its own, more specific exit code.
 //! - Nothing here panics, and nothing writes about a broken pipe.
 //!
-//! The commands print through [`out_println!`], [`out_print!`],
-//! [`err_println!`] and [`err_print!`], or through the writers [`stdout`] and
+//! The commands print through [`out_println!`](crate::out_println!),
+//! [`out_print!`](crate::out_print!), [`err_println!`](crate::err_println!) and
+//! [`err_print!`](crate::err_print!), or through the writers [`stdout`] and
 //! [`stderr`]. The failure is recorded on the stream when it happens, so a
 //! deep helper does not need to pass an error up through every caller; `main`
 //! reads it back once, in [`finish`], and unwinds normally (destructors and
@@ -325,13 +326,13 @@ pub fn recorded(result: io::Result<()>) {
 }
 
 /// Write formatted text to stdout, and a newline after it when `newline` is
-/// set. This is what [`out_print!`] and [`out_println!`] call.
+/// set. This is what [`out_print!`](crate::out_print!) and [`out_println!`](crate::out_println!) call.
 pub fn print_stdout(args: fmt::Arguments<'_>, newline: bool) {
     print_to(&mut stdout(), args, newline);
 }
 
 /// Write formatted text to stderr, and a newline after it when `newline` is
-/// set. This is what [`err_print!`] and [`err_println!`] call.
+/// set. This is what [`err_print!`](crate::err_print!) and [`err_println!`](crate::err_println!) call.
 pub fn print_stderr(args: fmt::Arguments<'_>, newline: bool) {
     print_to(&mut stderr(), args, newline);
 }

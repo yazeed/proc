@@ -12,6 +12,7 @@ cargo clippy --all-targets -- -D warnings      # No warnings, tests included (as
 cargo test                                     # Tests pass
 cargo build --release                          # Release builds
 cargo audit                                    # No security vulnerabilities
+RUSTDOCFLAGS="-D warnings" cargo doc --no-deps # The docs.rs pages build with no broken links
 ```
 
 - [ ] CI is green on main, including "Coverage gate" (100% lines across Linux, macOS and Windows; see CONTRIBUTING.md "Coverage"). A tag release does not wait for it. Locally: `scripts/coverage-local.sh`
@@ -102,7 +103,10 @@ Update and verify all docs are complete:
 - [ ] `skills/proc-cli/SKILL.md` — Agent Skills: new commands, flags, schemas, playbooks (the "proc 2.0 or later" floor stays unless the skill needs a newer proc)
 - [ ] `skills/proc-cli/reference.md` — JSON output schemas match actual output
 - [ ] `SECURITY.md` — supported versions table (new major or minor line)
-- [ ] `docs/commands/` — GitHub Pages: new command pages, index.md updated
+- [ ] `docs/commands/` — GitHub Pages: new command pages, index.md updated (its exit-code table matches the README's)
+- [ ] The rest of the website: `docs/index.html`, `docs/install.md`, `docs/faq.md`, `docs/skill.md`, `docs/_data/`
+- [ ] `pkg/npm/README.md` (the npm page) and the `.claude-plugin/marketplace.json` descriptions
+- [ ] Every surface at once: for each entry in the release's CHANGELOG section, search all of the files above, `src/lib.rs` and the `--help` text for what the entry makes untrue (the old message, exit code or behaviour), and fix what is found. Check the search finds a known mention first
 - [ ] Verify `proc manpage` output includes new commands
 - [ ] Verify `proc completions` includes new commands
 
