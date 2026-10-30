@@ -567,7 +567,9 @@ fn a_stderr_that_cannot_take_a_write_is_exit_1() {
                 normal.code, normal.stderr
             ));
         }
-        if without_numbers(&full.stdout) != without_numbers(&normal.stdout) {
+        // what goes to stdout is there either way (not the same text: `for
+        // {exe}` lists every listener the other cases have running)
+        if full.stdout.is_empty() != normal.stdout.is_empty() {
             return Err(format!(
                 "{hostile_name}: stdout changed with stderr on /dev/full\n\
                  full: {:?}\nnormal: {:?}",

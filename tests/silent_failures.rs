@@ -265,6 +265,91 @@ fn a_deleted_directory_with_a_process_in_it_still_finds_the_process() {
     drop(tmp);
 }
 
+/// The same, typed through a symlink (`/tmp` is `/private/tmp` on macOS): the
+/// part of the path that still exists is resolved, the rest kept as typed
+#[cfg(unix)]
+#[test]
+fn a_deleted_directory_typed_through_a_symlink_still_finds_the_process() {
+    let (tmp, dir) = fresh_dir();
+    let real = dir.join("real");
+    std::fs::create_dir(&real).unwrap();
+    std::os::unix::fs::symlink(&real, dir.join("link")).unwrap();
+    let project = real.join("project");
+    std::fs::create_dir(&project).unwrap();
+    let owned = Owned::start_in(&project);
+    std::fs::remove_dir(&project).unwrap();
+    let typed = dir.join("link").join("project");
+    let typed = typed.to_str().unwrap();
+
+    for args in [
+        &["list", "--in", typed, "--json"][..],
+        &["in", typed, "--json"],
+        &["kill", &owned.pid(), "--in", typed, "--dry-run", "--json"],
+    ] {
+        let (json, code) = run_json(args);
+        assert_eq!(code, 0, "{args:?}: {json}");
+        assert_eq!(
+            listed_pids(&json),
+            vec![u64::from(owned.0.id())],
+            "{args:?}: {json}"
+        );
+    }
+    drop(owned);
+    drop(tmp);
+}
+
+/// An empty argument names nothing; each of these read it as something (the
+/// current directory, a name no process has)
+#[test]
+fn an_empty_argument_is_invalid_input() {
+    for args in [
+        &["by", ""][..],
+        &["list", ""],
+        &["in", ""],
+        &["for", ""],
+        &["list", "--in", ""],
+        &["list", "--in="],
+        &["list", "-i="],
+        &["kill", "1", "--by", ""],
+    ] {
+        let mut args = args.to_vec();
+        args.push("--json");
+        let (json, code) = run_json(&args);
+        assert_eq!(code, 4, "{args:?}: {json}");
+        let error = json["error"].as_str().unwrap();
+        assert!(error.contains("can't be empty"), "{args:?}: {json}");
+    }
+    let (json, _) = run_json(&["list", "--in=", "--json"]);
+    assert!(
+        json["error"].as_str().unwrap().starts_with("--in "),
+        "{json}"
+    );
+}
+
+/// `tree --ancestors` takes `--in` and `--by` as the plain tree does: a
+/// missing directory is exit 4, a target they rule out exit 2
+#[test]
+fn tree_ancestors_keeps_to_in_and_by() {
+    let (_tmp, dir) = fresh_dir();
+    let owned = Owned::start_in(&dir);
+    let pid = owned.pid();
+    let dir_arg = dir.to_str().unwrap();
+    let gone = dir.join("nothing-here");
+
+    let (json, code) = run_json(&["tree", &pid, "-a", "--in", gone.to_str().unwrap(), "--json"]);
+    assert_eq!(code, 4, "{json}");
+    let (json, code) = run_json(&["tree", &pid, "-a", "--by", "no-such-name", "--json"]);
+    assert_eq!(code, 2, "{json}");
+    let (json, code) = run_json(&[
+        "tree", &pid, "-a", "--in", dir_arg, "--by", "listener", "--json",
+    ]);
+    assert_eq!(code, 0, "{json}");
+    assert!(
+        listed_pids(&json).contains(&u64::from(owned.0.id())),
+        "{json}"
+    );
+}
+
 /// A relative path when the current directory is gone has nothing to be
 /// resolved against: say that, instead of an unrelated "not found"
 #[cfg(unix)]
@@ -332,4 +417,78 @@ fn tree_in_without_a_target_shows_only_that_directory() {
     let (json, code) = run_json(&["tree", "--in", dir.to_str().unwrap(), "--json"]);
     assert_eq!(code, 0, "{json}");
     assert_eq!(listed_pids(&json), vec![u64::from(owned.0.id())], "{json}");
+}
+
+/// A process and its parent that both match are shown once: the child inside
+/// the parent's tree, not again as a root of its own
+#[cfg(unix)]
+#[test]
+fn tree_in_shows_a_matching_child_once() {
+    let (_tmp, dir) = fresh_dir();
+    let script = format!("'{}' > /dev/null; true", listener_path().display());
+    let mut shell = Command::new("sh")
+        .args(["-c", &script])
+        .current_dir(&dir)
+        .stdin(Stdio::null())
+        .spawn()
+        .unwrap();
+    let shell_pid = u64::from(shell.id());
+    // wait until the shell has started the listener
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    let json = loop {
+        let (json, _) = run_json(&["tree", "--in", dir.to_str().unwrap(), "--json"]);
+        if listed_pids(&json).len() >= 2 || std::time::Instant::now() > deadline {
+            break json;
+        }
+    };
+    let pids = listed_pids(&json);
+    let child = proc_cli::core::Process::find_all()
+        .unwrap()
+        .into_iter()
+        .find(|p| p.parent_pid == Some(shell.id()))
+        .map(|p| u64::from(p.pid));
+    if let Some(child) = child {
+        let _ = Command::new("kill").arg(child.to_string()).status();
+    }
+    let _ = shell.kill();
+    let _ = shell.wait();
+    assert_eq!(pids.len(), 2, "{json}");
+    assert_eq!(pids[0], shell_pid, "the shell is the one root: {json}");
+    assert_eq!(json["tree"].as_array().unwrap().len(), 1, "{json}");
+}
+
+/// `ports --in` a deleted directory that a process still runs in is that
+/// directory with no ports, not a missing one, when the process listens on
+/// nothing
+#[cfg(unix)]
+#[test]
+fn ports_in_a_deleted_directory_whose_process_listens_on_nothing_is_empty() {
+    let (_tmp, dir) = fresh_dir();
+    let project = dir.join("project");
+    std::fs::create_dir(&project).unwrap();
+    let mut sleeper = Command::new("sleep")
+        .arg("30")
+        .current_dir(&project)
+        .spawn()
+        .unwrap();
+    std::fs::remove_dir(&project).unwrap();
+    let (json, code) = run_json(&["ports", "--in", project.to_str().unwrap(), "--json"]);
+    let _ = sleeper.kill();
+    let _ = sleeper.wait();
+    assert_eq!(code, 0, "{json}");
+    assert_eq!(json["count"], 0, "{json}");
+}
+
+/// `--in` a file that exists says it is not a directory, not that it is missing
+#[test]
+fn in_a_file_is_not_a_directory() {
+    let (_tmp, dir) = fresh_dir();
+    let file = dir.join("file.txt");
+    std::fs::write(&file, "x").unwrap();
+    let (json, code) = run_json(&["list", "--in", file.to_str().unwrap(), "--json"]);
+    assert_eq!(code, 4, "{json}");
+    assert!(
+        json["error"].as_str().unwrap().contains("Not a directory"),
+        "{json}"
+    );
 }

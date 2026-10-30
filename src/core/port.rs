@@ -337,9 +337,12 @@ impl PortInfo {
             .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
             .unwrap_or_default();
 
+        // One process list names every socket: a `tasklist` per socket made
+        // each reading take seconds, and `proc ports --in` run past a minute
+        let names = Self::process_names_windows();
         Ok(Self::parse_netstat_output(
             &[&String::from_utf8_lossy(&v4.stdout), &v6],
-            Self::get_process_name_windows,
+            |pid| names.get(&pid).cloned(),
         ))
     }
 
@@ -392,17 +395,19 @@ impl PortInfo {
         })
     }
 
+    /// What each running process is called, by PID, as `tasklist` names it
+    /// (`listener.exe`)
     #[cfg(target_os = "windows")]
-    fn get_process_name_windows(pid: u32) -> Option<String> {
-        let output = Command::new("tasklist")
-            .args(["/FI", &format!("PID eq {}", pid), "/FO", "CSV", "/NH"])
-            .output()
-            .ok()?;
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let line = stdout.lines().next()?;
-        let name = line.split(',').next()?;
-        Some(escape_control(name.trim_matches('"')).into_owned())
+    fn process_names_windows() -> std::collections::HashMap<u32, String> {
+        let mut sys = sysinfo::System::new();
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+        sys.processes()
+            .iter()
+            .map(|(pid, p)| {
+                let name = p.name().to_string_lossy();
+                (pid.as_u32(), escape_control(&name).into_owned())
+            })
+            .collect()
     }
 
     /// Whether the port is open to the network: bound to every address. A port

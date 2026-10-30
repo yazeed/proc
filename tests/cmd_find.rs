@@ -416,15 +416,13 @@ fn by_ignores_a_word_only_in_the_command_line_and_says_cmd_would_find_it() {
 }
 
 #[test]
-fn by_an_empty_name_finds_nothing_and_does_not_count_command_lines() {
-    // every command line contains the empty string: no hint about them
+fn by_an_empty_name_is_invalid_input_not_a_search() {
+    // "" names nothing; it was a search that found nothing (exit 2), and every
+    // command line contains it, so it must not count them either
     let output = proc_cmd().args(["by", ""]).output().unwrap();
-    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(output.status.code(), Some(4));
     let err = String::from_utf8(output.stderr).unwrap();
-    assert!(
-        err.contains("No process found matching ''"),
-        "stderr: {err}"
-    );
+    assert!(err.contains("can't be empty"), "stderr: {err}");
     assert!(!err.contains("command line"), "stderr: {err}");
 }
 

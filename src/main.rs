@@ -135,15 +135,18 @@ fn run() -> u8 {
     // An argument that is not UTF-8 is invalid input, said before clap sees it:
     // clap's own message for it does not name the argument
     if let Some(arg) = first_non_utf8_arg() {
-        let message =
-            format!("argument '{arg}' is not valid UTF-8; proc takes its arguments as UTF-8");
-        let exit_code = ExitCode::InvalidInput;
-        if wants_json() {
-            print_json_error(&message, exit_code as i32, Some(REASON_INVALID_INPUT), None);
-        } else {
-            err_println!("error: {message}");
-        }
-        return exit_code as u8;
+        return invalid_argument(&format!(
+            "argument '{arg}' is not valid UTF-8; proc takes its arguments as UTF-8"
+        ));
+    }
+
+    // An empty argument names nothing, and every command used to read it as
+    // something: `--in "$DIR"` with DIR unset as the current directory, `in ""`
+    // and `for ""` too, `list ""` as a name no process has
+    if let Some(what) = first_empty_arg() {
+        return invalid_argument(&format!(
+            "{what} can't be empty: an empty value names no process, port, file or directory"
+        ));
     }
 
     let cli = match Cli::try_parse() {
@@ -355,6 +358,31 @@ fn raw_args() -> Vec<String> {
         .skip(1)
         .map(|arg| arg.to_string_lossy().into_owned())
         .collect()
+}
+
+/// Report an argument proc refuses before clap reads the line: exit 4,
+/// `invalid_input`
+fn invalid_argument(message: &str) -> u8 {
+    let exit_code = ExitCode::InvalidInput;
+    if wants_json() {
+        print_json_error(message, exit_code as i32, Some(REASON_INVALID_INPUT), None);
+    } else {
+        err_println!("error: {message}");
+    }
+    exit_code as u8
+}
+
+/// What the first empty argument was given for: the flag of a `--in=` form,
+/// or "an argument" for an empty word (`""`). Run after the UTF-8 check.
+fn first_empty_arg() -> Option<String> {
+    raw_args().into_iter().find_map(|arg| {
+        if arg.is_empty() {
+            return Some("an argument".to_string());
+        }
+        arg.strip_suffix('=')
+            .filter(|flag| flag.starts_with('-'))
+            .map(str::to_string)
+    })
 }
 
 /// The first argument that is not valid UTF-8, in lossy form

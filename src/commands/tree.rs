@@ -79,6 +79,44 @@ pub struct TreeCommand {
 }
 
 impl TreeCommand {
+    /// The matches to draw trees from. A match that a root above it draws in
+    /// its tree (no more than `--depth` levels down) is not a root itself:
+    /// drawing it again showed it twice (a shell and what it starts share a
+    /// cwd, so `--in` matches both). Roots are chosen top down, so a match
+    /// counts as drawn only under one that is drawn. The walk up is bounded,
+    /// so a loop in the parent links cannot hold it.
+    fn topmost<'a>(
+        &self,
+        matches: Vec<&'a Process>,
+        pid_map: &HashMap<u32, &Process>,
+    ) -> Vec<&'a Process> {
+        // each match with the PIDs above it, nearest first
+        let above: Vec<(&Process, Vec<u32>)> = matches
+            .into_iter()
+            .map(|p| {
+                let up = std::iter::successors(p.parent_pid, |ppid| {
+                    pid_map.get(ppid).and_then(|q| q.parent_pid)
+                })
+                .take(pid_map.len())
+                .collect();
+                (p, up)
+            })
+            .collect();
+        let mut top_down: Vec<&(&Process, Vec<u32>)> = above.iter().collect();
+        top_down.sort_by_key(|(_, up)| up.len());
+        let mut roots = std::collections::HashSet::new();
+        for (p, up) in top_down {
+            if !up.iter().take(self.depth).any(|pid| roots.contains(pid)) {
+                roots.insert(p.pid);
+            }
+        }
+        above
+            .into_iter()
+            .filter(|(p, _)| roots.contains(&p.pid))
+            .map(|(p, _)| p)
+            .collect()
+    }
+
     /// Build the set of ancestor PIDs to exclude from name matching.
     ///
     /// Walks up the process tree from the current process to avoid matching
@@ -165,13 +203,31 @@ impl TreeCommand {
             }
         }
 
+        // --in and --by narrow a target's processes. With no target they pick
+        // the processes shown, each with its subtree, as --min-cpu does; they
+        // used to be ignored there, so `tree --in .` printed the whole system
+        let mode = NameMatch::from_flag(self.cmd);
+        let in_dir_filter = resolve_in_dir(&self.in_dir)?;
+        let in_dir_has_any = in_dir_filter
+            .as_ref()
+            .is_some_and(|dir_path| all_processes.iter().any(|p| matches_in_filter(p, dir_path)));
+        crate::core::require_in_dir(&self.in_dir, &in_dir_filter, in_dir_has_any)?;
+        let in_and_by = |p: &Process| {
+            in_dir_filter
+                .as_ref()
+                .is_none_or(|dir_path| matches_in_filter(p, dir_path))
+                && self
+                    .by_name
+                    .as_ref()
+                    .is_none_or(|name| matches_by_filter(p, name, mode))
+        };
+
         // Handle --ancestors mode
         if let Some(target) = ancestry_of {
-            return self.show_ancestors(&printer, target, &pid_map, &all_processes);
+            return self.show_ancestors(&printer, target, &pid_map, &all_processes, &in_and_by);
         }
 
         // Determine target processes
-        let mode = NameMatch::from_flag(self.cmd);
         let target_processes: Vec<&Process> = if let Some(ref target) = self.target {
             // Use unified target resolution
             match parse_target(target) {
@@ -204,23 +260,6 @@ impl TreeCommand {
             Vec::new() // Will show full tree
         };
 
-        // --in and --by narrow a target's processes. With no target they pick
-        // the processes shown, each with its subtree, as --min-cpu does; they
-        // used to be ignored there, so `tree --in .` printed the whole system
-        let in_dir_filter = resolve_in_dir(&self.in_dir)?;
-        let in_dir_has_any = in_dir_filter
-            .as_ref()
-            .is_some_and(|dir_path| all_processes.iter().any(|p| matches_in_filter(p, dir_path)));
-        crate::core::require_in_dir(&self.in_dir, &in_dir_filter, in_dir_has_any)?;
-        let in_and_by = |p: &Process| {
-            in_dir_filter
-                .as_ref()
-                .is_none_or(|dir_path| matches_in_filter(p, dir_path))
-                && self
-                    .by_name
-                    .as_ref()
-                    .is_none_or(|name| matches_by_filter(p, name, mode))
-        };
         let target_processes: Vec<&Process> = if let Some(target) = &self.target {
             let kept: Vec<&Process> = target_processes
                 .into_iter()
@@ -259,10 +298,13 @@ impl TreeCommand {
                     .map(|p| self.build_tree_node(p, &children_map, 0))
                     .collect()
             } else if has_filters {
-                // Show only processes matching filters
-                all_processes
+                // Show only processes matching filters, each once
+                let matches = all_processes
                     .iter()
                     .filter(|p| in_and_by(p) && matches_filters(p))
+                    .collect();
+                self.topmost(matches, &pid_map)
+                    .into_iter()
                     .map(|p| self.build_tree_node(p, &children_map, 0))
                     .collect()
             } else {
@@ -322,8 +364,9 @@ impl TreeCommand {
                 plural(filtered.len())
             );
 
-            for (i, proc) in filtered.iter().enumerate() {
-                let is_last = i == filtered.len() - 1;
+            let roots = self.topmost(filtered, &pid_map);
+            for (i, proc) in roots.iter().enumerate() {
+                let is_last = i == roots.len() - 1;
                 self.print_tree(proc, &children_map, "", is_last, 0);
             }
         } else {
@@ -467,13 +510,14 @@ impl TreeCommand {
         target: &str,
         pid_map: &HashMap<u32, &Process>,
         all_processes: &[Process],
+        in_and_by: &dyn Fn(&Process) -> bool,
     ) -> Result<()> {
         use crate::core::{parse_target, resolve_target, TargetType};
 
         let mode = NameMatch::from_flag(self.cmd);
 
         // Resolve target to processes
-        let target_processes = match parse_target(target) {
+        let target_processes: Vec<Process> = match parse_target(target) {
             TargetType::Port(_) | TargetType::Pid(_) => resolve_target(target, mode)?,
             TargetType::Name(ref pattern) => {
                 let ancestor_pids = Self::ancestor_pids(all_processes);
@@ -485,6 +529,17 @@ impl TreeCommand {
                 named.into_iter().cloned().collect()
             }
         };
+        // --in and --by guard the target here too, as without --ancestors
+        let target_processes: Vec<Process> = target_processes
+            .into_iter()
+            .filter(|p| in_and_by(p))
+            .collect();
+        if target_processes.is_empty() {
+            return Err(ProcError::FilteredOut {
+                target: target.to_string(),
+                reason: "no matches with specified filters".to_string(),
+            });
+        }
 
         if self.json {
             let ancestry_output: Vec<AncestryNode> = target_processes

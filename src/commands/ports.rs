@@ -129,7 +129,16 @@ impl PortsCommand {
                 )
             });
         }
-        crate::core::require_in_dir(&self.in_dir, &in_dir_filter, !ports.is_empty())?;
+        // A deleted directory is kept while a process still runs in it, also
+        // one that listens on nothing: it is a directory, with no ports
+        let runs_there = |dir: &Path| {
+            Process::find_all().is_ok_and(|all| all.iter().any(|p| cwd_within(Some(p), dir)))
+        };
+        let found_any = !ports.is_empty()
+            || in_dir_filter
+                .as_ref()
+                .is_some_and(|dir| !dir.is_dir() && runs_there(dir));
+        crate::core::require_in_dir(&self.in_dir, &in_dir_filter, found_any)?;
 
         // Filter by address exposure
         if self.exposed {

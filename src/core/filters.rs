@@ -207,9 +207,13 @@ pub fn require_in_dir(
     found_any: bool,
 ) -> Result<()> {
     match (in_dir, dir) {
-        (Some(typed), Some(dir)) if !found_any && !dir.is_dir() => Err(ProcError::InvalidInput(
-            format!("Directory not found: {typed}"),
-        )),
+        (Some(typed), Some(dir)) if !found_any && !dir.is_dir() => {
+            Err(ProcError::InvalidInput(if dir.exists() {
+                format!("Not a directory: {typed}")
+            } else {
+                format!("Directory not found: {typed}")
+            }))
+        }
         _ => Ok(()),
     }
 }
@@ -234,22 +238,41 @@ pub fn current_dir_for(path: &Path) -> Result<PathBuf> {
 /// real case, long names and plain `D:\` form, so the path the user typed
 /// (symlinked, `RUNNER~1`, forward slashes) must be put in that form before
 /// the two are compared. A directory that does not exist (it may still be the
-/// cwd of a process that outlived it) is only made absolute. A relative path
-/// needs the current directory: when that is gone it is an error.
+/// cwd of a process that outlived it) has the part that does exist put in that
+/// form and the rest kept as typed, so a deleted `/tmp/x` still reads
+/// `/private/tmp/x`. A relative path needs the current directory: when that is
+/// gone it is an error.
 pub fn resolve_dir(path: PathBuf) -> Result<PathBuf> {
     let absolute = if path.is_relative() {
         current_dir_for(&path)?.join(path)
     } else {
         path
     };
-    Ok(match absolute.canonicalize() {
-        // Windows returns `\\?\D:\...`, but processes report `D:\...`
-        #[cfg(windows)]
-        Ok(canonical) => PathBuf::from(strip_verbatim_prefix(&canonical.to_string_lossy())),
-        #[cfg(not(windows))]
-        Ok(canonical) => canonical,
-        Err(_) => absolute,
-    })
+    let found = absolute
+        .ancestors()
+        .find_map(|part| part.canonicalize().ok().map(|real| (part, real)));
+    Ok(found.map_or(absolute.clone(), |(part, real)| {
+        let mut real = as_reported(real);
+        real.extend(
+            absolute
+                .strip_prefix(part)
+                .unwrap_or(Path::new(""))
+                .components(),
+        );
+        real
+    }))
+}
+
+/// A canonical path in the form processes report: Windows returns
+/// `\\?\D:\...`, but processes report `D:\...`
+#[cfg(windows)]
+fn as_reported(canonical: PathBuf) -> PathBuf {
+    PathBuf::from(strip_verbatim_prefix(&canonical.to_string_lossy()))
+}
+
+#[cfg(not(windows))]
+fn as_reported(canonical: PathBuf) -> PathBuf {
+    canonical
 }
 
 /// Turn a Windows verbatim path into the plain form processes report.
@@ -350,10 +373,18 @@ mod resolve_tests {
     }
 
     #[test]
-    fn a_missing_absolute_path_is_kept_as_written() {
+    fn a_missing_absolute_path_keeps_its_missing_part_as_written() {
+        // the part that exists in canonical form (macOS: /var is
+        // /private/var), the rest as typed, so a deleted directory still
+        // reads the way its processes report it
         let tmp = tempfile::tempdir().unwrap();
-        let gone = tmp.path().join("gone");
-        assert_eq!(resolve_dir(gone.clone()).unwrap(), gone);
+        let gone = tmp.path().join("gone").join("deeper");
+        let expected = PathBuf::from(super::strip_verbatim_prefix(
+            &tmp.path().canonicalize().unwrap().to_string_lossy(),
+        ))
+        .join("gone")
+        .join("deeper");
+        assert_eq!(resolve_dir(gone).unwrap(), expected);
     }
 
     #[test]
