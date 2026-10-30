@@ -130,6 +130,7 @@ Filters (a command takes only those its `--help` lists):
 | `--in [dir]` (`-i`; bare means `.`) | all except `why`, `free`, `in` |
 | `--by <name>` (`-b`) | all except `why`, `free`, `by`, `list` |
 | `--cmd` (substring of name or command line) | every command that takes a name or `--by` |
+| `--start-time <secs>` (one PID target; the `start_time` from its JSON) | `kill`, `stop`, `freeze`, `thaw`, `wait`, `info`, `unstick` |
 | `--min-cpu <pct>`, `--min-mem <MB>` | `list`, `by`, `in`, `for`, `tree`, `watch` |
 | `--status <s>` (running, sleeping, stopped, zombie), `--min-uptime <secs>` | `list`, `by`, `in`, `for`, `tree` |
 | `--parent <pid>` | `list`, `by`, `in` |
@@ -153,7 +154,7 @@ Filters (a command takes only those its `--help` lists):
 - **`--in`** matches the process's current working directory, including subdirectories, not prefixes (`/a/t1` does not match `/a/t1x`). Paths resolve through symlinks. A broad directory scopes nothing (`/` kept all 185 `node` processes). Processes with no readable cwd never match. A process whose cwd is `/` matches only `--in=/`. It takes the next word as its value unless that starts with `-`; `proc kill --in 123 456` reads `123` as the directory, so write targets first or `--in=<dir>`.
 - **`--in` with a missing directory:** every command with `--in` exits 4 (`reason: invalid_input`, `Directory not found`, or `Not a directory` for a file), `on` included. A deleted directory that processes still run in is not missing: it finds them, so leftovers can be cleaned up, also through a symlinked spelling such as `/tmp/x` on macOS. A relative `--in` when the current directory has been deleted exits 4 (`the current directory no longer exists`). `--in` compares the real directory, so a name shown with an escaped control character (`a\nb`) still matches only its own directory.
 - **An empty argument** exits 4 on every command: a target (`""`, `","`: `a target can't be empty`), a name, a path, or a flag's value (`--in ""`, `--in=`). An unset `"$DIR"` is an error, never the current directory. `tree <name>` that matches nothing exits 2, and `tree -a` with no target exits 4.
-- **A PID with `--in <its cwd> --by <its name>`** is a guard: a mismatch exits 2 with the PID in the error, which names the guard that ruled it out: `No process found matching '1234' (ruled out by --by node)`. A PID that no process holds reads `No process found matching '1234'` with nothing after it. The same holds for `kill`, `stop`, `freeze`, `thaw`, `wait`, `info` and `unstick` with targets; `on` and `tree` say `(no matches with specified filters)`.
+- **A PID with `--start-time <its start_time>`, `--in <its cwd>` or `--by <its name>`** is a guard: a mismatch exits 2 with the PID in the error, which names the guards that ruled it out: `No process found matching '1234' (ruled out by --by node)`. `--start-time` is the exact one (a new process on a reused PID can have the same name and directory): it takes one PID target (anything else exits 4), matches to within a second, and rules out a process whose start time can't be read (on macOS, another user's). A PID that no process holds reads `No process found matching '1234'` with nothing after it. The same holds for `kill`, `stop`, `freeze`, `thaw`, `wait`, `info` and `unstick` with targets; `on` and `tree` say `(no matches with specified filters)`.
 - **Plain patterns** for `list` are exact names (or substrings with `--cmd`), never regular expressions.
 
 ## Order of results
@@ -350,7 +351,7 @@ Both list candidates. Neither proves that a process is hung or abandoned. Never 
 - **Missing targets are in `not_found`**, never an error when at least one target was found. Check it after every action.
 - **Several holders of a port.** `on :PORT` lists all in `processes`; `free` stops all and says nothing about which. On `freed: false`, list again.
 - **Children.** `kill` and `stop` signal the PID you give, not its children. Orphaned children keep running with parent 1.
-- **PID reuse.** Before each signal proc checks the process's start time, so a delayed SIGKILL cannot reach a new process that reused the PID.
+- **PID reuse.** Before each signal proc checks the process's start time, so a delayed SIGKILL cannot reach a new process that reused the PID. Between two commands that check is yours: pass the `start_time` you recorded with `--start-time`, and a PID that a new process holds exits 2.
 - **Deleted directories.** A process can keep running in a removed directory (a deleted worktree). `proc in <dir>` lists them and `cwd` shows the plain path.
 - **`proc on 3000`** looks up PID 3000, not port 3000. Ports need the colon.
 - **`proc free`** accepts ports only (`proc free nginx` exits 4).

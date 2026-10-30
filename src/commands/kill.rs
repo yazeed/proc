@@ -13,8 +13,8 @@
 //! Commas still work (`proc kill :3000,:8080`) but are deprecated.
 
 use crate::core::{
-    apply_to_each, flatten_targets, guard_targets, resolve_targets_excluding_self, NameMatch,
-    Process,
+    apply_to_each, flatten_targets, guard_targets, resolve_targets_excluding_self, Guards,
+    NameMatch, Process,
 };
 use crate::error::{ProcError, Result};
 use crate::ui::Printer;
@@ -56,6 +56,11 @@ pub struct KillCommand {
     #[arg(long = "by", short = 'b')]
     pub by_name: Option<String>,
 
+    /// Act only if the process still has this start time (Unix seconds, `start_time`
+    /// in its JSON): a PID the OS gave to a new process is ruled out. One PID target
+    #[arg(long = "start-time", value_name = "SECONDS")]
+    pub start_time: Option<u64>,
+
     /// Match name targets and --by as a substring of the process name or full command line (like pkill -f)
     #[arg(long)]
     pub cmd: bool,
@@ -81,13 +86,8 @@ impl KillCommand {
         let mut processes = resolved.processes;
 
         // Apply --in and --by: guards that rule out everything found say so
-        guard_targets(
-            &mut processes,
-            &self.target,
-            &self.in_dir,
-            &self.by_name,
-            mode,
-        )?;
+        let guards = Guards::new(&self.in_dir, &self.by_name, self.start_time);
+        guard_targets(&mut processes, &self.target, &guards, mode)?;
 
         // Real CPU readings whenever the list is shown or returned (dry run, the
         // confirmation prompt, or the error for a missing `--yes`); only `--yes`

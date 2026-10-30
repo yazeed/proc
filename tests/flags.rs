@@ -200,6 +200,8 @@ const CASES: &[Case] = &[
     code("info", &["{part}", "--cmd"], 0),
     code("info", &["{part}"], 2),
     code("info", &[MISSING_PID], 2),
+    // a start time no running process has: the guard rules it out
+    code("info", &["{pid}", "--start-time", "1"], 2),
     // ---- ports ----
     code("ports", &[], 0),
     code("ports", &["--json"], 0),
@@ -274,6 +276,7 @@ const CASES: &[Case] = &[
     code("kill", &["{pid}", "--yes", "--by", "{part}", "--cmd"], 0),
     code("kill", &["{pid}", "--yes", "--by", "{part}"], 2),
     code("kill", &["{pid}", "--yes", "--by", "no-such-process-name"], 2),
+    code("kill", &["{pid}", "--yes", "--start-time", "1"], 2),
     code("kill", &["{pid}", "--json"], 4),
     code("kill", &[MISSING_PID, "--yes"], 2),
     // ---- stop ----
@@ -290,6 +293,7 @@ const CASES: &[Case] = &[
     code("stop", &["{pid}", "--yes", "--by", "{name}", "--verbose"], 0),
     code("stop", &["{part}", "--cmd", "--dry-run"], 0),
     code("stop", &["{pid}", "--yes", "--by", "{part}", "--cmd"], 0),
+    code("stop", &["{pid}", "--yes", "--start-time", "1"], 2),
     per_os("stop", &["{pid}", "--yes", "--signal", "TERM"], 0, 4),
     per_os("stop", &["{pid}", "-y", "-S", "HUP"], 0, 4),
     code("stop", &["{pid}", "--yes", "--signal", "NOT-A-SIGNAL"], 4),
@@ -317,6 +321,7 @@ const CASES: &[Case] = &[
     per_os("freeze", &["{pid}", "--yes", "--by", "{name}"], 0, 4),
     per_os("freeze", &["{part}", "--cmd", "--dry-run"], 0, 4),
     per_os("freeze", &["{pid}", "--yes", "--by", "{part}", "--cmd"], 0, 4),
+    per_os("freeze", &["{pid}", "--yes", "--start-time", "1"], 2, 4),
     code("freeze", &["{pid}", "--json"], 4),
     // ---- thaw (SIGCONT: unsupported on Windows) ----
     per_os("thaw", &["{pid}", "--yes"], 0, 4),
@@ -331,6 +336,7 @@ const CASES: &[Case] = &[
     per_os("thaw", &["{pid}", "--yes", "--by", "{name}"], 0, 4),
     per_os("thaw", &["{part}", "--cmd", "--dry-run"], 0, 4),
     per_os("thaw", &["{pid}", "--yes", "--by", "{part}", "--cmd"], 0, 4),
+    per_os("thaw", &["{pid}", "--yes", "--start-time", "1"], 2, 4),
     code("thaw", &["{pid}", "--json"], 4),
     // ---- unstick (has a Windows path: it can only terminate, and only with --force) ----
     code("unstick", &["{pid}", "--yes"], 0),
@@ -345,6 +351,7 @@ const CASES: &[Case] = &[
     code("unstick", &["--dry-run", "--in", "{dir}", "--by", "{part}", "--cmd"], 0),
     code("unstick", &["--yes", "--in", "{dir}", "-t", "1"], 0),
     code("unstick", &["--yes", "-i", "{dir}", "-b", "{name}"], 0),
+    code("unstick", &["{pid}", "--yes", "--start-time", "1"], 2),
     code("unstick", &["{pid}", "--json"], 4),
     // ---- orphans (unsupported on Windows: nothing re-parents an orphan) ----
     per_os("orphans", &["--in", "{dir}"], 0, 4),
@@ -384,6 +391,7 @@ const CASES: &[Case] = &[
     code("why", &[MISSING_PID], 2),
     // ---- wait (the owned process never exits, so each one times out) ----
     code("wait", &["{pid}", "--timeout", "1"], 1),
+    code("wait", &["{pid}", "--timeout", "1", "--start-time", "1"], 2),
     code("wait", &[":{port}", "-t", "1", "--json"], 1),
     code("wait", &["{pid}", "-t", "1", "-j"], 1),
     code("wait", &["{pid}", "-t", "1", "--interval", "1", "--quiet"], 1),

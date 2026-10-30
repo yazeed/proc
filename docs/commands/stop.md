@@ -26,6 +26,7 @@ Several targets are separate arguments. Comma-separated lists (`:3000,:8080`) st
 | `--signal <name>` | `-S` | Send a different first signal instead of SIGTERM (macOS and Linux; exits 4 on Windows). A process still running after `--timeout` is force-killed, so this is not a way to send a signal and leave the process running |
 | `--in [<dir>]` | `-i` | Filter by directory. Takes the next word as its directory unless it starts with `-` (bare `--in` is the current directory, `--in=DIR` is explicit) |
 | `--by <name>` | `-b` | Filter by process name (the whole name, ignoring case) |
+| `--start-time <secs>` | | Stop only if the PID still belongs to the process that started then (its `start_time` from the JSON, to the second). One PID target. A PID a new process holds exits 2 |
 | `--cmd` | | Match name targets and `--by` as a substring of the process name or full command line (like `pkill -f`) |
 | `--json` | `-j` | Output as JSON |
 | `--verbose` | `-v` | Show extra details |

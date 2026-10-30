@@ -2,7 +2,10 @@
 //!
 //! Provides common filter resolution logic to avoid duplication.
 
-use crate::core::{matches_name, NameMatch, PortInfo, Process, ProcessStatus};
+use crate::core::{
+    flatten_targets, matches_name, parse_target, NameMatch, PortInfo, Process, ProcessStatus,
+    TargetType,
+};
 use crate::error::{ProcError, Result};
 use clap::ValueEnum;
 use std::path::{Path, PathBuf};
@@ -180,31 +183,85 @@ pub fn apply_filters(
     Ok(())
 }
 
-/// [`apply_filters`] for a command that acts on targets. `--by` and `--in` are
-/// guards there (act on this PID only if it is still this process), so when
-/// they rule out everything the targets found, that is an error that names
-/// them: it used to read like a plain not-found, so an agent took a mistyped
-/// guard for a recycled PID and left the process running.
+/// The guards a command that acts on targets takes: what the caller saw of the
+/// process it means
+#[derive(Debug, Clone, Default)]
+pub struct Guards {
+    /// `--in`: the directory it runs in
+    pub in_dir: Option<String>,
+    /// `--by`: its name
+    pub by_name: Option<String>,
+    /// `--start-time`: when it started, Unix seconds (`start_time` in its JSON)
+    pub start_time: Option<u64>,
+}
+
+impl Guards {
+    /// The guards from a command's `--in`, `--by` and `--start-time`
+    pub fn new(in_dir: &Option<String>, by_name: &Option<String>, start_time: Option<u64>) -> Self {
+        Guards {
+            in_dir: in_dir.clone(),
+            by_name: by_name.clone(),
+            start_time,
+        }
+    }
+}
+
+/// [`apply_filters`] for a command that acts on targets. `--by`, `--in` and
+/// `--start-time` are guards there (act on this PID only if it is still this
+/// process), so when they rule out everything the targets found, that is an
+/// error that names them: it used to read like a plain not-found, so an agent
+/// took a mistyped guard for a recycled PID and left the process running.
+///
+/// `--start-time` is the exact guard: the OS gives a PID to a new process once
+/// the old one exits (a busy Mac cycles through every PID in under an hour), and
+/// a new process can have the same name and directory. It describes one
+/// process, so it takes one PID target, and a process whose start time can't
+/// be read (another user's, on macOS) can't be confirmed, so it is ruled out.
 pub fn guard_targets(
     processes: &mut Vec<Process>,
     targets: &[String],
-    in_dir: &Option<String>,
-    by_name: &Option<String>,
+    guards: &Guards,
     mode: NameMatch,
 ) -> Result<()> {
-    let found_any = !processes.is_empty();
-    apply_filters(processes, in_dir, by_name, mode)?;
-    if found_any && processes.is_empty() {
-        let guards: Vec<String> = [("--by", by_name), ("--in", in_dir)]
-            .into_iter()
-            .filter_map(|(flag, value)| value.as_ref().map(|v| format!("{flag} {v}")))
-            .collect();
-        return Err(ProcError::FilteredOut {
-            target: targets.join(" "),
-            reason: format!("ruled out by {}", guards.join(" and ")),
-        });
+    if guards.start_time.is_some() {
+        let all = flatten_targets(targets);
+        if !matches!(all.as_slice(), [one] if matches!(parse_target(one), TargetType::Pid(_))) {
+            return Err(ProcError::InvalidInput(
+                "--start-time describes one process: give it a single PID target".to_string(),
+            ));
+        }
     }
-    Ok(())
+    let found = processes.clone();
+    apply_filters(processes, &guards.in_dir, &guards.by_name, mode)?;
+    let started = |p: &Process, seen: u64| p.start_time.is_some_and(|now| now.abs_diff(seen) <= 1);
+    if let Some(seen) = guards.start_time {
+        processes.retain(|p| started(p, seen));
+    }
+    if found.is_empty() || !processes.is_empty() {
+        return Ok(());
+    }
+    // Name the guards that rule out a process the targets found, not every
+    // guard given: `--by sleep --start-time 1` on a sleep is the start time
+    let mut ruled_out = Vec::new();
+    if let Some(name) = &guards.by_name {
+        if found.iter().any(|p| !matches_by_filter(p, name, mode)) {
+            ruled_out.push(format!("--by {name}"));
+        }
+    }
+    if let (Some(typed), Some(dir)) = (&guards.in_dir, resolve_in_dir(&guards.in_dir)?) {
+        if found.iter().any(|p| !matches_in_filter(p, &dir)) {
+            ruled_out.push(format!("--in {typed}"));
+        }
+    }
+    if let Some(seen) = guards.start_time {
+        if found.iter().any(|p| !started(p, seen)) {
+            ruled_out.push(format!("--start-time {seen}"));
+        }
+    }
+    Err(ProcError::FilteredOut {
+        target: targets.join(" "),
+        reason: format!("ruled out by {}", ruled_out.join(" and ")),
+    })
 }
 
 /// Resolve an `--in` directory filter to the form processes report their cwd in.
@@ -478,6 +535,39 @@ mod match_tests {
     #[test]
     fn a_process_with_no_working_directory_is_not_in_any_directory() {
         assert!(!matches_in_filter(&bare_process(), Path::new("/")));
+    }
+
+    /// macOS hides other users' start times: such a process can't be confirmed,
+    /// so `--start-time` rules it out instead of letting it through
+    #[test]
+    fn a_start_time_guard_rules_out_a_process_whose_start_time_is_unknown() {
+        let guards = super::Guards::new(&None, &None, Some(1_700_000_000));
+        let mut processes = vec![bare_process()];
+        let error = super::guard_targets(
+            &mut processes,
+            &["1".to_string()],
+            &guards,
+            NameMatch::Exact,
+        )
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("(ruled out by --start-time 1700000000)"),
+            "{error}"
+        );
+
+        let mut known = bare_process();
+        known.start_time = Some(1_700_000_000);
+        let mut processes = vec![known];
+        super::guard_targets(
+            &mut processes,
+            &["1".to_string()],
+            &guards,
+            NameMatch::Exact,
+        )
+        .unwrap();
+        assert_eq!(processes.len(), 1);
     }
 
     #[test]

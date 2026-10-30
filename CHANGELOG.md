@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
+### Added
+
+- **`--start-time` acts on a PID only while it belongs to the process you saw.** The OS gives a PID to a new process once the old one exits, and on a busy Mac every PID comes around again in well under an hour (2,700 new PIDs a minute measured on one developer machine, with PIDs up to 99,999). An agent that recorded a PID and acted on it later could end someone else's process: `--by` and `--in` only catch a new process with another name or directory, and comparing `start_time` by hand happens before the action, not at it. `proc stop 1234 --start-time 1700000000 --yes` now acts only if PID 1234's process started then (to the second); otherwise it exits 2 with `(ruled out by --start-time 1700000000)`. The value is the `start_time` in the process's JSON. It takes one PID target (anything else is exit 4), and a process whose start time can't be read (on macOS, another user's) is ruled out rather than trusted. On `kill`, `stop`, `freeze`, `thaw`, `wait`, `info` and `unstick`. The skill's rules 1 and 7 and its playbooks use it, and `evals.md` has a task for a reused PID (14). A guard error now names only the guards that ruled the process out, so `--by sleep --start-time 1` on a `sleep` names the start time alone. **Library API:** `guard_targets` takes a `Guards` (`in_dir`, `by_name`, `start_time`), and the seven commands' structs have a `start_time` field
 
 - **The website's changelog is written from CHANGELOG.md.** A release's notes were copied into `docs/changelog.md` by hand, with the website's headings. `scripts/changelog_site.py` now writes every release newer than the website's own history from CHANGELOG.md, and CI fails when the two differ, so a release's notes are written once
 - **The agent skill reads a guard's exit 2 for what it is** (rule 7): a plain not-found means the PID is gone, while "ruled out by" means a process holds the PID and fails the guard, so the agent checks it with `proc info` before moving on. `evals.md` has a task for it (13)

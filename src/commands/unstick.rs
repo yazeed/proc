@@ -23,8 +23,8 @@
 //! Commas still work (`proc unstick :3000,1234`) but are deprecated.
 
 use crate::core::{
-    apply_filters, flatten_targets, guard_targets, resolve_targets_excluding_self, NameMatch,
-    Process, Resolved,
+    apply_filters, flatten_targets, guard_targets, resolve_targets_excluding_self, Guards,
+    NameMatch, Process, Resolved,
 };
 use crate::error::{ExitCode, ProcError, Result};
 use crate::ui::{format_duration, must_confirm, plural, prompt, Printer};
@@ -77,6 +77,11 @@ pub struct UnstickCommand {
     #[arg(long = "by", short = 'b')]
     pub by_name: Option<String>,
 
+    /// Act only if the process still has this start time (Unix seconds, `start_time`
+    /// in its JSON): a PID the OS gave to a new process is ruled out. One PID target
+    #[arg(long = "start-time", value_name = "SECONDS", requires = "target")]
+    pub start_time: Option<u64>,
+
     /// Match name targets and --by as a substring of the process name or full command line (like pkill -f)
     #[arg(long)]
     pub cmd: bool,
@@ -117,7 +122,8 @@ impl UnstickCommand {
         if self.target.is_empty() {
             apply_filters(&mut stuck, &self.in_dir, &self.by_name, mode)?;
         } else {
-            guard_targets(&mut stuck, &self.target, &self.in_dir, &self.by_name, mode)?;
+            let guards = Guards::new(&self.in_dir, &self.by_name, self.start_time);
+            guard_targets(&mut stuck, &self.target, &guards, mode)?;
         }
 
         // Only the search can come up empty: targets that match nothing, or

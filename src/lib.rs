@@ -11,6 +11,7 @@
 //! - **Working Directory**: See which project folder a process is running from
 //! - **Terminal-Adaptive Tables**: Tables adjust to terminal width automatically
 //! - **Consistent Filters**: `--in`, `--by`, `--min-uptime`, `--parent`, `--range`, `--sort`, `--limit`
+//! - **PID Guards**: `proc stop 1234 --start-time 1700000000 --yes` - act only while the PID still belongs to the process you saw (with `--in` and `--by` for its directory and name)
 //! - **JSON Output**: `--json` on every command except `completions` and `manpage` — one `{action, success, ...}` document per run (`watch` streams one per refresh), and `success: false` always exits non-zero
 //! - **Custom Signals**: `proc stop worker --signal INT` - send a different first signal; whatever is still running after `--timeout` is force-killed
 //! - **Real-Time Monitoring**: `proc watch` / `proc top` - live process table (TUI on a terminal, NDJSON stream with `--json`)

@@ -10,7 +10,9 @@
 //!
 //! Commas still work (`proc info :3000,:8080`) but are deprecated.
 
-use crate::core::{flatten_targets, guard_targets, resolve_target, NameMatch, Process, Resolved};
+use crate::core::{
+    flatten_targets, guard_targets, resolve_target, Guards, NameMatch, Process, Resolved,
+};
 use crate::error::{ExitCode, ProcError, Result};
 use crate::out_print;
 use crate::ui::{colorize_status, format_duration, format_memory, Printer};
@@ -43,6 +45,11 @@ pub struct InfoCommand {
     #[arg(long = "by", short = 'b')]
     pub by_name: Option<String>,
 
+    /// Show it only if the process still has this start time (Unix seconds, `start_time`
+    /// in its JSON): a PID the OS gave to a new process is ruled out. One PID target
+    #[arg(long = "start-time", value_name = "SECONDS")]
+    pub start_time: Option<u64>,
+
     /// Match name targets and --by as a substring of the process name or full command line (like pkill -f)
     #[arg(long)]
     pub cmd: bool,
@@ -66,7 +73,8 @@ impl InfoCommand {
         } = resolved;
 
         // Apply --in and --by: guards that rule out everything found say so
-        guard_targets(&mut found, &self.targets, &self.in_dir, &self.by_name, mode)?;
+        let guards = Guards::new(&self.in_dir, &self.by_name, self.start_time);
+        guard_targets(&mut found, &self.targets, &guards, mode)?;
 
         // Real CPU readings for what's shown
         Process::measure_cpu(&mut found);

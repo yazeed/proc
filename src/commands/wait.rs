@@ -11,7 +11,7 @@
 //!
 //! Commas still work (`proc wait node,python`) but are deprecated.
 
-use crate::core::{flatten_targets, guard_targets, resolve_targets, NameMatch, Process};
+use crate::core::{flatten_targets, guard_targets, resolve_targets, Guards, NameMatch, Process};
 use crate::error::{ExitCode, ProcError, Result};
 use crate::out_println;
 use crate::ui::{format_duration, plural, Printer};
@@ -51,6 +51,11 @@ pub struct WaitCommand {
     #[arg(long = "by", short = 'b')]
     pub by_name: Option<String>,
 
+    /// Wait only if the process still has this start time (Unix seconds, `start_time`
+    /// in its JSON): a PID the OS gave to a new process is ruled out. One PID target
+    #[arg(long = "start-time", value_name = "SECONDS")]
+    pub start_time: Option<u64>,
+
     /// Match name targets and --by as a substring of the process name or full command line (like pkill -f)
     #[arg(long)]
     pub cmd: bool,
@@ -80,13 +85,8 @@ impl WaitCommand {
         let mut processes = resolved.processes;
 
         // Apply --in and --by: guards that rule out everything found say so
-        guard_targets(
-            &mut processes,
-            &self.target,
-            &self.in_dir,
-            &self.by_name,
-            mode,
-        )?;
+        let guards = Guards::new(&self.in_dir, &self.by_name, self.start_time);
+        guard_targets(&mut processes, &self.target, &guards, mode)?;
 
         if processes.is_empty() {
             return Err(ProcError::ProcessNotFound(self.target.join(" ")));

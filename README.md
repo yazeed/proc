@@ -194,6 +194,7 @@ Not every filter is on every command. `--in`, `--by` (short `-b`) and `--cmd` wo
 | `--in [<path>]`, `-i` | Working directory (bare `--in` is the current directory) | nearly every command |
 | `--by <name>`, `-b` | Process name (the whole name, like a name target) | nearly every command |
 | `--cmd` | Match names and `--by` as a substring of the name or full command line (like `pkill -f`) | every command that takes a name or `--by` |
+| `--start-time <s>` | Only the process that started then (`start_time` from its JSON): a PID the OS has since given to a new process exits 2. One PID target | `kill`, `stop`, `freeze`, `thaw`, `wait`, `info`, `unstick` |
 | `--path <path>`, `-p` | Executable path | `list` |
 | `--min-cpu <n>` | Processes using >n% CPU | `by`, `in`, `for`, `list`, `tree`, `watch` |
 | `--min-mem <n>` | Processes using >n MB memory | `by`, `in`, `for`, `list`, `tree`, `watch` |

@@ -28,6 +28,7 @@ A name is the whole process name, ignoring case, the way `killall` and `pkill` r
 | `--graceful` | `-g` | Send SIGTERM instead of SIGKILL. On Windows it asks the program to close its windows, so a console program refuses (exit 1); use [`proc stop`](stop) for a stop that escalates |
 | `--in [<dir>]` | `-i` | Filter by directory. Takes the next word as its directory unless it starts with `-` (bare `--in` is the current directory, `--in=DIR` is explicit) |
 | `--by <name>` | `-b` | Filter by process name (the whole name, ignoring case) |
+| `--start-time <secs>` | | Kill only if the PID still belongs to the process that started then (its `start_time` from the JSON, to the second). One PID target. A PID a new process holds exits 2 |
 | `--cmd` | | Match name targets and `--by` as a substring of the process name or full command line (like `pkill -f`) |
 | `--json` | `-j` | Output as JSON |
 | `--verbose` | `-v` | Show extra details |

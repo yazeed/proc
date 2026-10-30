@@ -549,3 +549,74 @@ fn a_guard_that_rules_out_the_target_names_itself() {
     let (json, code) = run_json(&["info", &pid, "--json"]);
     assert_eq!(code, 0, "{json}");
 }
+
+/// `--start-time` acts on a PID only while it belongs to the process that
+/// started then: the OS gives a PID to a new process once the old one exits,
+/// and the new one can have the same name and directory as the old
+#[test]
+fn start_time_guards_one_pid_exactly() {
+    let (_tmp, dir) = fresh_dir();
+    let owned = Owned::start_in(&dir);
+    let pid = owned.pid();
+    let (json, _) = run_json(&["info", &pid, "--json"]);
+    let started = json["processes"][0]["start_time"].as_u64().unwrap();
+    let at = |offset: i64| (started as i64 + offset).to_string();
+
+    // the start time it has, or a second off it: the preview lists it
+    for seen in [at(0), at(1), at(-1)] {
+        let (json, code) = run_json(&["kill", &pid, "--start-time", &seen, "--dry-run", "--json"]);
+        assert_eq!(code, 0, "{seen}: {json}");
+        assert_eq!(listed_pids(&json), vec![u64::from(owned.0.id())], "{json}");
+    }
+
+    // another start time: ruled out, and only that guard is named
+    let wrong = at(-60);
+    let (json, code) = run_json(&[
+        "kill",
+        &pid,
+        "--by",
+        "listener",
+        "--start-time",
+        &wrong,
+        "--dry-run",
+        "--json",
+    ]);
+    assert_eq!(code, 2, "{json}");
+    let error = json["error"].as_str().unwrap();
+    assert!(
+        error.contains(&format!("(ruled out by --start-time {wrong})")),
+        "{json}"
+    );
+
+    // it describes one process: one PID target, nothing else
+    let mine = std::process::id().to_string();
+    for args in [
+        vec![
+            "kill",
+            &pid,
+            &mine,
+            "--start-time",
+            "1",
+            "--dry-run",
+            "--json",
+        ],
+        vec![
+            "kill",
+            "listener",
+            "--start-time",
+            "1",
+            "--dry-run",
+            "--json",
+        ],
+        vec!["kill", ":1", "--start-time", "1", "--dry-run", "--json"],
+        vec!["unstick", "--start-time", "1", "--dry-run", "--json"],
+    ] {
+        let (json, code) = run_json(&args);
+        assert_eq!(code, 4, "{args:?}: {json}");
+        assert_eq!(json["reason"], "invalid_input", "{args:?}: {json}");
+    }
+
+    // nothing above touched the process
+    let (json, code) = run_json(&["info", &pid, "--start-time", &at(0), "--json"]);
+    assert_eq!(code, 0, "{json}");
+}
