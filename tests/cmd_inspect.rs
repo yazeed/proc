@@ -1237,6 +1237,24 @@ fn manpage_prints_the_man_page() {
     assert!(out.contains("proc\\-why"), "the why command: {out}");
 }
 
+/// The title line (`.TH`) names the version line of `--version` alone. The
+/// whole `--version` text has a URL and the licence on lines of their own,
+/// which left the title's quote open and showed them under the title in `man`
+#[test]
+fn the_man_page_title_names_only_the_version() {
+    let (out, _, code) = run_text(&["manpage"]);
+    assert_eq!(code, 0);
+    let (version, _, _) = run_text(&["--version"]);
+    let version = version.lines().next().unwrap();
+    let title = out.lines().find(|l| l.starts_with(".TH ")).unwrap();
+    assert!(title.contains(&format!("\"{version}\"")), "{title}");
+    assert_eq!(title.matches('"').count() % 2, 0, "an open quote: {title}");
+    assert!(
+        !out.contains("https://github.com/yazeed/proc-cli\n"),
+        "{out}"
+    );
+}
+
 // --- main: usage errors -------------------------------------------------------
 
 #[test]
