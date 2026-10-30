@@ -8,11 +8,11 @@
 //!
 //! While a [`Guard`] is alive, SIGINT, SIGTERM, SIGHUP and SIGQUIT (on Windows
 //! Ctrl-C, Ctrl-Break and a closing console) are caught, the terminal is put
-//! back, and proc exits with the status a shell reports for a process that the
-//! signal killed: 128 plus the signal number (130 for Ctrl-C, 143 for SIGTERM,
-//! 129 for SIGHUP, 131 for SIGQUIT; 130 for everything on Windows). A signal is
-//! how a person ends a program, so it is not one of proc's own exit codes, and
-//! nothing is printed.
+//! back, and proc ends by that same signal, so a shell reports 128 plus the
+//! signal number (130 for Ctrl-C, 143 for SIGTERM, 129 for SIGHUP, 131 for
+//! SIGQUIT) and knows a signal ended it: Ctrl-C stops a script's loop. Windows
+//! has no signals, so there proc exits with 130. A signal is how a person ends
+//! a program, so it is not one of proc's own exit codes, and nothing is printed.
 //!
 //! The signal is not handled in the signal handler, which may not take a lock
 //! or allocate: `signal-hook` only records it, and a thread of ours that waits
@@ -162,6 +162,30 @@ fn block_signals(block: bool) {
 #[cfg(not(unix))]
 fn block_signals(_: bool) {}
 
+/// Start `command`'s child with no signal blocked. While a guard is alive this
+/// thread blocks the signals that end proc, and a child inherits the mask (the
+/// standard library keeps it), so an `lsof` that `watch` runs on a refresh
+/// could not be stopped by Ctrl-C, SIGTERM, SIGHUP or SIGQUIT.
+#[cfg(unix)]
+pub fn unblocked_in_child(command: &mut std::process::Command) -> &mut std::process::Command {
+    use std::os::unix::process::CommandExt;
+    // SAFETY: the hook runs in the child between fork and exec, and calls only
+    // sigemptyset and pthread_sigmask, which are async-signal-safe
+    unsafe { command.pre_exec(unblock_all) }
+}
+
+/// Block no signal on the calling thread
+#[cfg(unix)]
+fn unblock_all() -> std::io::Result<()> {
+    // SAFETY: an empty set, applied to this thread only
+    unsafe {
+        let mut set = std::mem::MaybeUninit::<libc::sigset_t>::uninit();
+        libc::sigemptyset(set.as_mut_ptr());
+        libc::pthread_sigmask(libc::SIG_SETMASK, set.as_ptr(), std::ptr::null_mut());
+    }
+    Ok(())
+}
+
 /// The signals that end proc, here and in `listen`
 #[cfg(unix)]
 const LISTENED: [i32; 4] = [
@@ -178,12 +202,36 @@ pub fn ctrl_c() {
 }
 
 fn exit_with(code: i32) {
+    // End by the signal itself, as a program without this handler would. A
+    // shell then knows the signal ended proc: Ctrl-C stops a script's loop,
+    // which an exit status of 130 does not, though it reads the same. `exit`
+    // is for Windows, which has no signals.
+    #[cfg(unix)]
+    {
+        write_coverage();
+        let _ = signal_hook::low_level::emulate_default_handler(code - 128);
+    }
     std::process::exit(code)
 }
 
-/// For each signal that arrives: put the terminal right, then end proc with
-/// the status a shell shows for a process that signal killed. `end` is
-/// [`exit_with`]; a test passes something that does not exit.
+/// A process that a signal ends writes no coverage profile, so a coverage
+/// build writes it first: the tests that end proc by a signal are the only
+/// ones that run this part of it
+#[cfg(all(unix, coverage))]
+fn write_coverage() {
+    extern "C" {
+        fn __llvm_profile_write_file() -> libc::c_int;
+    }
+    // SAFETY: the profiler runtime that every coverage build links defines it
+    unsafe { __llvm_profile_write_file() };
+}
+
+#[cfg(all(unix, not(coverage)))]
+fn write_coverage() {}
+
+/// For each signal that arrives: put the terminal right, then end proc by it.
+/// `end` gets 128 plus the signal's number and is [`exit_with`]; a test passes
+/// something that does not exit.
 fn serve(signals: impl Iterator<Item = i32>, end: impl Fn(i32)) {
     for signal in signals {
         put_right();
@@ -239,5 +287,26 @@ mod tests {
         assert!(needs().is_some());
         drop(Guard(()));
         assert!(needs().is_none());
+    }
+
+    // A child started while a guard blocks the signals can still be ended by
+    // them. `sleep` keeps the default action, so a blocked SIGTERM would leave
+    // it running for the whole minute.
+    #[cfg(unix)]
+    #[test]
+    fn a_child_started_while_the_signals_are_blocked_can_still_be_ended() {
+        use std::os::unix::process::ExitStatusExt;
+        block_signals(true);
+        let child = unblocked_in_child(&mut std::process::Command::new("sleep"))
+            .arg("60")
+            .spawn();
+        // The parent half of the test leaves this thread as it found it
+        let _ = unblock_all();
+        let mut child = child.unwrap();
+        unsafe { libc::kill(child.id() as i32, libc::SIGTERM) };
+        let start = std::time::Instant::now();
+        let status = child.wait().unwrap();
+        assert_eq!(status.signal(), Some(libc::SIGTERM));
+        assert!(start.elapsed() < std::time::Duration::from_secs(10));
     }
 }

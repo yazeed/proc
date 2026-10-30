@@ -2,6 +2,7 @@
 
 const { spawn } = require("child_process");
 const fs = require("fs");
+const os = require("os");
 const { install, binaryPath, cacheDir } = require("./install.js");
 
 /**
@@ -41,8 +42,14 @@ resolveBinary()
     });
 
     child.on("exit", (code, signal) => {
-      // Killed by a signal: report failure instead of success
-      process.exit(signal ? 1 : code);
+      if (signal) {
+        // End by the same signal, as proc did, so a shell knows a signal
+        // ended it (Ctrl-C stops a script's loop); 128 plus its number if
+        // this process survives it
+        process.kill(process.pid, signal);
+        process.exit(128 + (os.constants.signals[signal] || 0));
+      }
+      process.exit(code);
     });
   })
   .catch((err) => {

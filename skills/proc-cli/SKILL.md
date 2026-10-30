@@ -122,7 +122,7 @@ Both are leads, not verdicts. `stuck` flags any process that has run over 300 se
 
 A signal the OS refuses (a process of another user) is reported in `failed` with exit 1, not as exit 3. Treat it as "this process is not mine": stop and ask.
 
-Exit 129, 130, 131 or 143 is not a result of the command: a signal (SIGHUP, SIGINT, SIGQUIT, SIGTERM) ended proc, after it put the terminal back. Nothing was changed by a prompt that had not been answered; check with `proc info` before assuming anything.
+Exit 129, 130, 131 or 143 in a shell (ended by signal 1, 2, 3 or 15, if you ran proc directly) is not a result of the command: a signal (SIGHUP, SIGINT, SIGQUIT, SIGTERM) ended proc, after it put the terminal back. Nothing was changed by a prompt that had not been answered; check with `proc info` before assuming anything.
 
 A prompt that cannot show its list of processes (stdout and stderr both unusable) asks nothing and exits 4 with `needs_confirmation`, so a `y` is never given blind. Agents do not answer prompts: preview with `--dry-run --json`, then pass `--yes` for approved PIDs.
 

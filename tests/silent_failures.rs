@@ -273,6 +273,7 @@ fn a_relative_path_in_a_deleted_current_directory_says_so() {
     for args in [
         &["for", "./x", "--json"][..],
         &["list", "--in", "sub", "--json"],
+        &["in", "sub", "--json"],
     ] {
         let script = format!(
             "cd '{}' && rmdir '{}' && exec '{}' {}",

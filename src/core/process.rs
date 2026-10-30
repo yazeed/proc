@@ -560,7 +560,7 @@ impl Process {
     fn find_by_open_file_with(lsof: &str, path: &std::path::Path) -> Result<Vec<Process>> {
         use std::process::Command;
 
-        let output = Command::new(lsof)
+        let output = crate::ui::interrupt::unblocked_in_child(&mut Command::new(lsof))
             .args(["-t", &path.to_string_lossy()]) // -t = terse (PIDs only)
             .output();
 

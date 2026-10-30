@@ -62,6 +62,9 @@ struct PtyRun {
     #[cfg_attr(unix, allow(dead_code))]
     raw: Vec<u8>,
     exit_code: u32,
+    /// The signal that ended the child, as the system names it (`strsignal`)
+    #[cfg(unix)]
+    ended_by: Option<String>,
     /// The terminal's local mode flags (`ICANON`, `ECHO`, ...) when a `Signal`
     /// step was about to send its signal
     #[cfg(unix)]
@@ -354,6 +357,8 @@ fn try_run_program_in_pty(program: &str, args: &[&str], script: &[Step]) -> Resu
         output: text(),
         raw,
         exit_code: status.exit_code(),
+        #[cfg(unix)]
+        ended_by: status.signal().map(String::from),
         #[cfg(unix)]
         mode_at_signal,
         #[cfg(unix)]
@@ -1189,14 +1194,32 @@ fn watch_verbose_lists_the_details() {
 
 // ---- signals and redirected output (Unix: they use a shell and signals) ----
 
-/// The signals that end a program, with the status a shell shows for each
+/// The signals that end a program
 #[cfg(unix)]
-const END_SIGNALS: [(i32, &str, u32); 4] = [
-    (libc::SIGTERM, "SIGTERM", 143),
-    (libc::SIGINT, "SIGINT", 130),
-    (libc::SIGHUP, "SIGHUP", 129),
-    (libc::SIGQUIT, "SIGQUIT", 131),
+const END_SIGNALS: [(i32, &str); 4] = [
+    (libc::SIGTERM, "SIGTERM"),
+    (libc::SIGINT, "SIGINT"),
+    (libc::SIGHUP, "SIGHUP"),
+    (libc::SIGQUIT, "SIGQUIT"),
 ];
+
+/// proc ended by `signal` itself, as a program without a handler would: a
+/// shell then reports 128 plus its number and knows a signal ended proc, so
+/// Ctrl-C stops a script's loop. An exit status of 130 only reads the same.
+#[cfg(unix)]
+fn assert_ended_by(run: &PtyRun, signal: i32, what: &str) {
+    // SAFETY: strsignal returns a valid C string for a valid signal number
+    let name = unsafe { std::ffi::CStr::from_ptr(libc::strsignal(signal)) }
+        .to_string_lossy()
+        .into_owned();
+    assert_eq!(
+        run.ended_by.as_deref(),
+        Some(name.as_str()),
+        "{what}: exit {}: {}",
+        run.exit_code,
+        run.output
+    );
+}
 
 /// Position of the last `needle` in what the terminal received
 #[cfg(unix)]
@@ -1245,13 +1268,13 @@ fn ask_with_stdout(redirect: &str, args: &[&str], script: &[Step]) -> PtyRun {
 #[cfg(unix)]
 #[test]
 fn watch_puts_the_terminal_back_when_a_signal_ends_it() {
-    for (signal, name, status) in END_SIGNALS {
+    for (signal, name) in END_SIGNALS {
         let p = Owned::listener();
         let run = run_in_pty(
             &["watch", &p.pid()],
             &[Step::Expect("Watching"), Step::Raw, Step::Signal(signal)],
         );
-        assert_eq!(run.exit_code, status, "{name}: {}", run.output);
+        assert_ended_by(&run, signal, name);
         assert!(
             !is_cooked(run.mode_at_signal),
             "{name}: watch had turned raw mode on: {:x?}",
@@ -1271,7 +1294,7 @@ fn watch_puts_the_terminal_back_when_a_signal_ends_it() {
 #[cfg(unix)]
 #[test]
 fn a_prompt_puts_the_terminal_back_when_a_signal_ends_it() {
-    for (signal, name, status) in END_SIGNALS {
+    for (signal, name) in END_SIGNALS {
         let mut p = Owned::listener();
         let run = run_in_pty(
             &["kill", &p.pid()],
@@ -1281,7 +1304,7 @@ fn a_prompt_puts_the_terminal_back_when_a_signal_ends_it() {
                 Step::Signal(signal),
             ],
         );
-        assert_eq!(run.exit_code, status, "{name}: {}", run.output);
+        assert_ended_by(&run, signal, name);
         assert!(
             !is_cooked(run.mode_at_signal),
             "{name}: the prompt had turned line editing and echo off: {:x?}",
@@ -1304,7 +1327,9 @@ fn ctrl_c_at_a_prompt_puts_the_terminal_back() {
             Step::Send("\x03"),
         ],
     );
-    assert_eq!(run.exit_code, 130, "{}", run.output);
+    // Ctrl+C typed at the prompt is a key, not a signal, and still ends proc
+    // the way the signal would
+    assert_ended_by(&run, libc::SIGINT, "Ctrl+C");
     assert_terminal_back(&run, "Ctrl+C");
     assert!(p.alive(), "Ctrl+C killed the target");
 }

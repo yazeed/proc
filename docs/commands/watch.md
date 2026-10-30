@@ -17,7 +17,7 @@ proc watch :3000 :8080 node  # watch several targets together
 
 Several targets are separate arguments. Comma-separated lists (`:3000,:8080`) still work but are deprecated.
 
-Press `q`, `Esc`, or `Ctrl+C` to exit. The terminal is always restored cleanly: also when a signal ends watch (`kill`, closing the window) or when it panics. A signal ends proc with the status a shell shows for it: 130 for `Ctrl+C`/SIGINT, 143 for SIGTERM, 129 for SIGHUP and 131 for SIGQUIT (130 for any Ctrl+C, Ctrl+Break or closing console on Windows).
+Press `q`, `Esc`, or `Ctrl+C` to exit. The terminal is always restored cleanly: also when a signal ends watch (`kill`, closing the window) or when it panics. proc then ends by that same signal, so a shell shows 130 for `Ctrl+C`/SIGINT, 143 for SIGTERM, 129 for SIGHUP and 131 for SIGQUIT (130 for any Ctrl+C, Ctrl+Break or closing console on Windows).
 
 The table has the same columns as `proc list`, including uptime on terminals at least 100 columns wide.
 

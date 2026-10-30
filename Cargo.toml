@@ -107,3 +107,7 @@ opt-level = 0
 
 [profile.test]
 opt-level = 1
+
+# cargo-llvm-cov builds with cfg(coverage)
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(coverage)"] }

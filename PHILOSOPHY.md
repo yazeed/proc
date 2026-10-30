@@ -56,7 +56,7 @@ Nouns observe state. Verbs change state.
 You don't "run ports"—you look at ports. You don't "observe kill"—you kill.
 
 ### One Contract for People, Scripts and Agents
-Every process and port command speaks JSON with `--json`: one document (`watch` streams one per refresh), with `action` and `success`, and exit codes that always mean the same thing (0 success, 1 error, 2 not found, 3 permission denied, 4 nothing was done: invalid input, a confirmation is needed, or the OS doesn't support it). A shell script, a CI job and an AI agent read proc the same way a person does, without parsing tables.
+Every process and port command speaks JSON with `--json`: one document (`watch` streams one per refresh), with `action` and `success`, and exit codes that always mean the same thing (0 success, 1 error, 2 not found, 3 permission denied, 4 nothing was done: invalid input, a confirmation is needed, or the OS doesn't support it). Being interrupted is not a result: a signal ends proc by that signal, so the shell reports 128 plus its number. A shell script, a CI job and an AI agent read proc the same way a person does, without parsing tables.
 
 proc composes like any Unix tool: its output pipes into `jq`, `head` or the next command, and a reader that stops early ends proc quietly. Nothing needs a terminal except a question for a person, so the same command runs in a script, a cron job or CI, where a command that changes processes needs `--yes` and automation never acts by accident.
 

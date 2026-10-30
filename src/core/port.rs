@@ -71,7 +71,7 @@ impl PortInfo {
     fn get_listening_macos() -> Result<Vec<PortInfo>> {
         // Use lsof on macOS - only TCP LISTEN sockets. `+c 0` prints the whole
         // command name; by default lsof cuts it to 9 characters
-        let output = Command::new("lsof")
+        let output = crate::ui::interrupt::unblocked_in_child(&mut Command::new("lsof"))
             .args(["+c", "0", "-iTCP", "-sTCP:LISTEN", "-P", "-n"])
             .output()
             .map_err(|e| ProcError::SystemError(format!("Failed to run lsof: {}", e)))?;
