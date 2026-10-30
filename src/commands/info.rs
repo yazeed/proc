@@ -66,7 +66,7 @@ impl InfoCommand {
         } = resolved;
 
         // Apply --in and --by filters
-        apply_filters(&mut found, &self.in_dir, &self.by_name, mode);
+        apply_filters(&mut found, &self.in_dir, &self.by_name, mode)?;
 
         // Real CPU readings for what's shown
         Process::measure_cpu(&mut found);

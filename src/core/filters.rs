@@ -3,6 +3,7 @@
 //! Provides common filter resolution logic to avoid duplication.
 
 use crate::core::{matches_name, NameMatch, PortInfo, Process, ProcessStatus};
+use crate::error::{ProcError, Result};
 use clap::ValueEnum;
 use std::path::{Path, PathBuf};
 
@@ -102,13 +103,12 @@ pub fn matches_by_filter(process: &Process, pattern: &str, mode: NameMatch) -> b
     matches_name(pattern, &process.names(), mode)
 }
 
-/// Check if a process matches an `--in` directory filter.
+/// Check if a process matches an `--in` directory filter. Compares the real
+/// working directory, not the escaped text shown for it (see [`Process::raw_cwd`]).
 pub fn matches_in_filter(process: &Process, dir_path: &std::path::Path) -> bool {
-    if let Some(ref cwd) = process.cwd {
-        cwd_within(cwd, dir_path)
-    } else {
-        false
-    }
+    process
+        .raw_cwd()
+        .is_some_and(|cwd| cwd_within(cwd, dir_path))
 }
 
 /// Whether a process's cwd is `dir` or under it.
@@ -158,8 +158,12 @@ pub fn apply_filters(
     in_dir: &Option<String>,
     by_name: &Option<String>,
     mode: NameMatch,
-) {
-    let in_dir_filter = resolve_in_dir(in_dir);
+) -> Result<()> {
+    let in_dir_filter = resolve_in_dir(in_dir)?;
+    let in_dir_has_any = in_dir_filter
+        .as_ref()
+        .is_some_and(|dir_path| processes.iter().any(|p| matches_in_filter(p, dir_path)));
+    require_in_dir(in_dir, &in_dir_filter, in_dir_has_any)?;
     processes.retain(|p| {
         if let Some(ref dir_path) = in_dir_filter {
             if !matches_in_filter(p, dir_path) {
@@ -173,19 +177,52 @@ pub fn apply_filters(
         }
         true
     });
+    Ok(())
 }
 
 /// Resolve an `--in` directory filter to the form processes report their cwd in.
 ///
 /// Handles "." (current directory), relative paths, and absolute paths, then
 /// resolves symlinks (see [`resolve_dir`]).
-pub fn resolve_in_dir(in_dir: &Option<String>) -> Option<PathBuf> {
-    in_dir.as_ref().map(|p| {
-        if p == "." {
-            resolve_dir(std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
-        } else {
-            resolve_dir(PathBuf::from(p))
-        }
+///
+/// Every command that takes `--in` resolves it here, so they all refuse a
+/// relative path when the current directory is gone (exit 4, `invalid_input`):
+/// there is nothing to resolve it against. A directory that does not exist is
+/// not refused here, because processes can still run in a deleted directory;
+/// see [`require_in_dir`].
+pub fn resolve_in_dir(in_dir: &Option<String>) -> Result<Option<PathBuf>> {
+    let Some(typed) = in_dir else {
+        return Ok(None);
+    };
+    Ok(Some(resolve_dir(PathBuf::from(typed))?))
+}
+
+/// Refuse an `--in` directory that does not exist when nothing was found in
+/// it (exit 4, `invalid_input`, `Directory not found: <path as typed>`): that
+/// is a typo, not an empty directory. A deleted directory that processes still
+/// run in is kept, so its leftovers can be found, as `proc in` does.
+pub fn require_in_dir(
+    in_dir: &Option<String>,
+    dir: &Option<PathBuf>,
+    found_any: bool,
+) -> Result<()> {
+    match (in_dir, dir) {
+        (Some(typed), Some(dir)) if !found_any && !dir.is_dir() => Err(ProcError::InvalidInput(
+            format!("Directory not found: {typed}"),
+        )),
+        _ => Ok(()),
+    }
+}
+
+/// The current directory, for resolving the relative `path` the user typed.
+/// When the directory proc runs in was deleted there is nothing to resolve
+/// against; say that, rather than let the lookup fail as an unrelated error.
+pub fn current_dir_for(path: &Path) -> Result<PathBuf> {
+    std::env::current_dir().map_err(|err| {
+        ProcError::InvalidInput(format!(
+            "Cannot resolve '{}': the current directory no longer exists or can't be read ({err})",
+            path.display()
+        ))
     })
 }
 
@@ -197,23 +234,22 @@ pub fn resolve_in_dir(in_dir: &Option<String>) -> Option<PathBuf> {
 /// real case, long names and plain `D:\` form, so the path the user typed
 /// (symlinked, `RUNNER~1`, forward slashes) must be put in that form before
 /// the two are compared. A directory that does not exist (it may still be the
-/// cwd of a process that outlived it) is only made absolute.
-pub fn resolve_dir(path: PathBuf) -> PathBuf {
+/// cwd of a process that outlived it) is only made absolute. A relative path
+/// needs the current directory: when that is gone it is an error.
+pub fn resolve_dir(path: PathBuf) -> Result<PathBuf> {
     let absolute = if path.is_relative() {
-        std::env::current_dir()
-            .unwrap_or_else(|_| PathBuf::from("."))
-            .join(path)
+        current_dir_for(&path)?.join(path)
     } else {
         path
     };
-    match absolute.canonicalize() {
+    Ok(match absolute.canonicalize() {
         // Windows returns `\\?\D:\...`, but processes report `D:\...`
         #[cfg(windows)]
         Ok(canonical) => PathBuf::from(strip_verbatim_prefix(&canonical.to_string_lossy())),
         #[cfg(not(windows))]
         Ok(canonical) => canonical,
         Err(_) => absolute,
-    }
+    })
 }
 
 /// Turn a Windows verbatim path into the plain form processes report.
@@ -280,13 +316,13 @@ mod resolve_tests {
 
     #[test]
     fn no_filter_resolves_to_nothing() {
-        assert_eq!(resolve_in_dir(&None), None);
+        assert_eq!(resolve_in_dir(&None).unwrap(), None);
     }
 
     #[test]
     fn a_dot_is_the_current_directory() {
         let cwd = std::env::current_dir().unwrap().canonicalize().unwrap();
-        let resolved = resolve_in_dir(&Some(".".to_string())).unwrap();
+        let resolved = resolve_in_dir(&Some(".".to_string())).unwrap().unwrap();
         assert_eq!(resolved.canonicalize().unwrap(), cwd);
         assert!(resolved.is_absolute());
     }
@@ -299,7 +335,7 @@ mod resolve_tests {
             .join("src")
             .canonicalize()
             .unwrap();
-        let resolved = resolve_in_dir(&Some("src".to_string())).unwrap();
+        let resolved = resolve_in_dir(&Some("src".to_string())).unwrap().unwrap();
         assert_eq!(resolved.canonicalize().unwrap(), expected);
         assert!(resolved.is_absolute());
     }
@@ -308,7 +344,7 @@ mod resolve_tests {
     fn a_missing_relative_path_is_only_made_absolute() {
         let expected = std::env::current_dir().unwrap().join("no-such-dir-8f3a");
         assert_eq!(
-            resolve_in_dir(&Some("no-such-dir-8f3a".to_string())),
+            resolve_in_dir(&Some("no-such-dir-8f3a".to_string())).unwrap(),
             Some(expected)
         );
     }
@@ -317,7 +353,7 @@ mod resolve_tests {
     fn a_missing_absolute_path_is_kept_as_written() {
         let tmp = tempfile::tempdir().unwrap();
         let gone = tmp.path().join("gone");
-        assert_eq!(resolve_dir(gone.clone()), gone);
+        assert_eq!(resolve_dir(gone.clone()).unwrap(), gone);
     }
 
     #[test]
@@ -326,7 +362,7 @@ mod resolve_tests {
         let expected = PathBuf::from(super::strip_verbatim_prefix(
             &tmp.path().canonicalize().unwrap().to_string_lossy(),
         ));
-        assert_eq!(resolve_dir(tmp.path().to_path_buf()), expected);
+        assert_eq!(resolve_dir(tmp.path().to_path_buf()).unwrap(), expected);
     }
 
     #[cfg(unix)]
@@ -337,7 +373,7 @@ mod resolve_tests {
         std::fs::create_dir(&target).unwrap();
         let link = tmp.path().join("link");
         std::os::unix::fs::symlink(&target, &link).unwrap();
-        assert_eq!(resolve_dir(link), target.canonicalize().unwrap());
+        assert_eq!(resolve_dir(link).unwrap(), target.canonicalize().unwrap());
     }
 }
 
@@ -430,15 +466,15 @@ mod match_tests {
         let by = Some("node".to_string());
 
         let mut exact = both.clone();
-        apply_filters(&mut exact, &None, &by, EXACT);
+        apply_filters(&mut exact, &None, &by, EXACT).unwrap();
         assert_eq!(exact.iter().map(|p| p.pid).collect::<Vec<_>>(), vec![3]);
 
         let mut cmd = both.clone();
-        apply_filters(&mut cmd, &None, &by, CMD);
+        apply_filters(&mut cmd, &None, &by, CMD).unwrap();
         assert_eq!(cmd.iter().map(|p| p.pid).collect::<Vec<_>>(), vec![2, 3]);
 
         let mut unfiltered = both;
-        apply_filters(&mut unfiltered, &None, &None, EXACT);
+        apply_filters(&mut unfiltered, &None, &None, EXACT).unwrap();
         assert_eq!(unfiltered.len(), 2);
     }
 }

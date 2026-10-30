@@ -115,7 +115,7 @@ impl UnstickCommand {
             &self.in_dir,
             &self.by_name,
             NameMatch::from_flag(self.cmd),
-        );
+        )?;
 
         if stuck.is_empty() {
             // An explicit target filtered down to nothing is "not found", like other commands

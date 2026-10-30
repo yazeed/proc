@@ -70,7 +70,7 @@ impl OrphansCommand {
             &self.in_dir,
             &self.by_name,
             NameMatch::from_flag(self.cmd),
-        );
+        )?;
 
         // Real CPU readings for every view that shows or returns the list; only
         // `--kill --json --yes` (no dry run) goes straight to killing

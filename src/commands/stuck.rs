@@ -77,7 +77,7 @@ impl StuckCommand {
             &self.in_dir,
             &self.by_name,
             NameMatch::from_flag(self.cmd),
-        );
+        )?;
 
         if processes.is_empty() {
             printer.print_empty_result(

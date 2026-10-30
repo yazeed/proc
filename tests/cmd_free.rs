@@ -353,6 +353,7 @@ fn free_json_reports_a_port_that_stays_in_use() {
 fn free_with_no_port_in_the_target_is_invalid() {
     let (json, code) = run_json(&["free", ",", "--json"]);
     assert_eq!(code, 4, "{json}");
+    assert_eq!(json["reason"], "invalid_input", "{json}");
     let error = json["error"].as_str().unwrap();
-    assert!(error.contains("No port targets specified"), "{error}");
+    assert!(error.contains("a target can't be empty"), "{error}");
 }

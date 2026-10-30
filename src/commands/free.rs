@@ -88,12 +88,10 @@ impl FreeCommand {
         // the JSON results list the ports that matched nothing
         let printer = printer.with_not_found(&not_found);
 
+        // Targets are required, never empty (the parser refuses "" and ","),
+        // and only ports (checked above), so with no holders every port is in
+        // `not_found`: all of them are already free
         if port_processes.is_empty() {
-            if not_found.is_empty() {
-                return Err(ProcError::InvalidInput(
-                    "No port targets specified".to_string(),
-                ));
-            }
             printer.print_empty_result("free", "All specified ports are already free");
             return Ok(());
         }

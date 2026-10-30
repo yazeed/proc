@@ -77,7 +77,7 @@ impl FreezeCommand {
         let mut processes = resolved.processes;
 
         // Apply --in and --by filters
-        apply_filters(&mut processes, &self.in_dir, &self.by_name, mode);
+        apply_filters(&mut processes, &self.in_dir, &self.by_name, mode)?;
 
         // Real CPU readings whenever the list is shown or returned (dry run, the
         // confirmation prompt, or the error for a missing `--yes`); only `--yes`

@@ -23,7 +23,7 @@ use serde::Serialize;
 use std::io::Write;
 
 /// Show what's on a port, or what ports a process is on
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Clone)]
 pub struct OnCommand {
     /// Target(s): :port, PID, or process name (separate arguments for several)
     #[arg(required = true, num_args = 1.., value_parser = crate::core::validate_target_arg)]
@@ -54,6 +54,23 @@ pub struct OnCommand {
 impl OnCommand {
     /// Executes the on command, performing bidirectional port/process lookup.
     pub fn execute(&self) -> Result<()> {
+        // Resolve --in once: a relative directory needs the current one, which
+        // may be gone (an error here), and every check after this one uses the
+        // absolute path. A directory that doesn't exist matches nothing, so its
+        // targets are reported as not found.
+        let in_dir_filter = resolve_in_dir(&self.in_dir)?;
+        let resolved = OnCommand {
+            in_dir: in_dir_filter
+                .as_ref()
+                .and_then(|dir| dir.to_str().map(String::from))
+                .or_else(|| self.in_dir.clone()),
+            ..self.clone()
+        };
+        resolved.run()
+    }
+
+    /// `execute` once `--in` is resolved
+    fn run(&self) -> Result<()> {
         let targets = flatten_targets(&self.target);
 
         // For single target, use original behavior
@@ -147,15 +164,11 @@ impl OnCommand {
 
     /// Check if process matches --in filter
     fn matches_in_filter(&self, proc: &Process) -> bool {
-        if let Some(ref dir_path) = resolve_in_dir(&self.in_dir) {
-            if let Some(ref proc_cwd) = proc.cwd {
-                crate::core::filters::cwd_within(proc_cwd, dir_path)
-            } else {
-                false
-            }
-        } else {
-            true
-        }
+        // `execute` resolved --in to an absolute path, which can't fail again
+        resolve_in_dir(&self.in_dir)
+            .ok()
+            .flatten()
+            .is_none_or(|dir_path| crate::core::filters::matches_in_filter(proc, &dir_path))
     }
 
     /// Check if process matches --by filter

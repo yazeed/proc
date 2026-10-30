@@ -22,8 +22,7 @@ use std::path::Path;
 
 /// Whether the process is known and its working directory is inside `dir`
 fn cwd_within(proc: Option<&Process>, dir: &Path) -> bool {
-    proc.and_then(|p| p.cwd.as_deref())
-        .is_some_and(|cwd| crate::core::filters::cwd_within(cwd, dir))
+    proc.is_some_and(|p| crate::core::filters::matches_in_filter(p, dir))
 }
 
 /// Whether the process behind a port matches `--by`, the way it does in every
@@ -121,14 +120,16 @@ impl PortsCommand {
         }
 
         // Filter by directory if specified
-        if let Some(dir_path) = resolve_in_dir(&self.in_dir) {
+        let in_dir_filter = resolve_in_dir(&self.in_dir)?;
+        if let Some(ref dir_path) = in_dir_filter {
             ports.retain(|p| {
                 cwd_within(
                     Process::find_by_pid(p.pid).ok().flatten().as_ref(),
-                    &dir_path,
+                    dir_path,
                 )
             });
         }
+        crate::core::require_in_dir(&self.in_dir, &in_dir_filter, !ports.is_empty())?;
 
         // Filter by address exposure
         if self.exposed {

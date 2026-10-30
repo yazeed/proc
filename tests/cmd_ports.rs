@@ -665,16 +665,14 @@ fn on_with_nothing_found_echoes_the_targets_as_typed() {
         error.contains("No process found matching '4294967 4294968'"),
         "{error}"
     );
-    // and a target that splits into nothing
+    // a target that splits into nothing is refused while parsing
     let (json, code) = run_json(&["on", ",", ",,", "--json"]);
-    assert_eq!(code, 2, "{json}");
+    assert_eq!(code, 4, "{json}");
+    assert_eq!(json["reason"], "invalid_input", "{json}");
     let error = json["error"].as_str().unwrap();
-    assert!(
-        error.contains("No process found matching ', ,,'"),
-        "{error}"
-    );
+    assert!(error.contains("a target can't be empty"), "{error}");
     let (out, err, code) = run_text(&["on", ",", ",,"]);
-    assert_eq!(code, 2, "{out}{err}");
+    assert_eq!(code, 4, "{out}{err}");
 }
 
 // ---- ports ----

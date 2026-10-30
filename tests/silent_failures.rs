@@ -1,0 +1,330 @@
+//! Failures that used to pass silently now say what went wrong.
+//!
+//! `tree -a` with no target, `tree <unknown name>`, an empty target, an `--in`
+//! directory that does not exist, a relative path when the current directory
+//! is gone, and `--in` against a directory whose name holds a control
+//! character each looked like an answer (exit 0, an empty or a full list).
+//! Every case here only reads, runs `--dry-run`, or acts on a process the test
+//! started.
+
+use clap::CommandFactory;
+use proc_cli::cli::Cli;
+use serde_json::Value;
+use std::io::{BufRead, BufReader};
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command, Stdio};
+use std::time::Duration;
+
+fn proc_cmd() -> assert_cmd::Command {
+    let mut cmd = assert_cmd::Command::cargo_bin("proc").unwrap();
+    cmd.env("NO_COLOR", "1");
+    // a case that wrongly succeeds must not run forever (`watch`)
+    cmd.timeout(Duration::from_secs(20));
+    cmd
+}
+
+/// Runs proc with `args` and returns its JSON document and exit code
+fn run_json(args: &[&str]) -> (Value, i32) {
+    let out = proc_cmd().args(args).output().unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    let json = serde_json::from_str(&text)
+        .unwrap_or_else(|e| panic!("proc {args:?} printed no JSON ({e}): {text}"));
+    (json, out.status.code().unwrap_or(-1))
+}
+
+/// `target/debug/examples/listener[.exe]`, found relative to this test binary
+fn listener_path() -> PathBuf {
+    let mut path = std::env::current_exe().unwrap();
+    path.pop();
+    path.pop();
+    path.push("examples");
+    path.push(format!("listener{}", std::env::consts::EXE_SUFFIX));
+    assert!(path.exists(), "build the example first: {}", path.display());
+    path
+}
+
+/// A listener the test owns, running in `dir`; killed and reaped on drop
+struct Owned(Child);
+
+impl Owned {
+    fn start_in(dir: &Path) -> Self {
+        let mut child = Command::new(listener_path())
+            .current_dir(dir)
+            .stdout(Stdio::piped())
+            .stdin(Stdio::null())
+            .spawn()
+            .expect("spawn the listener example");
+        // the listener prints `PORT <n>` once it is up
+        let mut line = String::new();
+        BufReader::new(child.stdout.take().unwrap())
+            .read_line(&mut line)
+            .unwrap();
+        assert!(line.starts_with("PORT "), "listener printed {line:?}");
+        Owned(child)
+    }
+
+    fn pid(&self) -> String {
+        self.0.id().to_string()
+    }
+}
+
+impl Drop for Owned {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+/// A fresh directory, in the form processes report their cwd in
+fn fresh_dir() -> (tempfile::TempDir, PathBuf) {
+    let tmp = tempfile::tempdir().unwrap();
+    #[cfg(unix)]
+    let dir = tmp.path().canonicalize().unwrap();
+    #[cfg(not(unix))]
+    let dir = tmp.path().to_path_buf();
+    (tmp, dir)
+}
+
+fn listed_pids(json: &Value) -> Vec<u64> {
+    let mut pids = Vec::new();
+    collect_pids(json, &mut pids);
+    pids
+}
+
+fn collect_pids(json: &Value, pids: &mut Vec<u64>) {
+    match json {
+        Value::Object(map) => {
+            if let Some(pid) = map.get("pid").and_then(Value::as_u64) {
+                pids.push(pid);
+            }
+            map.values().for_each(|v| collect_pids(v, pids));
+        }
+        Value::Array(items) => items.iter().for_each(|v| collect_pids(v, pids)),
+        _ => {}
+    }
+}
+
+#[test]
+fn tree_ancestors_without_a_target_is_invalid_input() {
+    let (json, code) = run_json(&["tree", "-a", "--json"]);
+    assert_eq!(code, 4, "{json}");
+    assert_eq!(json["reason"], "invalid_input", "{json}");
+    assert!(
+        json["error"]
+            .as_str()
+            .unwrap()
+            .contains("--ancestors needs a target"),
+        "{json}"
+    );
+
+    let out = proc_cmd().args(["tree", "--ancestors"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(4));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("--ancestors needs a target"));
+}
+
+#[test]
+fn tree_of_a_name_that_matches_nothing_is_not_found() {
+    let (json, code) = run_json(&["tree", "no-such-process-name-7c1e", "--json"]);
+    assert_eq!(code, 2, "{json}");
+    assert_eq!(json["success"], false, "{json}");
+
+    let (json, code) = run_json(&["tree", "no-such-process-name-7c1e", "-a", "--json"]);
+    assert_eq!(code, 2, "{json}");
+}
+
+#[test]
+fn an_empty_target_is_invalid_input() {
+    for target in ["", ",", " , "] {
+        for command in ["watch", "kill", "on", "info"] {
+            let (json, code) = run_json(&[command, target, "--json"]);
+            assert_eq!(code, 4, "{command} {target:?}: {json}");
+            assert_eq!(
+                json["reason"], "invalid_input",
+                "{command} {target:?}: {json}"
+            );
+            assert!(
+                json["error"].as_str().unwrap().contains("can't be empty"),
+                "{command} {target:?}: {json}"
+            );
+        }
+    }
+}
+
+/// The arguments each command with `--in` runs with, before `--in`. `{pid}` is
+/// a process the test owns; changing commands only preview. The exit code a
+/// missing `--in` directory gives: 4, except `on`, whose targets are simply not
+/// found there (2).
+fn in_dir_rows(pid: &str, exe: &str) -> Vec<(&'static str, Vec<String>, i32)> {
+    let s = |args: &[&str]| {
+        args.iter()
+            .map(|a| a.replace("{pid}", pid).replace("{exe}", exe))
+            .collect::<Vec<_>>()
+    };
+    vec![
+        ("on", s(&["on", "{pid}"]), 2),
+        ("for", s(&["for", "{exe}"]), 4),
+        ("by", s(&["by", "listener"]), 4),
+        ("list", s(&["list"]), 4),
+        ("info", s(&["info", "{pid}"]), 4),
+        ("ports", s(&["ports"]), 4),
+        ("kill", s(&["kill", "{pid}", "--dry-run"]), 4),
+        ("stop", s(&["stop", "{pid}", "--dry-run"]), 4),
+        ("tree", s(&["tree"]), 4),
+        ("watch", s(&["watch"]), 4),
+        ("stuck", s(&["stuck"]), 4),
+        ("unstick", s(&["unstick", "--dry-run"]), 4),
+        ("freeze", s(&["freeze", "{pid}", "--dry-run"]), 4),
+        ("thaw", s(&["thaw", "{pid}", "--dry-run"]), 4),
+        ("orphans", s(&["orphans"]), 4),
+        ("why", s(&["why", "{pid}"]), 4),
+        ("free", s(&["free", ":1", "--dry-run"]), 4),
+        ("wait", s(&["wait", "{pid}"]), 4),
+    ]
+}
+
+#[test]
+fn every_command_with_in_has_a_row() {
+    let rows = in_dir_rows("1", "x");
+    let missing: Vec<String> = Cli::command()
+        .get_subcommands()
+        .filter(|sub| sub.get_arguments().any(|a| a.get_long() == Some("in")))
+        .map(|sub| sub.get_name().to_string())
+        .filter(|name| !rows.iter().any(|(row, _, _)| row == name))
+        .collect();
+    assert!(missing.is_empty(), "add these to in_dir_rows: {missing:?}");
+}
+
+#[test]
+fn a_missing_in_directory_is_an_error_for_every_command() {
+    let (_tmp, dir) = fresh_dir();
+    let owned = Owned::start_in(&dir);
+    let pid = owned.pid();
+    let exe = listener_path().to_string_lossy().into_owned();
+    let missing = dir.join("no-such-directory");
+    let missing = missing.to_str().unwrap();
+    let has_in: Vec<String> = Cli::command()
+        .get_subcommands()
+        .filter(|sub| sub.get_arguments().any(|a| a.get_long() == Some("in")))
+        .map(|sub| sub.get_name().to_string())
+        .collect();
+
+    for (command, mut args, want) in in_dir_rows(&pid, &exe) {
+        if !has_in.iter().any(|c| c == command) {
+            continue;
+        }
+        // freeze, thaw and orphans are not supported on Windows, which they say first
+        if cfg!(windows) && matches!(command, "freeze" | "thaw" | "orphans") {
+            continue;
+        }
+        args.extend([
+            "--in".to_string(),
+            missing.to_string(),
+            "--json".to_string(),
+        ]);
+        let args: Vec<&str> = args.iter().map(String::as_str).collect();
+        let (json, code) = run_json(&args);
+        assert_eq!(code, want, "{args:?}: {json}");
+        if want == 4 {
+            assert_eq!(json["reason"], "invalid_input", "{args:?}: {json}");
+            assert!(
+                json["error"]
+                    .as_str()
+                    .unwrap()
+                    .contains("Directory not found"),
+                "{args:?}: {json}"
+            );
+        }
+    }
+    // nothing above changed the process it previewed
+    drop(owned);
+}
+
+/// A deleted directory that a process still runs in is kept, so its leftovers
+/// can be found
+#[cfg(unix)]
+#[test]
+fn a_deleted_directory_with_a_process_in_it_still_finds_the_process() {
+    let (tmp, dir) = fresh_dir();
+    let project = dir.join("project");
+    std::fs::create_dir(&project).unwrap();
+    let owned = Owned::start_in(&project);
+    std::fs::remove_dir(&project).unwrap();
+    let dir_arg = project.to_str().unwrap();
+
+    let (json, code) = run_json(&["list", "--in", dir_arg, "--json"]);
+    assert_eq!(code, 0, "{json}");
+    assert_eq!(listed_pids(&json), vec![u64::from(owned.0.id())], "{json}");
+
+    let (json, code) = run_json(&["kill", &owned.pid(), "--in", dir_arg, "--dry-run", "--json"]);
+    assert_eq!(code, 0, "{json}");
+    drop(owned);
+    drop(tmp);
+}
+
+/// A relative path when the current directory is gone has nothing to be
+/// resolved against: say that, instead of an unrelated "not found"
+#[cfg(unix)]
+#[test]
+fn a_relative_path_in_a_deleted_current_directory_says_so() {
+    let (_tmp, dir) = fresh_dir();
+    let gone = dir.join("gone");
+    std::fs::create_dir(&gone).unwrap();
+    let proc_path = assert_cmd::cargo::cargo_bin("proc");
+    for args in [
+        &["for", "./x", "--json"][..],
+        &["list", "--in", "sub", "--json"],
+    ] {
+        let script = format!(
+            "cd '{}' && rmdir '{}' && exec '{}' {}",
+            gone.display(),
+            gone.display(),
+            proc_path.display(),
+            args.join(" ")
+        );
+        std::fs::create_dir_all(&gone).unwrap();
+        let out = Command::new("sh").args(["-c", &script]).output().unwrap();
+        let text = String::from_utf8_lossy(&out.stdout);
+        let json: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("{e}: {text}"));
+        assert_eq!(out.status.code(), Some(4), "{args:?}: {json}");
+        assert_eq!(json["reason"], "invalid_input", "{args:?}: {json}");
+        assert!(
+            json["error"]
+                .as_str()
+                .unwrap()
+                .contains("current directory no longer exists"),
+            "{args:?}: {json}"
+        );
+    }
+}
+
+/// `--in` compares the real directory, not the escaped text shown for it: a
+/// name holding a newline and one holding a backslash and an `n` both read
+/// `a\nb`, and each must find only its own process
+#[cfg(unix)]
+#[test]
+fn in_tells_a_control_character_from_its_escaped_text() {
+    let (_tmp, dir) = fresh_dir();
+    let newline = dir.join("a\nb");
+    let literal = dir.join("a\\nb");
+    std::fs::create_dir(&newline).unwrap();
+    std::fs::create_dir(&literal).unwrap();
+    let in_newline = Owned::start_in(&newline);
+    let in_literal = Owned::start_in(&literal);
+
+    for (path, owner) in [(&newline, &in_newline), (&literal, &in_literal)] {
+        let (json, code) = run_json(&["list", "--in", path.to_str().unwrap(), "--json"]);
+        assert_eq!(code, 0, "{json}");
+        assert_eq!(listed_pids(&json), vec![u64::from(owner.0.id())], "{json}");
+    }
+}
+
+/// `tree --in` with no target shows the processes in the directory, each with
+/// its subtree; it used to ignore `--in` and print every process
+#[test]
+fn tree_in_without_a_target_shows_only_that_directory() {
+    let (_tmp, dir) = fresh_dir();
+    let owned = Owned::start_in(&dir);
+    let (json, code) = run_json(&["tree", "--in", dir.to_str().unwrap(), "--json"]);
+    assert_eq!(code, 0, "{json}");
+    assert_eq!(listed_pids(&json), vec![u64::from(owned.0.id())], "{json}");
+}

@@ -81,7 +81,13 @@ impl ByCommand {
         Process::measure_cpu(&mut processes);
 
         // Resolve --in filter path
-        let in_dir_filter = resolve_in_dir(&self.in_dir);
+        let in_dir_filter = resolve_in_dir(&self.in_dir)?;
+        let in_dir_has_any = in_dir_filter.as_ref().is_some_and(|dir_path| {
+            processes
+                .iter()
+                .any(|p| crate::core::filters::matches_in_filter(p, dir_path))
+        });
+        crate::core::require_in_dir(&self.in_dir, &in_dir_filter, in_dir_has_any)?;
 
         // Apply filters
         processes.retain(|p| self.keeps(p, &in_dir_filter));
@@ -110,11 +116,7 @@ impl ByCommand {
     fn keeps(&self, p: &Process, in_dir_filter: &Option<PathBuf>) -> bool {
         // Directory filter (--in)
         if let Some(ref dir_path) = in_dir_filter {
-            if let Some(ref proc_cwd) = p.cwd {
-                if !crate::core::filters::cwd_within(proc_cwd, dir_path) {
-                    return false;
-                }
-            } else {
+            if !crate::core::filters::matches_in_filter(p, dir_path) {
                 return false;
             }
         }

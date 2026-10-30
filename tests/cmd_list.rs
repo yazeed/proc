@@ -785,18 +785,26 @@ fn tree_by_and_in_narrow_a_target() {
     ]);
     assert_eq!(json["tree"].as_array().unwrap().len(), 1, "{json}");
 
-    // Wrong name, or a directory it is not in: nothing left
-    let (json, _) = run_json(&["tree", &pid, "--by", &nobody(), "--json"]);
-    assert!(json["tree"].as_array().unwrap().is_empty(), "{json}");
+    // Wrong name, or a directory it is not in: the guard rules the PID out,
+    // exit 2 as in `info` and `on`, not an empty tree that looks like success
+    let (json, code) = run_json(&["tree", &pid, "--by", &nobody(), "--json"]);
+    assert_eq!(code, 2, "{json}");
     let elsewhere = tempfile::tempdir().unwrap();
-    let (json, _) = run_json(&[
+    let (json, code) = run_json(&[
         "tree",
         &pid,
         "--in",
         elsewhere.path().to_str().unwrap(),
         "--json",
     ]);
-    assert!(json["tree"].as_array().unwrap().is_empty(), "{json}");
+    assert_eq!(code, 2, "{json}");
+    assert!(
+        json["error"]
+            .as_str()
+            .unwrap()
+            .contains("no matches with specified filters"),
+        "{json}"
+    );
 }
 
 #[test]
@@ -815,7 +823,7 @@ fn tree_a_target_every_filter_drops_says_so() {
         assert_eq!(code, 0);
         assert_eq!(
             out.trim(),
-            format!("⚠ No processes found for '{pid}'"),
+            format!("⚠ No processes for '{pid}' match the specified filters"),
             "{args:?}"
         );
     }
@@ -934,10 +942,14 @@ fn tree_ancestors_takes_a_name() {
 }
 
 #[test]
-fn tree_ancestors_of_a_name_nothing_has_is_a_warning() {
-    let (out, _, code) = run_text(&["tree", &nobody(), "--ancestors"]);
-    assert_eq!(code, 0);
-    assert!(out.contains("No process found for"), "{out}");
+fn tree_ancestors_of_a_name_nothing_has_is_not_found() {
+    let name = nobody();
+    let (out, err, code) = run_text(&["tree", &name, "--ancestors"]);
+    assert_eq!(code, 2, "{out}{err}");
+    assert!(
+        err.contains(&format!("No process found matching '{name}'")),
+        "{err}"
+    );
 }
 
 #[test]
@@ -946,22 +958,19 @@ fn tree_name_is_the_whole_name_and_cmd_widens_it_to_the_command_line() {
     let owned = Owned::listener_with_args(&[&word]);
     let hint = format!("1 process has '{word}' in its command line (add --cmd to match those)");
 
-    // only in the command line: no match by default, and the warning says so
-    let (out, _, code) = run_text(&["tree", &word]);
-    assert_eq!(code, 0, "{out}");
-    assert!(
-        out.contains(&format!("No processes found for '{word}'")),
-        "{out}"
-    );
-    assert!(out.contains(&hint), "{out}");
-    let (out, _, _) = run_text(&["tree", &word, "--ancestors"]);
-    assert!(
-        out.contains(&format!("No process found for '{word}'")),
-        "{out}"
-    );
-    assert!(out.contains(&hint), "{out}");
-    let (json, _) = run_json(&["tree", &word, "--json"]);
-    assert_eq!(json["tree"].as_array().unwrap().len(), 0, "{json}");
+    // only in the command line: not found by default (exit 2), and the error
+    // says where the name is
+    for args in [vec!["tree", &word], vec!["tree", &word, "--ancestors"]] {
+        let (out, err, code) = run_text(&args);
+        assert_eq!(code, 2, "{args:?}: {out}{err}");
+        assert!(
+            err.contains(&format!("No process found matching '{word}'")),
+            "{args:?}: {err}"
+        );
+        assert!(err.contains(&hint), "{args:?}: {err}");
+    }
+    let (json, code) = run_json(&["tree", &word, "--json"]);
+    assert_eq!(code, 2, "{json}");
 
     // with --cmd it is the match, for the tree and for the ancestry
     let (json, _) = run_json(&["tree", &word, "--cmd", "--json", "--depth", "0"]);
@@ -971,8 +980,8 @@ fn tree_name_is_the_whole_name_and_cmd_widens_it_to_the_command_line() {
 
     // part of the name is not the name either
     let part = &owned.name[..owned.name.len() - 1];
-    let (json, _) = run_json(&["tree", part, "--json", "--depth", "0"]);
-    assert_eq!(json["tree"].as_array().unwrap().len(), 0, "{json}");
+    let (json, code) = run_json(&["tree", part, "--json", "--depth", "0"]);
+    assert_eq!(code, 2, "{json}");
     let (json, _) = run_json(&["tree", part, "--cmd", "--json", "--depth", "0"]);
     assert!(
         json["tree"]
@@ -986,11 +995,11 @@ fn tree_name_is_the_whole_name_and_cmd_widens_it_to_the_command_line() {
 
 #[test]
 fn tree_ancestors_without_a_target_asks_for_one() {
-    let (out, _, code) = run_text(&["tree", "--ancestors"]);
-    assert_eq!(code, 0);
-    assert_eq!(
-        out.trim(),
-        "⚠ --ancestors requires a target (PID, :port, or name)"
+    let (out, err, code) = run_text(&["tree", "--ancestors"]);
+    assert_eq!(code, 4, "{out}{err}");
+    assert!(
+        err.contains("--ancestors needs a target (PID, :port, or name)"),
+        "{err}"
     );
 }
 

@@ -102,7 +102,7 @@ impl ForCommand {
 
         // 5. Apply filters, with real CPU readings for --min-cpu, the sort and the view
         Process::measure_cpu(&mut processes);
-        self.apply_filters(&mut processes);
+        self.apply_filters(&mut processes)?;
 
         // 6. Sort processes
         sort_processes(&mut processes, self.sort);
@@ -150,7 +150,7 @@ impl ForCommand {
 
         // Make absolute if relative
         let absolute = if expanded.is_relative() {
-            std::env::current_dir()?.join(expanded)
+            crate::core::filters::current_dir_for(&expanded)?.join(expanded)
         } else {
             expanded
         };
@@ -169,17 +169,19 @@ impl ForCommand {
         Ok(canonical)
     }
 
-    fn apply_filters(&self, processes: &mut Vec<Process>) {
-        let in_dir_filter = resolve_in_dir(&self.in_dir);
+    fn apply_filters(&self, processes: &mut Vec<Process>) -> Result<()> {
+        let in_dir_filter = resolve_in_dir(&self.in_dir)?;
+        let in_dir_has_any = in_dir_filter.as_ref().is_some_and(|dir_path| {
+            processes
+                .iter()
+                .any(|p| crate::core::filters::matches_in_filter(p, dir_path))
+        });
+        crate::core::require_in_dir(&self.in_dir, &in_dir_filter, in_dir_has_any)?;
 
         processes.retain(|p| {
             // Directory filter (--in)
             if let Some(ref dir_path) = in_dir_filter {
-                if let Some(ref proc_cwd) = p.cwd {
-                    if !crate::core::filters::cwd_within(proc_cwd, dir_path) {
-                        return false;
-                    }
-                } else {
+                if !crate::core::filters::matches_in_filter(p, dir_path) {
                     return false;
                 }
             }
@@ -229,6 +231,7 @@ impl ForCommand {
 
             true
         });
+        Ok(())
     }
 
     fn print_human(&self, results: &[(Process, Vec<PortInfo>)]) {
@@ -399,11 +402,11 @@ mod tests {
             ..command()
         };
         let mut processes = vec![bare_process()];
-        cmd.apply_filters(&mut processes);
+        cmd.apply_filters(&mut processes).unwrap();
         assert!(processes.is_empty());
 
         let mut processes = vec![bare_process()];
-        command().apply_filters(&mut processes);
+        command().apply_filters(&mut processes).unwrap();
         assert_eq!(processes.len(), 1);
     }
 
@@ -414,7 +417,7 @@ mod tests {
             ..command()
         };
         let mut processes = vec![bare_process()];
-        cmd.apply_filters(&mut processes);
+        cmd.apply_filters(&mut processes).unwrap();
         assert!(processes.is_empty());
     }
 }

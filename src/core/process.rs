@@ -386,6 +386,8 @@ pub struct RawText {
     pub exe_path: Option<String>,
     /// The full command line
     pub command: Option<String>,
+    /// The working directory
+    pub cwd: Option<String>,
 }
 
 /// How a name relates to a process sysinfo listed, under `mode`. Reads the
@@ -434,6 +436,17 @@ impl Process {
         }
     }
 
+    /// The working directory exactly as the OS gave it, for matching `--in`.
+    /// `cwd` is what is shown, with control characters escaped, so a directory
+    /// named `a<newline>b` and one named `a\nb` (backslash, `n`) both read
+    /// `a\nb` there; this one tells them apart.
+    pub fn raw_cwd(&self) -> Option<&str> {
+        match &self.raw {
+            Some(raw) => raw.cwd.as_deref(),
+            None => self.cwd.as_deref(),
+        }
+    }
+
     /// Find all processes a name matches (see [`NameMatch`]): by default the
     /// whole name, with `--cmd` any part of the name or command line.
     ///
@@ -471,14 +484,7 @@ impl Process {
         processes.sort_by_key(|p| p.pid);
 
         if processes.is_empty() {
-            return Err(if in_command_line_only > 0 {
-                ProcError::NameNotFound {
-                    name: pattern.to_string(),
-                    in_command_line: in_command_line_only,
-                }
-            } else {
-                ProcError::ProcessNotFound(pattern.to_string())
-            });
+            return Err(ProcError::name_not_found(pattern, in_command_line_only));
         }
 
         Ok(processes)
@@ -963,15 +969,20 @@ impl Process {
         });
         let raw_name = proc.name().to_string_lossy();
         let raw_exe = proc.exe().map(|p| p.to_string_lossy());
+        let raw_cwd = proc
+            .cwd()
+            .map(|p| strip_deleted_marker(p.to_string_lossy().to_string()));
         let changed = |text: &str| matches!(escape_control(text), std::borrow::Cow::Owned(_));
         let raw = (changed(&raw_name)
             || raw_exe.as_deref().is_some_and(changed)
-            || raw_command.as_deref().is_some_and(changed))
+            || raw_command.as_deref().is_some_and(changed)
+            || raw_cwd.as_deref().is_some_and(changed))
         .then(|| {
             Box::new(RawText {
                 name: raw_name.to_string(),
                 exe_path: raw_exe.as_ref().map(|exe| exe.to_string()),
                 command: raw_command.clone(),
+                cwd: raw_cwd.clone(),
             })
         });
         let command = raw_command
@@ -981,10 +992,9 @@ impl Process {
         let exe_path = raw_exe
             .as_deref()
             .map(|exe| escape_control(exe).into_owned());
-        let cwd = proc.cwd().map(|p| {
-            let path = strip_deleted_marker(p.to_string_lossy().to_string());
-            escape_control(&path).into_owned()
-        });
+        let cwd = raw_cwd
+            .as_deref()
+            .map(|path| escape_control(path).into_owned());
 
         Process {
             pid: pid.as_u32(),
@@ -1347,6 +1357,7 @@ mod tests {
                 name: "a\u{7}b".to_string(),
                 exe_path: Some("c\u{7}d".to_string()),
                 command: Some("e\u{7}f".to_string()),
+                cwd: None,
             })),
             argv0: Some("g".to_string()),
             ..ghost()

@@ -600,14 +600,12 @@ fn why_takes_several_targets_as_separate_arguments() {
 }
 
 #[test]
-fn why_with_a_target_that_splits_into_nothing_echoes_the_targets_as_typed() {
+fn why_with_a_target_that_splits_into_nothing_is_invalid_input() {
     let (json, code) = run_json(&["why", ",", ",,", "--json"]);
-    assert_eq!(code, 2, "{json}");
+    assert_eq!(code, 4, "{json}");
+    assert_eq!(json["reason"], "invalid_input", "{json}");
     let error = json["error"].as_str().unwrap();
-    assert!(
-        error.contains("No process found matching ', ,,'"),
-        "{error}"
-    );
+    assert!(error.contains("a target can't be empty"), "{error}");
 }
 
 #[test]

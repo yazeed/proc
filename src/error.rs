@@ -143,6 +143,20 @@ impl ProcError {
         }
     }
 
+    /// The error for a name that matched no process: [`ProcError::NameNotFound`]
+    /// when `in_command_line` processes have it in their command line (which
+    /// `--cmd` would match), [`ProcError::ProcessNotFound`] when none do.
+    pub fn name_not_found(name: &str, in_command_line: usize) -> Self {
+        if in_command_line > 0 {
+            ProcError::NameNotFound {
+                name: name.to_string(),
+                in_command_line,
+            }
+        } else {
+            ProcError::ProcessNotFound(name.to_string())
+        }
+    }
+
     /// Creates a [`ProcError::Reported`] for a result that has already been printed.
     pub fn reported(exit_code: ExitCode, message: impl Into<String>) -> Self {
         ProcError::Reported {

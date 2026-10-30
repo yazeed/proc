@@ -80,7 +80,7 @@ impl WaitCommand {
         let mut processes = resolved.processes;
 
         // Apply --in and --by filters
-        apply_filters(&mut processes, &self.in_dir, &self.by_name, mode);
+        apply_filters(&mut processes, &self.in_dir, &self.by_name, mode)?;
 
         if processes.is_empty() {
             return Err(ProcError::ProcessNotFound(self.target.join(" ")));

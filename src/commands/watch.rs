@@ -49,7 +49,7 @@ fn parse_interval(s: &str) -> std::result::Result<f64, String> {
 }
 
 /// Watch processes in real-time
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Clone)]
 pub struct WatchCommand {
     /// Target(s): PID, :port, or name (separate arguments for several; omit for all processes)
     #[arg(num_args = 0.., value_parser = crate::core::validate_target_arg)]
@@ -192,6 +192,30 @@ fn write_json_frame(out: &mut impl Write, err: &mut impl Write, frame: &impl Ser
 impl WatchCommand {
     /// Execute the watch command — real-time process monitoring.
     pub fn execute(&self) -> Result<()> {
+        // A missing --in directory is an error before the first frame, not a
+        // view of nothing that looks like an answer. A deleted directory that
+        // processes still run in is kept, so its leftovers can be watched.
+        let in_dir_filter = resolve_in_dir(&self.in_dir)?;
+        if let Some(dir_path) = in_dir_filter.as_ref().filter(|dir| !dir.is_dir()) {
+            let any = Process::find_all()?
+                .iter()
+                .any(|p| crate::core::filters::matches_in_filter(p, dir_path));
+            crate::core::require_in_dir(&self.in_dir, &in_dir_filter, any)?;
+        }
+        // Every refresh uses the directory as resolved now, so a relative --in
+        // never depends on the current directory still existing later
+        let resolved = WatchCommand {
+            in_dir: in_dir_filter
+                .as_ref()
+                .and_then(|dir| dir.to_str().map(String::from))
+                .or_else(|| self.in_dir.clone()),
+            ..self.clone()
+        };
+        resolved.run()
+    }
+
+    /// `execute` once `--in` is resolved: a JSON stream, the live view, or one snapshot
+    fn run(&self) -> Result<()> {
         let is_tty = out::stdout_is_terminal();
 
         if self.json {
@@ -225,7 +249,9 @@ impl WatchCommand {
         // a name never finds proc's ancestor shells, whose command lines hold
         // proc's own arguments (`sh -c 'proc watch node'`)
         let ancestors = self_and_ancestors(sys);
-        let in_dir_filter = resolve_in_dir(&self.in_dir);
+        // `execute` resolved --in to an absolute path, which resolves without
+        // the current directory, so this can't fail
+        let in_dir_filter = resolve_in_dir(&self.in_dir).ok().flatten();
         let mode = NameMatch::from_flag(self.cmd);
 
         // Parse targets once
@@ -291,13 +317,7 @@ impl WatchCommand {
 
         // Apply --in filter
         if let Some(ref dir_path) = in_dir_filter {
-            processes.retain(|p| {
-                if let Some(ref proc_cwd) = p.cwd {
-                    crate::core::filters::cwd_within(proc_cwd, dir_path)
-                } else {
-                    false
-                }
-            });
+            processes.retain(|p| crate::core::filters::matches_in_filter(p, dir_path));
         }
 
         // Apply --min-cpu filter

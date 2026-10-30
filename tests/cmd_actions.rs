@@ -1993,19 +1993,17 @@ fn unstick_takes_several_targets_as_separate_arguments() {
 }
 
 #[test]
-fn when_nothing_matches_the_error_echoes_the_targets_as_typed() {
-    // "," and ",," split into no target at all, so nothing can be found (and
-    // nothing is touched)
-    let mut commands = vec!["kill", "stop", "wait", "unstick"];
-    if cfg!(unix) {
-        commands.extend(["freeze", "thaw"]);
-    }
-    for command in commands {
+fn a_target_that_splits_into_nothing_is_invalid_input() {
+    // "," and ",," split into no target at all. They used to be looked up as
+    // nothing (exit 2, or on `watch` every process); they are rejected while
+    // parsing, before anything is looked up or touched, on every OS
+    for command in ["kill", "stop", "wait", "unstick", "freeze", "thaw"] {
         let (json, code) = run_json(&[command, ",", ",,", "--json"]);
-        assert_eq!(code, 2, "{command}: {json}");
+        assert_eq!(code, 4, "{command}: {json}");
+        assert_eq!(json["reason"], "invalid_input", "{command}: {json}");
         let error = json["error"].as_str().unwrap();
         assert!(
-            error.contains("No process found matching ', ,,'"),
+            error.contains("a target can't be empty"),
             "{command}: {error}"
         );
     }
@@ -2038,13 +2036,14 @@ fn in_takes_the_next_word_as_its_directory_and_a_flag_is_not_a_directory() {
     let (json, code) = run_json(&["kill", &in_dir, &a, &b, "--dry-run", "--json"]);
     only_first(&json, code, "--in=<dir> before the targets");
 
-    // `--in` before a PID reads the PID as its directory: nothing runs in a
-    // directory of that name, and only the last PID is left as a target
+    // `--in` before a PID reads the PID as its directory. No directory of that
+    // name exists, and the error says so, which shows `--in` took the PID
     let (json, code) = run_json(&["kill", "--in", &a, &b, "--dry-run", "--json"]);
-    assert_eq!(code, 2, "{json}");
+    assert_eq!(code, 4, "{json}");
+    assert_eq!(json["reason"], "invalid_input", "{json}");
     let error = json["error"].as_str().unwrap();
     assert!(
-        error.contains(&format!("No process found matching '{b}'")),
+        error.contains(&format!("Directory not found: {a}")),
         "{error}"
     );
 

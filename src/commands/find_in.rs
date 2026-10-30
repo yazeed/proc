@@ -108,14 +108,10 @@ impl InCommand {
             PathBuf::from(".")
         } else {
             Self::expand_tilde(&self.path)
-        });
+        })?;
 
         // Directory filter (required for this command)
-        processes.retain(|p| {
-            p.cwd
-                .as_ref()
-                .is_some_and(|cwd| crate::core::filters::cwd_within(cwd, &dir_filter))
-        });
+        processes.retain(|p| crate::core::filters::matches_in_filter(p, &dir_filter));
 
         // A missing path with nothing running there is a typo, not an empty
         // directory (same as `proc for`). A deleted directory that processes

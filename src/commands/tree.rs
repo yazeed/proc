@@ -13,7 +13,7 @@ use crate::core::{
     classify, matches_by_filter, matches_in_filter, parse_target, resolve_in_dir, resolve_target,
     Hit, NameMatch, Process, ProcessStatus, StatusFilter, TargetType,
 };
-use crate::error::Result;
+use crate::error::{ProcError, Result};
 use crate::out_println;
 use crate::ui::{format_memory, plural, uptime_label, Printer};
 use clap::Args;
@@ -131,6 +131,18 @@ impl TreeCommand {
     pub fn execute(&self) -> Result<()> {
         let printer = Printer::from_flags(self.json, self.verbose);
 
+        // Ancestry is of a target; with none there is nothing to trace, and
+        // answering with an empty result would look like success
+        let ancestry_of = match (self.ancestors, &self.target) {
+            (true, None) => {
+                return Err(ProcError::InvalidInput(
+                    "--ancestors needs a target (PID, :port, or name)".to_string(),
+                ))
+            }
+            (true, Some(target)) => Some(target),
+            (false, _) => None,
+        };
+
         // Get all processes, with real CPU readings for the nodes and --min-cpu
         let mut all_processes = Process::find_all()?;
         Process::measure_cpu(&mut all_processes);
@@ -154,14 +166,12 @@ impl TreeCommand {
         }
 
         // Handle --ancestors mode
-        if self.ancestors {
-            return self.show_ancestors(&printer, &pid_map, &all_processes);
+        if let Some(target) = ancestry_of {
+            return self.show_ancestors(&printer, target, &pid_map, &all_processes);
         }
 
-        // Determine target processes; `in_command_line` counts the processes a name
-        // is only in the command line of, which `--cmd` would have matched
+        // Determine target processes
         let mode = NameMatch::from_flag(self.cmd);
-        let mut in_command_line = 0;
         let target_processes: Vec<&Process> = if let Some(ref target) = self.target {
             // Use unified target resolution
             match parse_target(target) {
@@ -182,7 +192,11 @@ impl TreeCommand {
                     let ancestor_pids = Self::ancestor_pids(&all_processes);
                     let (named, others) =
                         Self::named(all_processes.iter(), &ancestor_pids, pattern, mode);
-                    in_command_line = others;
+                    // A name that matches nothing is not found, as a PID or a
+                    // port that matches nothing is
+                    if named.is_empty() {
+                        return Err(ProcError::name_not_found(pattern, others));
+                    }
                     named
                 }
             }
@@ -190,25 +204,38 @@ impl TreeCommand {
             Vec::new() // Will show full tree
         };
 
-        // Apply --in and --by filters (only for targeted mode)
-        let target_processes = if self.target.is_some() {
-            let in_dir_filter = resolve_in_dir(&self.in_dir);
-            target_processes
+        // --in and --by narrow a target's processes. With no target they pick
+        // the processes shown, each with its subtree, as --min-cpu does; they
+        // used to be ignored there, so `tree --in .` printed the whole system
+        let in_dir_filter = resolve_in_dir(&self.in_dir)?;
+        let in_dir_has_any = in_dir_filter
+            .as_ref()
+            .is_some_and(|dir_path| all_processes.iter().any(|p| matches_in_filter(p, dir_path)));
+        crate::core::require_in_dir(&self.in_dir, &in_dir_filter, in_dir_has_any)?;
+        let in_and_by = |p: &Process| {
+            in_dir_filter
+                .as_ref()
+                .is_none_or(|dir_path| matches_in_filter(p, dir_path))
+                && self
+                    .by_name
+                    .as_ref()
+                    .is_none_or(|name| matches_by_filter(p, name, mode))
+        };
+        let target_processes: Vec<&Process> = if let Some(target) = &self.target {
+            let kept: Vec<&Process> = target_processes
                 .into_iter()
-                .filter(|p| {
-                    if let Some(ref dir_path) = in_dir_filter {
-                        if !matches_in_filter(p, dir_path) {
-                            return false;
-                        }
-                    }
-                    if let Some(ref name) = self.by_name {
-                        if !matches_by_filter(p, name, mode) {
-                            return false;
-                        }
-                    }
-                    true
-                })
-                .collect()
+                .filter(|p| in_and_by(p))
+                .collect();
+            // The target found processes (none would have been an error above),
+            // so an empty list means --in or --by ruled them all out: the same
+            // guard error as `info` and `on`, not an empty answer
+            if kept.is_empty() {
+                return Err(ProcError::FilteredOut {
+                    target: target.clone(),
+                    reason: "no matches with specified filters".to_string(),
+                });
+            }
+            kept
         } else {
             target_processes
         };
@@ -217,7 +244,9 @@ impl TreeCommand {
         let matches_filters = |p: &Process| self.matches_filters(p);
 
         // Apply filters to target processes or find filtered roots
-        let has_filters = self.min_cpu.is_some()
+        let has_filters = in_dir_filter.is_some()
+            || self.by_name.is_some()
+            || self.min_cpu.is_some()
             || self.min_mem.is_some()
             || self.status.is_some()
             || self.min_uptime.is_some();
@@ -233,7 +262,7 @@ impl TreeCommand {
                 // Show only processes matching filters
                 all_processes
                     .iter()
-                    .filter(|p| matches_filters(p))
+                    .filter(|p| in_and_by(p) && matches_filters(p))
                     .map(|p| self.build_tree_node(p, &children_map, 0))
                     .collect()
             } else {
@@ -256,13 +285,13 @@ impl TreeCommand {
                 .filter(|p| matches_filters(p))
                 .collect();
             if filtered.is_empty() {
+                // Only --min-cpu, --min-mem, --status or --min-uptime get here:
+                // they narrow the view, so nothing left is an empty answer, as
+                // in `list`
                 let target = self.target.as_ref().unwrap();
-                let mut warning = format!("No processes found for '{target}'");
-                if in_command_line > 0 {
-                    warning.push_str("\n  ");
-                    warning.push_str(&crate::error::command_line_hint(target, in_command_line));
-                }
-                printer.warning(&warning);
+                printer.warning(&format!(
+                    "No processes for '{target}' match the specified filters"
+                ));
                 return Ok(());
             }
 
@@ -279,7 +308,7 @@ impl TreeCommand {
         } else if has_filters {
             let filtered: Vec<_> = all_processes
                 .iter()
-                .filter(|p| matches_filters(p))
+                .filter(|p| in_and_by(p) && matches_filters(p))
                 .collect();
             if filtered.is_empty() {
                 printer.warning("No processes match the specified filters");
@@ -435,20 +464,13 @@ impl TreeCommand {
     fn show_ancestors(
         &self,
         printer: &Printer,
+        target: &str,
         pid_map: &HashMap<u32, &Process>,
         all_processes: &[Process],
     ) -> Result<()> {
         use crate::core::{parse_target, resolve_target, TargetType};
 
         let mode = NameMatch::from_flag(self.cmd);
-        let mut in_command_line = 0;
-        let target = match &self.target {
-            Some(t) => t,
-            None => {
-                printer.warning("--ancestors requires a target (PID, :port, or name)");
-                return Ok(());
-            }
-        };
 
         // Resolve target to processes
         let target_processes = match parse_target(target) {
@@ -457,20 +479,12 @@ impl TreeCommand {
                 let ancestor_pids = Self::ancestor_pids(all_processes);
                 let (named, others) =
                     Self::named(all_processes.iter(), &ancestor_pids, pattern, mode);
-                in_command_line = others;
+                if named.is_empty() {
+                    return Err(ProcError::name_not_found(pattern, others));
+                }
                 named.into_iter().cloned().collect()
             }
         };
-
-        if target_processes.is_empty() {
-            let mut warning = format!("No process found for '{}'", target);
-            if in_command_line > 0 {
-                warning.push_str("\n  ");
-                warning.push_str(&crate::error::command_line_hint(target, in_command_line));
-            }
-            printer.warning(&warning);
-            return Ok(());
-        }
 
         if self.json {
             let ancestry_output: Vec<AncestryNode> = target_processes
