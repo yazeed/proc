@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Windows: proc.exe no longer needs the Visual C++ runtime.** The Windows binary from Scoop, npm and GitHub Releases imported `VCRUNTIME140.dll` and the `api-ms-win-crt-*` libraries, so on a machine without the Visual C++ Redistributable it could not start. It now links the C runtime in (`.cargo/config.toml`, as ripgrep and fd do), and CI and the release build fail if `proc.exe` imports it again. GitHub's Windows runners have the runtime installed, which is why no test run showed it
 - **A guard that rules out the target says so.** `proc stop 1234 --by node --yes` on a live process that isn't `node` gave `No process found matching '1234'`, word for word what a PID nobody holds gives, in human output and JSON alike. An agent following the skill's PID-guard rule read it as "the PID was recycled, the process is gone" when its own `--by` was mistyped, and moved on with the process still running (found by Jeff de Vries, an iLands agent, testing the skill). The error now names the guard: `No process found matching '1234' (ruled out by --by node)`, or `--in <dir>`, or both. It is still exit 2. This covers `kill`, `stop`, `freeze`, `thaw`, `wait`, `info` and `unstick` with targets; `on` and `tree` said `(no matches with specified filters)`, and now name the guard too (see Changed). `info` used to print its normal document with nothing in it (`found_count: 0`, `not_found: []`); it now prints this error
 
 ## [2.0.2] - 2026-10-30

@@ -54,6 +54,22 @@ jobs:
       - name: Build release
         run: cargo build --release --target ${{ matrix.target }}
 
+      # proc.exe links the C runtime statically (.cargo/config.toml), so it runs
+      # without the Visual C++ Redistributable. The runners have that runtime
+      # installed, so a missing DLL never shows in a run: read the import table.
+      - name: Check proc.exe needs no Visual C++ runtime
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $dumpbin = & $vswhere -latest -products * -find 'VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe' | Select-Object -First 1
+          $deps = & $dumpbin /nologo /dependents "target/${{ matrix.target }}/release/proc.exe"
+          $deps
+          if ($deps -match 'VCRUNTIME|MSVCP|api-ms-win-crt') {
+            echo "::error::proc.exe imports the Visual C++ runtime; it must link it statically"
+            exit 1
+          }
+
       # Every publish job needs this one, so a binary that would call itself a
       # -dev build, or a tag that doesn't match Cargo.toml's version, stops the
       # release here. Cross-compiled targets can't run on the runner, so they

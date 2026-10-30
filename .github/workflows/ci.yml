@@ -109,6 +109,21 @@ jobs:
       - name: Build release
         run: cargo build --release --target ${{ matrix.target }}
 
+      # Same check as release.yml: the runners have the Visual C++ runtime, so
+      # only the import table shows that proc.exe would need it
+      - name: Check proc.exe needs no Visual C++ runtime
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $dumpbin = & $vswhere -latest -products * -find 'VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe' | Select-Object -First 1
+          $deps = & $dumpbin /nologo /dependents "target/${{ matrix.target }}/release/proc.exe"
+          $deps
+          if ($deps -match 'VCRUNTIME|MSVCP|api-ms-win-crt') {
+            echo "::error::proc.exe imports the Visual C++ runtime; it must link it statically"
+            exit 1
+          }
+
       - name: Rename binary (Unix)
         if: runner.os != 'Windows'
         run: cp target/${{ matrix.target }}/release/proc ${{ matrix.artifact }}
