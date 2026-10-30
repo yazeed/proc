@@ -156,8 +156,9 @@ fn an_empty_target_is_invalid_input() {
 
 /// The arguments each command with `--in` runs with, before `--in`. `{pid}` is
 /// a process the test owns; changing commands only preview. The exit code a
-/// missing `--in` directory gives: 4, except `on`, whose targets are simply not
-/// found there (2).
+/// missing `--in` directory gives: 4 on every one. (`on` said its targets were
+/// not in the directory, exit 2, the same as for a directory that exists, so
+/// a typo looked like an answer.)
 fn in_dir_rows(pid: &str, exe: &str) -> Vec<(&'static str, Vec<String>, i32)> {
     let s = |args: &[&str]| {
         args.iter()
@@ -165,7 +166,7 @@ fn in_dir_rows(pid: &str, exe: &str) -> Vec<(&'static str, Vec<String>, i32)> {
             .collect::<Vec<_>>()
     };
     vec![
-        ("on", s(&["on", "{pid}"]), 2),
+        ("on", s(&["on", "{pid}"]), 4),
         ("for", s(&["for", "{exe}"]), 4),
         ("by", s(&["by", "listener"]), 4),
         ("list", s(&["list"]), 4),

@@ -187,7 +187,7 @@ Work is committed and pushed to `main` without a tag, and every change goes unde
 
 **ALWAYS follow [RELEASE.md](RELEASE.md) for every release.** Do not skip steps. This includes:
 
-1. Pre-release checks: `cargo update` (first), `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`, `cargo build --release`, `cargo audit`, `cargo check --target x86_64-pc-windows-msvc --all-targets`
+1. Pre-release checks: `rustup update stable` and `cargo update` (first), `cargo +<rust-version> check --all-targets` (the oldest supported Rust, from Cargo.toml), `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`, `cargo build --release`, `cargo audit`, `cargo check --target x86_64-pc-windows-msvc --all-targets`
 2. Manual testing with the release binary (`./target/release/proc --version`, `--help`, new features)
 3. Version bump in ALL files: `Cargo.toml`, `pkg/npm/package.json`, `flake.nix`, `.claude-plugin/marketplace.json`, `docs/_data/release.yml`
 4. Documentation: `CHANGELOG.md`, `docs/changelog.md`, `README.md`, `ROADMAP.md`, `src/lib.rs`, `skills/proc-cli/*.md`, `docs/commands/` — verify all reflect new changes

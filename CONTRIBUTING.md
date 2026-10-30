@@ -69,7 +69,7 @@ Feature suggestions are welcome! Please create an issue with:
 
 ### Prerequisites
 
-- Rust 1.88 or later (the sysinfo dependency requires it)
+- Rust 1.88 or later (the sysinfo dependency requires it). Work on the latest stable (`rustup update stable`): CI lints and tests with it, and an older toolchain can miss lints CI reports
 - Git
 
 ### Building

@@ -338,11 +338,14 @@ fn tree_ancestors_for_a_name_lists_the_targets_ascending() {
 #[test]
 fn tree_with_a_resource_filter_lists_the_processes_ascending() {
     let _lock = serial();
-    let _herd = Herd::start(3, 0);
-    let (json, code) = run_json(&["tree", "--min-uptime", "0", "--json"]);
+    let herd = Herd::start(3, 0);
+    // the herd's copies are siblings whose parent (this test) is not a match,
+    // so each is a root of its own: a match under another match is drawn in
+    // that one's tree, not again as a root
+    let (json, code) = run_json(&["tree", "--min-uptime", "0", "--by", &herd.name, "--json"]);
     assert_eq!(code, 0);
     let pids = pids_in(&json, "tree");
-    assert!(pids.len() >= 3, "{pids:?}");
+    assert_eq!(pids.len(), 3, "{pids:?}");
     assert!(is_ascending(&pids), "{pids:?}");
 }
 

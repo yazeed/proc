@@ -99,6 +99,10 @@ pub struct WatchCommand {
     /// Sort by: cpu, mem (biggest first); pid, name (ascending). Ties come by PID
     #[arg(long, short = 's', value_enum, default_value_t = WatchSortKey::Cpu)]
     pub sort: WatchSortKey,
+
+    /// `--in` as `execute` resolved it, absolute; every refresh uses this one
+    #[arg(skip)]
+    in_dir_path: Option<std::path::PathBuf>,
 }
 
 /// Sort key for watch command (mirrors SortKey but with independent default)
@@ -195,20 +199,12 @@ impl WatchCommand {
         // A missing --in directory is an error before the first frame, not a
         // view of nothing that looks like an answer. A deleted directory that
         // processes still run in is kept, so its leftovers can be watched.
-        let in_dir_filter = resolve_in_dir(&self.in_dir)?;
-        if let Some(dir_path) = in_dir_filter.as_ref().filter(|dir| !dir.is_dir()) {
-            let any = Process::find_all()?
-                .iter()
-                .any(|p| crate::core::filters::matches_in_filter(p, dir_path));
-            crate::core::require_in_dir(&self.in_dir, &in_dir_filter, any)?;
-        }
+        let in_dir_path = resolve_in_dir(&self.in_dir)?;
+        crate::core::require_in_dir_live(&self.in_dir, &in_dir_path)?;
         // Every refresh uses the directory as resolved now, so a relative --in
         // never depends on the current directory still existing later
         let resolved = WatchCommand {
-            in_dir: in_dir_filter
-                .as_ref()
-                .and_then(|dir| dir.to_str().map(String::from))
-                .or_else(|| self.in_dir.clone()),
+            in_dir_path,
             ..self.clone()
         };
         resolved.run()
@@ -249,9 +245,7 @@ impl WatchCommand {
         // a name never finds proc's ancestor shells, whose command lines hold
         // proc's own arguments (`sh -c 'proc watch node'`)
         let ancestors = self_and_ancestors(sys);
-        // `execute` resolved --in to an absolute path, which resolves without
-        // the current directory, so this can't fail
-        let in_dir_filter = resolve_in_dir(&self.in_dir).ok().flatten();
+        let in_dir_filter = &self.in_dir_path;
         let mode = NameMatch::from_flag(self.cmd);
 
         // Parse targets once
@@ -740,6 +734,7 @@ mod tests {
             wide: false,
             limit: None,
             sort: WatchSortKey::Cpu,
+            in_dir_path: None,
         }
     }
 

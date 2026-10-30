@@ -12,8 +12,8 @@ pub mod target;
 
 pub use apply::apply_to_each;
 pub use filters::{
-    apply_filters, matches_by_filter, matches_in_filter, require_in_dir, resolve_in_dir,
-    sort_ports, sort_processes, PortSortKey, SortKey, StatusFilter,
+    apply_filters, matches_by_filter, matches_in_filter, require_in_dir, require_in_dir_live,
+    resolve_in_dir, sort_ports, sort_processes, PortSortKey, SortKey, StatusFilter,
 };
 pub use name_match::{classify, matches_name, Hit, NameMatch, Names};
 pub use port::{parse_port, PortInfo, Protocol};

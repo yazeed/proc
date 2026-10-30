@@ -49,6 +49,10 @@ pub struct OnCommand {
     /// Show verbose output (full command line)
     #[arg(long, short = 'v')]
     pub verbose: bool,
+
+    /// `--in` as `execute` resolved it, absolute; every check uses this one
+    #[arg(skip)]
+    in_dir_path: Option<std::path::PathBuf>,
 }
 
 impl OnCommand {
@@ -56,14 +60,12 @@ impl OnCommand {
     pub fn execute(&self) -> Result<()> {
         // Resolve --in once: a relative directory needs the current one, which
         // may be gone (an error here), and every check after this one uses the
-        // absolute path. A directory that doesn't exist matches nothing, so its
-        // targets are reported as not found.
-        let in_dir_filter = resolve_in_dir(&self.in_dir)?;
+        // absolute path. A missing directory with nothing running there is a
+        // typo, as on every command, not targets that are not found in it.
+        let in_dir_path = resolve_in_dir(&self.in_dir)?;
+        crate::core::require_in_dir_live(&self.in_dir, &in_dir_path)?;
         let resolved = OnCommand {
-            in_dir: in_dir_filter
-                .as_ref()
-                .and_then(|dir| dir.to_str().map(String::from))
-                .or_else(|| self.in_dir.clone()),
+            in_dir_path,
             ..self.clone()
         };
         resolved.run()
@@ -164,11 +166,9 @@ impl OnCommand {
 
     /// Check if process matches --in filter
     fn matches_in_filter(&self, proc: &Process) -> bool {
-        // `execute` resolved --in to an absolute path, which can't fail again
-        resolve_in_dir(&self.in_dir)
-            .ok()
-            .flatten()
-            .is_none_or(|dir_path| crate::core::filters::matches_in_filter(proc, &dir_path))
+        self.in_dir_path
+            .as_ref()
+            .is_none_or(|dir_path| crate::core::filters::matches_in_filter(proc, dir_path))
     }
 
     /// Check if process matches --by filter
@@ -579,9 +579,12 @@ mod tests {
     use crate::test_support::assert_stops_at_a_failed_write;
 
     fn command(in_dir: Option<&str>) -> OnCommand {
+        let in_dir = in_dir.map(String::from);
         OnCommand {
             target: vec!["x".to_string()],
-            in_dir: in_dir.map(String::from),
+            // as `execute` resolves it
+            in_dir_path: resolve_in_dir(&in_dir).unwrap(),
+            in_dir,
             by_name: None,
             cmd: false,
             json: false,

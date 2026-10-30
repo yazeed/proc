@@ -5,6 +5,7 @@ Follow these steps for every release. Do not skip steps.
 ## 1. Pre-Release Checks
 
 ```bash
+rustup update stable                           # The latest stable Rust: CI and the release builds use it
 cargo update                                   # Update dependencies first, so everything below tests them
 cargo fmt --check                              # Code formatted
 cargo clippy --all-targets -- -D warnings      # No warnings, tests included (as CI runs it)
@@ -22,6 +23,15 @@ Code behind `#[cfg(unix)]` or `#[cfg(windows)]` (signals, `freeze`/`thaw`, lsof 
 ```bash
 rustup target add x86_64-pc-windows-msvc  # One-time setup
 cargo check --target x86_64-pc-windows-msvc --all-targets
+```
+
+### Oldest Supported Rust
+
+`rust-version` in Cargo.toml is the oldest Rust proc builds with, and `cargo update` can pull in a dependency that needs a newer one. Check it with that version (1.88 at the time of writing), and raise `rust-version` (and CONTRIBUTING.md) if a dependency now needs more:
+
+```bash
+rustup toolchain install 1.88 --profile minimal  # One-time setup, the version in Cargo.toml
+cargo +1.88 check --all-targets
 ```
 
 ## 2. Manual Testing

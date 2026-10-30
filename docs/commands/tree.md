@@ -33,6 +33,8 @@ Each line shows the process's status, name, PID, CPU, memory and uptime (`up 3m 
 | `--json` | `-j` | Output as JSON |
 | `--verbose` | `-v` | Show extra details |
 
+With no target, the filters narrow the view, as in `list`: when nothing passes them, `tree` says so and exits 0. A target is a question, so a target that matches nothing, or that `--in` or `--by` rule out, exits 2, as in `by` and `info`. A process that passes the filters and is already drawn inside another one's tree is not drawn again as a root of its own.
+
 ## Examples
 
 ```bash

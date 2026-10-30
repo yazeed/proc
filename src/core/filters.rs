@@ -218,6 +218,19 @@ pub fn require_in_dir(
     }
 }
 
+/// [`require_in_dir`] for a command that has not listed every process: only
+/// when the resolved directory is missing does it look whether a process
+/// still runs there
+pub fn require_in_dir_live(in_dir: &Option<String>, dir: &Option<PathBuf>) -> Result<()> {
+    if let Some(missing) = dir.as_ref().filter(|dir| !dir.is_dir()) {
+        let any = Process::find_all()?
+            .iter()
+            .any(|p| matches_in_filter(p, missing));
+        require_in_dir(in_dir, dir, any)?;
+    }
+    Ok(())
+}
+
 /// The current directory, for resolving the relative `path` the user typed.
 /// When the directory proc runs in was deleted there is nothing to resolve
 /// against; say that, rather than let the lookup fail as an unrelated error.
