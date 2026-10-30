@@ -51,7 +51,7 @@ Never do these: `--yes` with a name; `orphans --kill` or `stuck --kill`; `kill` 
 |--------|---------|-----|
 | `:3000` | every process listening on port 3000 (all holders) | Preferred. Port numbers always start with `:`. |
 | `1234` | PID 1234 | Preferred. |
-| `node` | processes whose whole name is `node` (case-insensitive), or whose executable or argv[0] file name is | Search only, with `--dry-run` and `--in=<dir>`. |
+| `node` | processes whose whole name is `node` (case-insensitive), or whose executable or argv[0] file name is | Search only, with `--dry-run`. Add `--in=<dir>` once the user names the directory. |
 | `node --cmd` | a substring of the name or full command line, like `pkill -f` | Only after the exact-name search found nothing or too little. Preview it read-only (`proc by <name> --cmd --json`, or `--dry-run` on the action). Never with `--yes`. Matches far more. |
 
 Give several targets as separate arguments: `proc stop <pid> <pid> :<port> --dry-run --json`. Commas (`:3000,:8080`) still work but are deprecated, and print a `note:` on stderr in human mode only, so `--json` is unaffected. A path is not a name: `proc kill ./server` finds nothing.
@@ -99,11 +99,12 @@ proc info <pid> --start-time <start_time> --json   # exit 2 means gone
 ### Stop something you did not start
 
 ```bash
-proc kill <name> --in=<dir> --dry-run --json     # a search, not an action
+proc kill <name> --dry-run --json                # a search, not an action: every match on the machine
+proc kill <name> --in=<dir> --dry-run --json     # once the user names the directory
 proc stop <pid> --start-time <start_time> --in=<cwd> --by <name> --yes --json   # per approved PID, values from the preview
 ```
 
-Run the first line with `stop` or `kill`, whichever the user asked for. Show the preview (rule 4). If the user approves, act by the PIDs you showed. The preview, the prompt and the receipt list the same processes in the same order (targets as typed, then PID ascending), so the receipt can be checked against what the user approved line by line. If the preview exits 2, the name may still appear in some command lines, but the JSON error of `kill` and `stop` does not say so. Run `proc by <name> --json`: its error reads "N processes have '<name>' in their command line (add --cmd to match those)". Show that to the user. To see `--cmd` matches, run `proc by <name> --cmd --json` (read-only) or add `--dry-run` to the action. Never combine `--cmd` with `--yes`.
+Run the search with `stop` or `kill`, whichever the user asked for. Start unscoped: tell the user how many processes match and what they are (which projects, tool servers, other agents' processes), and ask which ones they mean. Don't guess a directory with `--in` before the user names one, because that hides the matches they need to see. Show the preview (rule 4). If the user approves, act by the PIDs you showed. The preview, the prompt and the receipt list the same processes in the same order (targets as typed, then PID ascending), so the receipt can be checked against what the user approved line by line. If the preview exits 2, the name may still appear in some command lines, but the JSON error of `kill` and `stop` does not say so. Run `proc by <name> --json`: its error reads "N processes have '<name>' in their command line (add --cmd to match those)". Show that to the user. To see `--cmd` matches, run `proc by <name> --cmd --json` (read-only) or add `--dry-run` to the action. Never combine `--cmd` with `--yes`.
 
 ### Clean up before you finish
 
