@@ -236,8 +236,8 @@ Every process and port command prints JSON with `--json`: one document per comma
 proc on :8080 --json | jq '.process | {pid, cwd, uptime_secs}'
 ```
 
-- **Errors are JSON too**, including invalid flags: `{"action", "success": false, "error", "exit_code"}`. `"success": false` always comes with a non-zero exit code.
-- **Exit 4 means nothing was done**, and the error adds `"reason"`: `"invalid_input"` (a wrong flag, value or argument), `"needs_confirmation"` or `"not_supported"` (this OS cannot do it).
+- **Errors are JSON too**, including invalid flags: `{"action", "success": false, "error", "exit_code", "reason"}`. `"success": false` always comes with a non-zero exit code.
+- **Every error says why in `"reason"`**, one fixed word to branch on: `"system_error"` (exit 1); `"not_found"`, `"command_line_only"` (the name is only in command lines; `--cmd` matches) or `"ruled_out"` (a guard ruled the process out, listed in `"ruled_out_by"`) for exit 2; `"permission_denied"` (exit 3); and, for exit 4, where nothing was done, `"invalid_input"` (a wrong flag, value or argument), `"needs_confirmation"` or `"not_supported"` (this OS cannot do it).
 - **Preview, then confirm.** A command that changes processes, run with `--json` but without `--yes`, exits 4 with `"needs_confirmation": true` and `"processes"` (the ones it would have changed), so a script can show them before running it again with `--yes`.
 - **`not_found`** lists the targets that matched nothing (empty when all were found). It is in the JSON of `on`, `why`, `info`, `kill`, `stop`, `freeze`, `thaw`, `unstick`, `free` and `wait`, and in the exit 4 output above. `list` and `watch` do not have it.
 - **A prompt shows what you would approve.** The list of processes goes to the terminal beside the `[y/N]` question: on stdout, or on stderr when stdout is a file or a pipe. If the list cannot be shown, nothing is asked and nothing is changed (exit 4).

@@ -41,18 +41,19 @@ If the reader of proc's output goes away (`proc ... | head -n1`), proc stops wri
 
 ## Errors and needs_confirmation
 
-On failure with `--json`, stdout carries the four fields below. `action` is the canonical command name even when an alias was used (`proc k` gives `"kill"`). Unknown flags and arguments produce the same document with exit 4, plus `reason` (see below). Without `--json` the message goes to stderr.
+On failure with `--json`, stdout carries the five fields below. `action` is the canonical command name even when an alias was used (`proc k` gives `"kill"`), and `reason` says why in one fixed word (see below). Unknown flags and arguments produce the same document with exit 4. Without `--json` the message goes to stderr.
 
 ```json
 {
   "action": "kill",
   "success": false,
   "error": "No process found matching '99999999'\n  Try: proc list to list all processes",
-  "exit_code": 2
+  "exit_code": 2,
+  "reason": "not_found"
 }
 ```
 
-`on`, `by` and `why` say so in their error text when a name matches no process name but appears in some command lines: `2 processes have 'serve' in their command line (add --cmd to match those)`. The commands that change processes (and `wait`, `info`, `tree`) report the plain exit 2 / `not_found`; run `proc by <name> --json` to see the hint.
+`on`, `by` and `why` say so when a name matches no process name but appears in some command lines: `reason` is `command_line_only` and the error text says `2 processes have 'serve' in their command line (add --cmd to match those)`. The commands that change processes (and `wait`, `info`, `tree`) report `not_found`; run `proc by <name> --json` to see the hint.
 
 A command that changes processes (`kill`, `stop`, `freeze`, `thaw`, `free`, `unstick`, `orphans --kill`, `stuck --kill`) run with `--json` or with no terminal, and without `--yes`, changes nothing and exits 4:
 
@@ -74,13 +75,18 @@ How to respond is in SKILL.md, rule 6: show `processes` to the user, and re-run 
 
 ### reason
 
-Every exit-4 error carries `reason`, one of three strings. Exit 4 always means nothing was done:
+Every error carries `reason`, one fixed word: branch on it, never on the text of `error`. A result that did not fully succeed (a kill with `failed` entries, `freed: false`, a `wait` that timed out) is not an error and has none. Exit 4 always means nothing was done:
 
-| `reason` | Meaning | What to do |
-|----------|---------|------------|
-| `invalid_input` | A flag, value or argument is wrong: an unknown flag (`kill --name node`), a bad value (`--sort bogus`, `--signal BOGUS`), a missing argument, a directory or file that does not exist. | Fix the command from `error`. Retrying unchanged fails the same way. |
-| `needs_confirmation` | The command changes processes and did not get `--yes`. The error also has `needs_confirmation: true` and `processes`. | SKILL.md, rule 6. |
-| `not_supported` | This OS cannot do it: `freeze`, `thaw`, `orphans` and `stop --signal` on Windows. | Do not retry; use another approach. |
+| Exit | `reason` | Meaning | What to do |
+|------|----------|---------|------------|
+| 1 | `system_error` | proc itself could not do its part, such as reading the process or port table. | Report it; retrying may work. |
+| 2 | `not_found` | No process holds that PID, name or port (any more). | It is gone, or never was. |
+| 2 | `command_line_only` | No process has that name, but some have it in their command line. | Add `--cmd` if a command-line match is what you meant. |
+| 2 | `ruled_out` | A process holds the target, but a guard rules it out. `ruled_out_by` lists the guards' flags (`["--start-time"]`), and `error` names them with their values. | `--start-time`: your process is gone and a new one has the PID. `--by` or `--in`: check the PID with `proc info` before treating it as gone. |
+| 3 | `permission_denied` | proc itself got an I/O permission error. | Ask the user. |
+| 4 | `invalid_input` | A flag, value or argument is wrong: an unknown flag (`kill --name node`), a bad value (`--sort bogus`, `--signal BOGUS`), a missing argument, a directory or file that does not exist. | Fix the command from `error`. Retrying unchanged fails the same way. |
+| 4 | `needs_confirmation` | The command changes processes and did not get `--yes`. The error also has `needs_confirmation: true` and `processes`. | SKILL.md, rule 6. |
+| 4 | `not_supported` | This OS cannot do it: `freeze`, `thaw`, `orphans` and `stop --signal` on Windows. | Do not retry; use another approach. |
 
 ```json
 {
@@ -94,7 +100,18 @@ Every exit-4 error carries `reason`, one of three strings. Exit 4 always means n
 
 For a usage error, `error` is clap's whole message on one line: its lines joined with a space, without the `Usage:` block, the `--help` pointer and the `tip:` lines. A missing argument reads `the following required arguments were not provided: <TARGET>...` and a bad value reads `invalid value 'bogus' for '--sort <SORT>' [possible values: cpu, mem, pid, name]`. A suggestion or hint follows on its own indented line after `\n`: `\n  Try: did you mean '--json'?` for a mistyped flag, `\n  Try: did you mean 'kill'?` for a subcommand or value (up to three names, closest first: `'free' or 'freeze' or 'for'`), or, when a command that needs targets got `--by` or `--in` and no target, `\n  kill needs at least one target; --by filters the targets, it doesn't select them`. An argument that is not valid UTF-8 is `invalid_input` too, with the bad bytes shown as U+FFFD in `error`.
 
-Errors with exit 1, 2 or 3 have no `reason`: the exit code already says what happened.
+A target its guards ruled out:
+
+```json
+{
+  "action": "stop",
+  "success": false,
+  "error": "No process found matching '1234' (ruled out by --start-time 1700000000)\n  Try: proc list to list all processes",
+  "exit_code": 2,
+  "reason": "ruled_out",
+  "ruled_out_by": ["--start-time"]
+}
+```
 
 ## Commands and flags
 
@@ -154,7 +171,7 @@ Filters (a command takes only those its `--help` lists):
 - **`--in`** matches the process's current working directory, including subdirectories, not prefixes (`/a/t1` does not match `/a/t1x`). Paths resolve through symlinks. A broad directory scopes nothing (`/` kept all 185 `node` processes). Processes with no readable cwd never match. A process whose cwd is `/` matches only `--in=/`. It takes the next word as its value unless that starts with `-`; `proc kill --in 123 456` reads `123` as the directory, so write targets first or `--in=<dir>`.
 - **`--in` with a missing directory:** every command with `--in` exits 4 (`reason: invalid_input`, `Directory not found`, or `Not a directory` for a file), `on` included. A deleted directory that processes still run in is not missing: it finds them, so leftovers can be cleaned up, also through a symlinked spelling such as `/tmp/x` on macOS. A relative `--in` when the current directory has been deleted exits 4 (`the current directory no longer exists`). `--in` compares the real directory, so a name shown with an escaped control character (`a\nb`) still matches only its own directory.
 - **An empty argument** exits 4 on every command: a target (`""`, `","`: `a target can't be empty`), a name, a path, or a flag's value (`--in ""`, `--in=`). An unset `"$DIR"` is an error, never the current directory. `tree <name>` that matches nothing exits 2, and `tree -a` with no target exits 4.
-- **A PID with `--start-time <its start_time>`, `--in <its cwd>` or `--by <its name>`** is a guard: a mismatch exits 2 with the PID in the error, which names the guards that ruled it out: `No process found matching '1234' (ruled out by --by node)`. `--start-time` is the exact one (a new process on a reused PID can have the same name and directory): it takes one PID target (anything else exits 4), matches to within a second, and rules out a process whose start time can't be read (on macOS, another user's). A PID that no process holds reads `No process found matching '1234'` with nothing after it. The same holds for `kill`, `stop`, `freeze`, `thaw`, `wait`, `info` and `unstick` with targets; `on` and `tree` say `(no matches with specified filters)`.
+- **A PID with `--start-time <its start_time>`, `--in <its cwd>` or `--by <its name>`** is a guard: a mismatch exits 2 with the PID in the error, which names the guards that ruled it out: `No process found matching '1234' (ruled out by --by node)`. `--start-time` is the exact one (a new process on a reused PID can have the same name and directory): it takes one PID target (anything else exits 4), matches to within a second, and rules out a process whose start time can't be read (on macOS, another user's). A PID that no process holds reads `No process found matching '1234'` with nothing after it. The same holds for `kill`, `stop`, `freeze`, `thaw`, `wait`, `info` and `unstick` with targets, and for `--in` and `--by` on `on` and `tree`. The JSON has `reason: "ruled_out"` and `ruled_out_by`, the guards' flags (`["--by"]`).
 - **Plain patterns** for `list` are exact names (or substrings with `--cmd`), never regular expressions.
 
 ## Order of results

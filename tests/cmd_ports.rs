@@ -304,13 +304,18 @@ fn on_port_keeps_the_process_only_when_it_passes_in_and_by() {
             .unwrap_or_default()
             .trim_start_matches("Error: "),
         format!(
-            "No process found matching '{}' (process not in specified directory)",
+            "No process found matching '{}' (ruled out by --in {other})",
             p.target()
         ),
-        "the target sits in the quotes, the reason follows them: {err}"
+        "the target sits in the quotes, the guard that ruled it out follows: {err}"
     );
     let (out, err, code) = run_text(&["on", &p.target(), "--by", "no-such-process-name"]);
     assert_eq!(code, 2, "{out}{err}");
+    // the guard that failed, not the directory (it named the directory for both)
+    assert!(
+        err.contains("(ruled out by --by no-such-process-name)"),
+        "{err}"
+    );
 }
 
 /// `list` and `by` take process names, never targets: a colon is part of the
@@ -401,14 +406,18 @@ fn on_pid_outside_in_or_by_exits_not_found() {
             .unwrap_or_default()
             .trim_start_matches("Error: "),
         format!(
-            "No process found matching '{}' (not in specified directory)",
+            "No process found matching '{}' (ruled out by --in {other})",
             p.pid_arg()
         ),
-        "the target sits in the quotes, the reason follows them: {err}"
+        "the target sits in the quotes, the guard that ruled it out follows: {err}"
     );
 
     let (out, err, code) = run_text(&["on", &p.pid_arg(), "--by", "no-such-process-name"]);
     assert_eq!(code, 2, "{out}{err}");
+    assert!(
+        err.contains("(ruled out by --by no-such-process-name)"),
+        "{err}"
+    );
 
     let (out, _, code) = run_text(&["on", &p.pid_arg(), "--in", &p.dir(), "--by", &p.name]);
     assert_eq!(code, 0, "{out}");
@@ -458,14 +467,18 @@ fn on_name_applies_in_and_by() {
             .unwrap_or_default()
             .trim_start_matches("Error: "),
         format!(
-            "No process found matching '{}' (no matches with specified filters)",
+            "No process found matching '{}' (ruled out by --in {other})",
             p.name
         ),
-        "the target sits in the quotes, the reason follows them: {err}"
+        "the target sits in the quotes, the guard that ruled it out follows: {err}"
     );
 
     let (out, err, code) = run_text(&["on", &p.name, "--by", "no-such-process-name"]);
     assert_eq!(code, 2, "{out}{err}");
+    assert!(
+        err.contains("(ruled out by --by no-such-process-name)"),
+        "{err}"
+    );
 }
 
 #[test]

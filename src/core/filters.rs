@@ -233,35 +233,51 @@ pub fn guard_targets(
     }
     let found = processes.clone();
     apply_filters(processes, &guards.in_dir, &guards.by_name, mode)?;
-    let started = |p: &Process, seen: u64| p.start_time.is_some_and(|now| now.abs_diff(seen) <= 1);
     if let Some(seen) = guards.start_time {
-        processes.retain(|p| started(p, seen));
+        processes.retain(|p| started_at(p, seen));
     }
     if found.is_empty() || !processes.is_empty() {
         return Ok(());
     }
-    // Name the guards that rule out a process the targets found, not every
-    // guard given: `--by sleep --start-time 1` on a sleep is the start time
+    Err(ProcError::FilteredOut {
+        target: targets.join(" "),
+        ruled_out_by: ruled_out_by(&found, guards, mode)?,
+    })
+}
+
+/// Whether the process started at `seen` (Unix seconds), to within a second.
+/// A start time that can't be read doesn't match: nothing confirms it.
+fn started_at(process: &Process, seen: u64) -> bool {
+    process
+        .start_time
+        .is_some_and(|now| now.abs_diff(seen) <= 1)
+}
+
+/// The guards that rule out a process in `found`, each as its flag and the
+/// value typed, for [`ProcError::FilteredOut`]. Only those that fail count:
+/// `--by sleep --start-time 1` on a `sleep` names the start time alone.
+pub fn ruled_out_by(
+    found: &[Process],
+    guards: &Guards,
+    mode: NameMatch,
+) -> Result<Vec<(String, String)>> {
     let mut ruled_out = Vec::new();
     if let Some(name) = &guards.by_name {
         if found.iter().any(|p| !matches_by_filter(p, name, mode)) {
-            ruled_out.push(format!("--by {name}"));
+            ruled_out.push(("--by".to_string(), name.clone()));
         }
     }
     if let (Some(typed), Some(dir)) = (&guards.in_dir, resolve_in_dir(&guards.in_dir)?) {
         if found.iter().any(|p| !matches_in_filter(p, &dir)) {
-            ruled_out.push(format!("--in {typed}"));
+            ruled_out.push(("--in".to_string(), typed.clone()));
         }
     }
     if let Some(seen) = guards.start_time {
-        if found.iter().any(|p| !started(p, seen)) {
-            ruled_out.push(format!("--start-time {seen}"));
+        if found.iter().any(|p| !started_at(p, seen)) {
+            ruled_out.push(("--start-time".to_string(), seen.to_string()));
         }
     }
-    Err(ProcError::FilteredOut {
-        target: targets.join(" "),
-        reason: format!("ruled out by {}", ruled_out.join(" and ")),
-    })
+    Ok(ruled_out)
 }
 
 /// Resolve an `--in` directory filter to the form processes report their cwd in.

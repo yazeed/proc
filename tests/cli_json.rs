@@ -33,7 +33,11 @@ fn the_contract_check_refuses_each_break() {
     let kept = [
         (json!({"action": "list", "success": true, "count": 0}), 0),
         (
-            json!({"action": "kill", "success": false, "error": "x", "exit_code": 2}),
+            json!({"action": "kill", "success": false, "error": "x", "exit_code": 2, "reason": "not_found"}),
+            2,
+        ),
+        (
+            json!({"action": "kill", "success": false, "error": "x", "exit_code": 2, "reason": "ruled_out", "ruled_out_by": ["--by"]}),
             2,
         ),
         (json!({"action": "kill", "success": false, "failed": []}), 1),
@@ -61,6 +65,24 @@ fn the_contract_check_refuses_each_break() {
         ),
         (
             json!({"action": "kill", "success": false, "error": "x", "exit_code": 2, "reason": "invalid_input"}),
+            2,
+        ),
+        // an error without a reason, a reason without an error
+        (
+            json!({"action": "kill", "success": false, "error": "x", "exit_code": 2}),
+            2,
+        ),
+        (
+            json!({"action": "list", "success": true, "reason": "not_found"}),
+            0,
+        ),
+        // ruled_out and ruled_out_by come together
+        (
+            json!({"action": "kill", "success": false, "error": "x", "exit_code": 2, "reason": "ruled_out"}),
+            2,
+        ),
+        (
+            json!({"action": "kill", "success": false, "error": "x", "exit_code": 2, "reason": "not_found", "ruled_out_by": ["--by"]}),
             2,
         ),
     ];
@@ -107,13 +129,13 @@ fn a_bad_value_says_invalid_input_whether_clap_or_proc_finds_it() {
 }
 
 #[test]
-fn errors_with_exit_1_to_3_have_no_reason() {
+fn every_error_says_why_and_a_result_does_not() {
     let (json, code) = run_json(&["kill", MISSING_PID, "--json"]);
     assert_eq!(code, 2, "{json}");
-    assert!(json.get("reason").is_none(), "{json}");
+    assert_eq!(json["reason"], "not_found", "{json}");
 
-    // a wait that times out prints its own result, exit 1; the process it
-    // waits for is this test, which is still running
+    // a wait that times out prints its own result, exit 1, which is not an
+    // error document; the process it waits for is this test, still running
     let pid = std::process::id().to_string();
     let (json, code) = run_json(&["wait", &pid, "--timeout", "1", "--json"]);
     assert_eq!(code, 1, "{json}");
@@ -592,12 +614,12 @@ mod unix {
         let (json, code) = run_json(&["kill", &pid, "--dry-run", "--json"]);
         assert_eq!(code, 0, "{json}");
 
-        // other errors keep their plain shape
+        // other errors keep their plain shape, with their own reason
         let (json, code) = run_json(&["kill", "99999999", "--json"]);
         assert_ne!(code, 0, "{json}");
         assert!(json.get("needs_confirmation").is_none(), "{json}");
         assert!(json.get("processes").is_none(), "{json}");
-        assert!(json.get("reason").is_none(), "{json}");
+        assert_eq!(json["reason"], "not_found", "{json}");
     }
 
     #[test]

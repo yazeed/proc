@@ -22,16 +22,19 @@ pub enum ProcError {
         in_command_line: usize,
     },
 
-    /// A target exists but `--in` or `--by` ruled out everything it matched.
-    /// The target sits in the quotes and the reason follows them.
+    /// A target exists but its guards (`--by`, `--in`, `--start-time`) ruled
+    /// out everything it matched. The target sits in the quotes and the guards
+    /// that ruled it out follow them.
     #[error(
-        "No process found matching '{target}' ({reason})\n  Try: proc list to list all processes"
+        "No process found matching '{target}' (ruled out by {})\n  Try: proc list to list all processes",
+        guard_list(.ruled_out_by)
     )]
     FilteredOut {
         /// The target as typed (`node`, `:3000`, `1234`)
         target: String,
-        /// Which filter ruled it out
-        reason: String,
+        /// Each guard that ruled it out: its flag and the value typed
+        /// (`("--by", "node")`)
+        ruled_out_by: Vec<(String, String)>,
     },
 
     /// No process is listening on the specified port
@@ -99,6 +102,26 @@ pub enum ProcError {
     },
 }
 
+/// The `reason` of an exit-1 JSON error: proc itself could not do its part,
+/// such as reading the process or port table
+pub const REASON_SYSTEM_ERROR: &str = "system_error";
+
+/// The `reason` of an exit-2 JSON error: no process holds that PID, name or
+/// port (any more)
+pub const REASON_NOT_FOUND: &str = "not_found";
+
+/// The `reason` of an exit-2 JSON error for a name that no process has, though
+/// some have it in their command line (`--cmd` would match those)
+pub const REASON_COMMAND_LINE_ONLY: &str = "command_line_only";
+
+/// The `reason` of an exit-2 JSON error for a target whose guards (`--by`,
+/// `--in`, `--start-time`) ruled out every process it found; `ruled_out_by`
+/// names them
+pub const REASON_RULED_OUT: &str = "ruled_out";
+
+/// The `reason` of an exit-3 JSON error
+pub const REASON_PERMISSION_DENIED: &str = "permission_denied";
+
 /// The `reason` of an exit-4 JSON error caused by bad flags, values or
 /// arguments, including clap's own usage errors
 pub const REASON_INVALID_INPUT: &str = "invalid_input";
@@ -109,6 +132,15 @@ pub const REASON_NEEDS_CONFIRMATION: &str = "needs_confirmation";
 
 /// The `reason` of an exit-4 JSON error for a command this OS does not support
 pub const REASON_NOT_SUPPORTED: &str = "not_supported";
+
+/// Guards as the message names them: `--by node and --start-time 1700000000`
+fn guard_list(guards: &[(String, String)]) -> String {
+    let named: Vec<String> = guards
+        .iter()
+        .map(|(flag, value)| format!("{flag} {value}"))
+        .collect();
+    named.join(" and ")
+}
 
 /// The hint for a name that matched nothing by name but is in some command lines
 pub fn command_line_hint(name: &str, count: usize) -> String {
@@ -132,13 +164,36 @@ impl ProcError {
         }
     }
 
-    /// Why this error is exit 4 (nothing was done), as the `reason` of the JSON
-    /// error. `None` for every error with another exit code.
+    /// Why this error happened, as the `reason` of the JSON error: a fixed word
+    /// a caller branches on instead of reading the message. Every error has
+    /// one except [`ProcError::Reported`], whose command already printed its
+    /// result and prints no error.
     pub fn reason(&self) -> Option<&'static str> {
         match self {
+            ProcError::ProcessNotFound(_)
+            | ProcError::PortNotFound(_)
+            | ProcError::ProcessGone(_) => Some(REASON_NOT_FOUND),
+            ProcError::NameNotFound { .. } => Some(REASON_COMMAND_LINE_ONLY),
+            ProcError::FilteredOut { .. } => Some(REASON_RULED_OUT),
+            ProcError::PermissionDenied(_) => Some(REASON_PERMISSION_DENIED),
             ProcError::InvalidInput(_) => Some(REASON_INVALID_INPUT),
             ProcError::ConfirmationRequired { .. } => Some(REASON_NEEDS_CONFIRMATION),
             ProcError::NotSupported(_) => Some(REASON_NOT_SUPPORTED),
+            ProcError::SystemError(_)
+            | ProcError::Timeout(_)
+            | ProcError::ParseError(_)
+            | ProcError::SignalError(_) => Some(REASON_SYSTEM_ERROR),
+            ProcError::Reported { .. } => None,
+        }
+    }
+
+    /// The flags of the guards that ruled the target out, for the JSON's
+    /// `ruled_out_by`; `None` for every other error
+    pub fn ruled_out_by(&self) -> Option<Vec<&str>> {
+        match self {
+            ProcError::FilteredOut { ruled_out_by, .. } => {
+                Some(ruled_out_by.iter().map(|(flag, _)| flag.as_str()).collect())
+            }
             _ => None,
         }
     }
@@ -218,7 +273,8 @@ impl From<&ProcError> for ExitCode {
             ProcError::ProcessNotFound(_)
             | ProcError::NameNotFound { .. }
             | ProcError::FilteredOut { .. }
-            | ProcError::PortNotFound(_) => ExitCode::NotFound,
+            | ProcError::PortNotFound(_)
+            | ProcError::ProcessGone(_) => ExitCode::NotFound,
             ProcError::PermissionDenied(_) => ExitCode::PermissionDenied,
             ProcError::InvalidInput(_)
             | ProcError::NotSupported(_)
@@ -252,11 +308,19 @@ mod tests {
             processes: Vec::new(),
             not_found: None,
         };
-        let cases: Vec<(ProcError, &str, i32)> = vec![
+        let filtered = ProcError::FilteredOut {
+            target: "1234".to_string(),
+            ruled_out_by: vec![
+                ("--by".to_string(), "node".to_string()),
+                ("--start-time".to_string(), "1700000000".to_string()),
+            ],
+        };
+        let cases: Vec<(ProcError, &str, i32, Option<&str>)> = vec![
             (
                 ProcError::ProcessNotFound("node".to_string()),
                 "No process found matching 'node'\n  Try: proc list to list all processes",
                 2,
+                Some("not_found"),
             ),
             (
                 ProcError::NameNotFound {
@@ -265,74 +329,97 @@ mod tests {
                 },
                 "No process found matching 'serve'\n  2 processes have 'serve' in their command line (add --cmd to match those)\n  Try: proc list to list all processes",
                 2,
+                Some("command_line_only"),
             ),
             (
-                ProcError::FilteredOut {
-                    target: "node".to_string(),
-                    reason: "no matches with specified filters".to_string(),
-                },
-                "No process found matching 'node' (no matches with specified filters)\n  Try: proc list to list all processes",
+                filtered,
+                "No process found matching '1234' (ruled out by --by node and --start-time 1700000000)\n  Try: proc list to list all processes",
                 2,
+                Some("ruled_out"),
             ),
             (
                 ProcError::PortNotFound(3000),
                 "No process listening on port 3000\n  Try: proc ports",
                 2,
+                Some("not_found"),
             ),
             (
                 ProcError::PermissionDenied(42),
                 "Permission denied for PID 42\n  Try: sudo proc <command>",
                 3,
+                Some("permission_denied"),
             ),
             (
                 ProcError::InvalidInput("bad".to_string()),
                 "Invalid input: bad",
                 4,
+                Some("invalid_input"),
             ),
-            (confirmation, "Pass --yes", 4),
+            (confirmation, "Pass --yes", 4, Some("needs_confirmation")),
             (
                 ProcError::SystemError("boom".to_string()),
                 "System error: boom",
                 1,
+                Some("system_error"),
             ),
             (
                 ProcError::Timeout("10s".to_string()),
                 "Operation timed out: 10s",
                 1,
+                Some("system_error"),
             ),
             (
                 ProcError::ParseError("x".to_string()),
                 "Failed to parse: x",
                 1,
+                Some("system_error"),
             ),
             (
                 ProcError::NotSupported("freeze".to_string()),
                 "Not supported on this platform: freeze",
                 4,
+                Some("not_supported"),
             ),
+            // every holder of a port ended between listing it and looking it up
             (
                 ProcError::ProcessGone(7),
                 "Process 7 is no longer running",
-                1,
+                2,
+                Some("not_found"),
             ),
             (
                 ProcError::SignalError("EPERM".to_string()),
                 "Signal failed: EPERM",
                 1,
+                Some("system_error"),
             ),
+            // printed its own result; no error is printed, so no reason
             (
                 ProcError::reported(ExitCode::NotFound, "nothing matched"),
                 "nothing matched",
                 2,
+                None,
             ),
         ];
         assert_eq!(ExitCode::Success as i32, 0);
-        for (err, message, code) in cases {
+        for (err, message, code, reason) in cases {
             assert_eq!(err.to_string(), message);
-            // exit 4 always says why, and no other exit code does
-            assert_eq!(err.reason().is_some(), code == 4, "{message}");
+            assert_eq!(err.reason(), reason, "{message}");
             assert_eq!(exit_code(err), code, "{message}");
         }
+    }
+
+    #[test]
+    fn only_a_guard_error_names_the_guards_in_json() {
+        let filtered = ProcError::FilteredOut {
+            target: "1234".to_string(),
+            ruled_out_by: vec![("--in".to_string(), "/app".to_string())],
+        };
+        assert_eq!(filtered.ruled_out_by(), Some(vec!["--in"]));
+        assert_eq!(
+            ProcError::ProcessNotFound("1".to_string()).ruled_out_by(),
+            None
+        );
     }
 
     #[test]
@@ -355,6 +442,11 @@ mod tests {
         assert_eq!(REASON_INVALID_INPUT, "invalid_input");
         assert_eq!(REASON_NEEDS_CONFIRMATION, "needs_confirmation");
         assert_eq!(REASON_NOT_SUPPORTED, "not_supported");
+        assert_eq!(REASON_SYSTEM_ERROR, "system_error");
+        assert_eq!(REASON_NOT_FOUND, "not_found");
+        assert_eq!(REASON_COMMAND_LINE_ONLY, "command_line_only");
+        assert_eq!(REASON_RULED_OUT, "ruled_out");
+        assert_eq!(REASON_PERMISSION_DENIED, "permission_denied");
     }
 
     #[test]

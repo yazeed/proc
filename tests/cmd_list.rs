@@ -802,13 +802,8 @@ fn tree_by_and_in_narrow_a_target() {
         "--json",
     ]);
     assert_eq!(code, 2, "{json}");
-    assert!(
-        json["error"]
-            .as_str()
-            .unwrap()
-            .contains("no matches with specified filters"),
-        "{json}"
-    );
+    assert_eq!(json["reason"], "ruled_out", "{json}");
+    assert_eq!(json["ruled_out_by"], serde_json::json!(["--in"]), "{json}");
 }
 
 #[test]

@@ -11,8 +11,8 @@
 //! Commas still work (`proc on :3000,:8080`) but are deprecated.
 
 use crate::core::{
-    find_ports_for_pid, flatten_targets, parse_target, resolve_in_dir, resolve_target, with_ports,
-    NameMatch, PortInfo, Process, TargetType,
+    find_ports_for_pid, flatten_targets, parse_target, resolve_in_dir, resolve_target,
+    ruled_out_by, with_ports, Guards, NameMatch, PortInfo, Process, TargetType,
 };
 use crate::error::{ExitCode, ProcError, Result};
 use crate::out_println;
@@ -174,10 +174,20 @@ impl OnCommand {
     /// Check if process matches --by filter
     fn matches_by_filter(&self, proc: &Process) -> bool {
         if let Some(ref name) = self.by_name {
-            crate::core::matches_by_filter(proc, name, NameMatch::from_flag(self.cmd))
+            crate::core::matches_by_filter(proc, name, self.mode())
         } else {
             true
         }
+    }
+
+    /// How names and `--by` match
+    fn mode(&self) -> NameMatch {
+        NameMatch::from_flag(self.cmd)
+    }
+
+    /// `--in` and `--by`, for naming the ones that rule a target out
+    fn guards(&self) -> Guards {
+        Guards::new(&self.in_dir, &self.by_name, None)
     }
 
     /// Check if process matches all filters (--in and --by)
@@ -209,6 +219,7 @@ impl OnCommand {
         port: u16,
         holders: Vec<(PortInfo, Option<Process>)>,
     ) -> Result<Vec<(PortInfo, Option<Process>)>> {
+        let found: Vec<Process> = holders.iter().filter_map(|(_, p)| p.clone()).collect();
         let mut kept: Vec<(PortInfo, Option<Process>)> = holders
             .into_iter()
             .filter(|(_, process)| process.as_ref().is_none_or(|p| self.matches_filters(p)))
@@ -216,7 +227,7 @@ impl OnCommand {
         if kept.is_empty() {
             return Err(ProcError::FilteredOut {
                 target: format!(":{port}"),
-                reason: "process not in specified directory".to_string(),
+                ruled_out_by: ruled_out_by(&found, &self.guards(), self.mode())?,
             });
         }
 
@@ -272,7 +283,7 @@ impl OnCommand {
         if !self.matches_filters(&process) {
             return Err(ProcError::FilteredOut {
                 target: pid.to_string(),
-                reason: "not in specified directory".to_string(),
+                ruled_out_by: ruled_out_by(&[process], &self.guards(), self.mode())?,
             });
         }
 
@@ -312,11 +323,12 @@ impl OnCommand {
 
         // Apply --in and --by filters if present
         if self.in_dir.is_some() || self.by_name.is_some() {
+            let found = processes.clone();
             processes.retain(|p| self.matches_filters(p));
             if processes.is_empty() {
                 return Err(ProcError::FilteredOut {
                     target: name.to_string(),
-                    reason: "no matches with specified filters".to_string(),
+                    ruled_out_by: ruled_out_by(&found, &self.guards(), self.mode())?,
                 });
             }
         }

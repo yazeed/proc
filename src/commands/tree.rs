@@ -11,7 +11,7 @@
 
 use crate::core::{
     classify, matches_by_filter, matches_in_filter, parse_target, resolve_in_dir, resolve_target,
-    Hit, NameMatch, Process, ProcessStatus, StatusFilter, TargetType,
+    ruled_out_by, Guards, Hit, NameMatch, Process, ProcessStatus, StatusFilter, TargetType,
 };
 use crate::error::{ProcError, Result};
 use crate::out_println;
@@ -261,6 +261,7 @@ impl TreeCommand {
         };
 
         let target_processes: Vec<&Process> = if let Some(target) = &self.target {
+            let found: Vec<Process> = target_processes.iter().map(|p| (*p).clone()).collect();
             let kept: Vec<&Process> = target_processes
                 .into_iter()
                 .filter(|p| in_and_by(p))
@@ -269,9 +270,10 @@ impl TreeCommand {
             // so an empty list means --in or --by ruled them all out: the same
             // guard error as `info` and `on`, not an empty answer
             if kept.is_empty() {
+                let guards = Guards::new(&self.in_dir, &self.by_name, None);
                 return Err(ProcError::FilteredOut {
                     target: target.clone(),
-                    reason: "no matches with specified filters".to_string(),
+                    ruled_out_by: ruled_out_by(&found, &guards, mode)?,
                 });
             }
             kept
@@ -530,14 +532,16 @@ impl TreeCommand {
             }
         };
         // --in and --by guard the target here too, as without --ancestors
+        let found = target_processes.clone();
         let target_processes: Vec<Process> = target_processes
             .into_iter()
             .filter(|p| in_and_by(p))
             .collect();
         if target_processes.is_empty() {
+            let guards = Guards::new(&self.in_dir, &self.by_name, None);
             return Err(ProcError::FilteredOut {
                 target: target.to_string(),
-                reason: "no matches with specified filters".to_string(),
+                ruled_out_by: ruled_out_by(&found, &guards, mode)?,
             });
         }
 

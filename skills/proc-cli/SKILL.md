@@ -124,7 +124,7 @@ Both are leads, not verdicts. `stuck` flags any process that has run over 300 se
 |------|---------|-----------|
 | 0 | Done (or the dry run succeeded) | Check `not_found`: every target you passed must appear in `succeeded`, `processes` or `results`. |
 | 1 | Partly failed, a port stayed busy, or `wait` timed out | Read `succeeded` and `failed`. Retry only the PIDs in `failed`. Report anything the OS refused. |
-| 2 | Nothing matched | Do not widen the target. Re-run the read-only command. Add `--cmd` only after a dry run. |
+| 2 | Nothing matched; branch on `reason` | `not_found`: gone; do not widen the target. `command_line_only`: add `--cmd` only after a dry run. `ruled_out`: a guard in `ruled_out_by` ruled out the process on that PID (rule 7). |
 | 3 | Permission denied | Stop and ask. Do not use `sudo` unprompted. |
 | 4 | Nothing was done; branch on `reason` | `needs_confirmation`: follow rule 6. `invalid_input`: fix the command from `error`. `not_supported`: this OS cannot do it, so do not retry. |
 
@@ -134,7 +134,7 @@ Exit 129, 130, 131 or 143 in a shell (ended by signal 1, 2, 3 or 15, if you ran 
 
 A prompt that cannot show its list of processes (stdout and stderr both unusable) asks nothing and exits 4 with `needs_confirmation`, so a `y` is never given blind. Agents do not answer prompts: preview with `--dry-run --json`, then pass `--yes` for approved PIDs.
 
-With `--json` every command prints one JSON document on stdout, including errors: `{"action", "success": false, "error", "exit_code"}`, plus `reason` on exit 4. `success: false` always comes with a non-zero exit. Use the full schemas in [reference.md](reference.md) before you parse `kill`, `stop` or `free` output.
+With `--json` every command prints one JSON document on stdout, including errors: `{"action", "success": false, "error", "exit_code", "reason"}`. Every error has a `reason` (one fixed word per cause; the full list is in reference.md): branch on it, never on the text. `success: false` always comes with a non-zero exit. Use the full schemas in [reference.md](reference.md) before you parse `kill`, `stop` or `free` output.
 
 ## Platform notes
 

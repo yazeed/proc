@@ -200,7 +200,7 @@ fn run() -> u8 {
                 if let Some(ref hint) = hint {
                     error.push_str(&format!("\n  {hint}"));
                 }
-                print_json_error(&error, exit_code, Some(REASON_INVALID_INPUT), None);
+                print_json_error(&error, exit_code, Some(REASON_INVALID_INPUT), None, None);
             } else {
                 err_println!("{}", parts.human());
                 if let Some(suggestion) = suggestion {
@@ -287,7 +287,14 @@ fn run() -> u8 {
                 } => Some((processes.as_slice(), not_found.as_deref())),
                 _ => None,
             };
-            print_json_error(&e.to_string(), exit_code as i32, e.reason(), confirmation);
+            let ruled_out_by = e.ruled_out_by();
+            print_json_error(
+                &e.to_string(),
+                exit_code as i32,
+                e.reason(),
+                confirmation,
+                ruled_out_by.as_deref(),
+            );
         } else {
             err_println!("{}", e);
         }
@@ -300,16 +307,21 @@ fn run() -> u8 {
 
 /// Print an error as the standard JSON error object on stdout.
 ///
-/// `reason` is `Some` exactly for exit 4: why nothing was done.
+/// `reason` says why, as a fixed word to branch on; every error printed here
+/// has one.
 ///
 /// `confirmation` is `Some((processes, not_found))` only for a missing `--yes`:
 /// the object then also says `needs_confirmation`, lists what would have been
 /// changed and, for a command that takes targets, the targets that were not found.
+///
+/// `ruled_out_by` is `Some` only for a target its guards ruled out: the flags
+/// of those guards (`["--start-time"]`).
 fn print_json_error(
     error: &str,
     exit_code: i32,
     reason: Option<&str>,
     confirmation: Option<(&[Process], Option<&[String]>)>,
+    ruled_out_by: Option<&[&str]>,
 ) {
     let mut error_json = serde_json::json!({
         "action": action_name(),
@@ -326,6 +338,9 @@ fn print_json_error(
         if let Some(not_found) = not_found {
             error_json["not_found"] = serde_json::json!(not_found);
         }
+    }
+    if let Some(ruled_out_by) = ruled_out_by {
+        error_json["ruled_out_by"] = serde_json::json!(ruled_out_by);
     }
     out_println!("{}", serde_json::to_string_pretty(&error_json).unwrap());
 }
@@ -365,7 +380,13 @@ fn raw_args() -> Vec<String> {
 fn invalid_argument(message: &str) -> u8 {
     let exit_code = ExitCode::InvalidInput;
     if wants_json() {
-        print_json_error(message, exit_code as i32, Some(REASON_INVALID_INPUT), None);
+        print_json_error(
+            message,
+            exit_code as i32,
+            Some(REASON_INVALID_INPUT),
+            None,
+            None,
+        );
     } else {
         err_println!("error: {message}");
     }
