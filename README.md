@@ -324,6 +324,10 @@ proc is also a Rust crate, `proc_cli`: see the [API docs on docs.rs](https://doc
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). The principles behind the commands are in [PHILOSOPHY.md](PHILOSOPHY.md).
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/chart?repos=yazeed/proc-cli&type=date&legend=top-left)](https://www.star-history.com/?repos=yazeed%2Fproc-cli&type=date&legend=top-left)
+
 ## License
 
 MIT

@@ -179,6 +179,8 @@ cargo clippy             # Lint
 
 Pre-commit hook runs `cargo fmt --check` automatically.
 
+Every change to a command, flag, argument or output gets tests for its cases (targets, filters, JSON, bad input, pipes, no terminal), in the suite CONTRIBUTING.md's "What a change is tested for" names. CI enforces 100% line coverage and a test for every flag.
+
 ## Unreleased Work
 
 Work is committed and pushed to `main` without a tag, and every change goes under `## [Unreleased]` in `CHANGELOG.md` in the same commit. Every place that describes proc is updated with the change, so `main` describes the next release:

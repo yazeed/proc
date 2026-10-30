@@ -188,6 +188,22 @@ fn test_find_process_by_name() {
 }
 ```
 
+### What a change is tested for
+
+Line coverage says a line ran, not that its behaviour is pinned. A change that adds or alters a command, flag, argument or output gets tests for the cases people and agents meet, in the suite that holds that kind of case:
+
+- **Behaviour through the real binary:** the command's own file (`cmd_actions.rs`, `cmd_find.rs`, `cmd_free.rs`, `cmd_inspect.rs`, `cmd_list.rs`, `cmd_ports.rs`, `cmd_watch.rs`), with every target form it takes (`:port`, PID, name, several targets) and every filter (`--in`, `--by`, `--start-time`)
+- **A new flag:** a case in the flag matrix (`tests/flags.rs`); `every_flag_is_exercised` fails until there is one
+- **JSON:** one document, `action`, `success`, exit codes and `reason` (`cli_json.rs`, and the checker in `tests/contract/` that runs on every JSON document a test reads); `not_found` for targets that match nothing (`cmd_not_found.rs`)
+- **Bad input:** missing or bad values, unknown flags, empty arguments (`parser_errors.rs`, generated from the CLI definition), and inputs that used to look like an answer (`silent_failures.rs`)
+- **Pipes and closed output:** stdout or stderr that can't take the bytes, a reader that stops early (`hostile_io.rs`)
+- **A terminal, or none:** confirmation prompts and the `watch` screen through a pseudo-terminal (`terminal.rs`); the same command without a terminal must exit 4, not ask
+- **Ordering and several holders:** stable output order (`order.rs`), a port held over IPv4 and IPv6 at once (`cmd_port_holders.rs`)
+- **Anything that waits:** `timing.rs`, so a timeout or a wait that never returns fails fast
+- **Docs:** examples never pair `--yes` with a name (`doc_examples.rs`)
+
+Tests aim proc only at processes they started themselves (a copy of `examples/listener.rs` under its own name in a fresh temp directory, or a shell the test owns), so the suite can run on a machine that is busy with other work.
+
 ### Coverage
 
 CI fails a change that lowers line coverage or leaves a flag without a test. The `Coverage gate` job checks:
