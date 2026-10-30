@@ -1,0 +1,4 @@
+# Link the C runtime into proc.exe, so it runs on a Windows machine without the
+# Visual C++ Redistributable (VCRUNTIME140.dll). ripgrep and fd do the same.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

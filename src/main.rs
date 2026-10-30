@@ -260,9 +260,11 @@ fn run() -> u8 {
             out::write_stdout(&script);
             Ok(())
         }
+        // The title takes the command's version: the version line alone, not
+        // the --version text with its URL and licence lines
         Commands::Manpage => {
             let mut page = Vec::new();
-            clap_mangen::Man::new(Cli::command())
+            clap_mangen::Man::new(Cli::command().version(env!("PROC_VERSION")))
                 .render(&mut page)
                 .map(|()| out::write_stdout(&page))
                 .map_err(ProcError::from)
