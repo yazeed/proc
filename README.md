@@ -255,6 +255,8 @@ Full schemas: [`skills/proc-cli/reference.md`](skills/proc-cli/reference.md).
 
 ### Agent skill
 
+[![Skills installs](https://skills.sh/b/yazeed/proc-cli)](https://www.skills.sh/yazeed/proc-cli)
+
 Teach your coding agent (Claude Code, Codex, Cursor, Gemini CLI and others) when to reach for proc and how to use it safely, with structured JSON output:
 
 ```bash
