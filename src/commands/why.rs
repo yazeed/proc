@@ -11,8 +11,8 @@
 //! Commas still work (`proc why :3000,:8080`) but are deprecated.
 
 use crate::core::{
-    find_ports_for_pid, flatten_targets, parse_target, resolve_target, NameMatch, PortInfo,
-    Process, ProcessStatus, Protocol, TargetType,
+    flatten_targets, parse_target, resolve_target, NameMatch, PortInfo, Process, ProcessStatus,
+    Protocol, TargetType,
 };
 use crate::error::{ExitCode, ProcError, Result};
 use crate::out_println;
@@ -58,6 +58,8 @@ impl WhyCommand {
         let mut found_any = false;
         let mut first_error: Option<ProcError> = None;
         let mut not_found: Vec<String> = Vec::new();
+        // Read once for every process shown (see `with_ports`)
+        let listening = std::cell::OnceCell::new();
 
         for (i, target_str) in targets.iter().enumerate() {
             if i > 0 && !self.json {
@@ -91,7 +93,12 @@ impl WhyCommand {
             if self.json {
                 json_results.extend(target_processes.iter().map(|proc| {
                     let chain = self.build_ancestry_chain(proc, &pid_map);
-                    let ports = find_ports_for_pid(proc.pid).unwrap_or_default();
+                    let ports = listening
+                        .get_or_init(|| PortInfo::get_all_listening().unwrap_or_default())
+                        .iter()
+                        .filter(|p| p.pid == proc.pid)
+                        .cloned()
+                        .collect();
                     WhyOutput {
                         target: target_str.clone(),
                         port: port_context.as_ref().map(|p| p.port),

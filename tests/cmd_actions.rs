@@ -8,6 +8,8 @@
 //! reaped on drop. Timing assertions live in tests/timing.rs; the limits here
 //! are only there to stop a broken command from hanging the test.
 
+mod contract;
+
 use assert_cmd::Command;
 use proc_cli::core::filters::strip_verbatim_prefix;
 use serde_json::Value;
@@ -55,6 +57,7 @@ fn run_json(args: &[&str]) -> (Value, i32) {
             r.stdout, r.stderr
         )
     });
+    contract::check(&json, r.code, args);
     (json, r.code)
 }
 

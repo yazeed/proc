@@ -811,7 +811,7 @@ impl Process {
 
     /// `kill_and_wait_within` with the kill to send, so a test can send one that
     /// leaves the process running (a real kill is over before it returns on
-    /// Windows, so the wait would never be needed)
+    /// Windows, though the process can stay listed for a moment after)
     fn kill_then_wait(&self, wait: Duration, kill: impl Fn(&Process) -> Result<()>) -> Result<()> {
         match kill(self) {
             // it exited on its own just before the kill

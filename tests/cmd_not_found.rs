@@ -6,6 +6,8 @@
 //! for `--yes`. Every process these tests act on is a listener the test
 //! started; the missing target is a PID above every OS maximum.
 
+mod contract;
+
 use assert_cmd::Command;
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader};
@@ -27,7 +29,9 @@ fn run_json(args: &[&str]) -> (Value, i32) {
     let stdout = String::from_utf8(output.stdout).unwrap();
     let json: Value = serde_json::from_str(&stdout)
         .unwrap_or_else(|e| panic!("stdout is not a single JSON document ({e}):\n{stdout}"));
-    (json, output.status.code().unwrap())
+    let code = output.status.code().unwrap();
+    contract::check(&json, code, args);
+    (json, code)
 }
 
 /// `target/debug/examples/listener`, found relative to this test binary

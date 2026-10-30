@@ -16,6 +16,8 @@
 //! - `{name}`: the owned process's name, for name targets and `--by`
 //! - `{part}`: the start of that name, which matches only with `--cmd`
 
+mod contract;
+
 use assert_cmd::Command;
 use clap::CommandFactory;
 use proc_cli::cli::Cli;
@@ -755,11 +757,8 @@ fn run_case(case: &Case) -> Result<(), String> {
     if case.cmd != "watch" {
         let json: Value = serde_json::from_str(&stdout)
             .map_err(|e| format!("{shown}: stdout is not one JSON document ({e}):\n{stdout}"))?;
-        if json["success"] != (want == 0) {
-            return Err(format!(
-                "{shown}: exit {want} but success = {}",
-                json["success"]
-            ));
+        if let Some(wrong) = contract::violation(&json, want) {
+            return Err(format!("{shown}: {wrong}\n{json:#}"));
         }
     }
     Ok(())

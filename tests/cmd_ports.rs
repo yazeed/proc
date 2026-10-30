@@ -6,6 +6,8 @@
 //! it. A port nothing holds is one the OS just handed out and took back. Each
 //! process is killed and reaped on drop.
 
+mod contract;
+
 use assert_cmd::Command;
 use proc_cli::core::filters::strip_verbatim_prefix;
 use serde_json::Value;
@@ -27,7 +29,9 @@ fn run_json(args: &[&str]) -> (Value, i32) {
     let stdout = String::from_utf8(output.stdout).unwrap();
     let json: Value = serde_json::from_str(&stdout)
         .unwrap_or_else(|e| panic!("stdout is not a single JSON document ({e}):\n{stdout}"));
-    (json, output.status.code().unwrap())
+    let code = output.status.code().unwrap();
+    contract::check(&json, code, args);
+    (json, code)
 }
 
 /// Run proc and return its stdout, stderr and exit code.

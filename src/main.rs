@@ -159,13 +159,10 @@ fn run() -> u8 {
                 return 0;
             }
 
-            // Strip clap's misleading "tip:" lines
+            // clap's tips go: its own "to pass '--x' as a value" one misleads,
+            // and its "a similar ... exists" ones become proc's suggestion
             let msg = e.to_string();
-            let cleaned: String = msg
-                .lines()
-                .filter(|line| !line.trim_start().starts_with("tip:"))
-                .collect::<Vec<_>>()
-                .join("\n");
+            let parts = split_clap(&msg);
 
             // Try to suggest a similar flag
             let mut suggestion = None;
@@ -180,6 +177,11 @@ fn run() -> u8 {
                     suggestion = suggest_flag(&unknown, subcmd);
                 }
             }
+            // a subcommand or value clap found close to the one typed
+            let similar = best_first(&parts.similar, e.kind() == ErrorKind::InvalidSubcommand);
+            if suggestion.is_none() && !similar.is_empty() {
+                suggestion = Some(similar.join("' or '"));
+            }
 
             // Usage errors are invalid input, same as runtime validation errors
             let exit_code = ExitCode::InvalidInput as i32;
@@ -188,7 +190,7 @@ fn run() -> u8 {
             let hint = missing_target_hint(&e, &msg);
 
             if wants_json() {
-                let mut error = one_line(&msg);
+                let mut error = parts.one_line();
                 if let Some(ref suggestion) = suggestion {
                     error.push_str(&format!("\n  Try: did you mean '{}'?", suggestion));
                 }
@@ -197,7 +199,7 @@ fn run() -> u8 {
                 }
                 print_json_error(&error, exit_code, Some(REASON_INVALID_INPUT), None);
             } else {
-                err_println!("{}", cleaned);
+                err_println!("{}", parts.human());
                 if let Some(suggestion) = suggestion {
                     err_println!("\n  tip: did you mean '{}'?", suggestion);
                 }
@@ -363,22 +365,107 @@ fn first_non_utf8_arg() -> Option<String> {
         .map(|arg| arg.to_string_lossy().into_owned())
 }
 
-/// clap's message as one line for the JSON `error`: its meaningful lines
-/// joined with a space, without the `error: ` prefix, the `Usage:` block, the
-/// `tip:` lines and the `--help` pointer. clap puts the detail (the missing
-/// `<TARGET>...`, the `[possible values: ...]`) on lines after the first.
-fn one_line(msg: &str) -> String {
-    let mut parts: Vec<&str> = Vec::new();
-    for line in msg.lines().map(str::trim) {
-        if line.starts_with("Usage:") {
-            break;
+/// clap's rendered error, in the parts proc uses. clap writes the message,
+/// then, each after a blank line, its tips (`  tip: ...`), the `Usage:` block
+/// and the `--help` pointer. A part starts only after a blank line, so a value
+/// the user typed that holds `\nUsage:` or `\n  tip:` stays in the message.
+struct ClapMessage<'a> {
+    /// The message, as clap wrote it. The detail (the missing `<TARGET>...`,
+    /// the `[possible values: ...]`) is on the lines after the first.
+    message: Vec<&'a str>,
+    /// What clap's "a similar ... exists" tips suggest
+    similar: Vec<String>,
+    /// The `Usage:` block and the `--help` pointer, as clap wrote them
+    rest: Vec<&'a str>,
+}
+
+fn split_clap(msg: &str) -> ClapMessage<'_> {
+    let mut parts = ClapMessage {
+        message: Vec::new(),
+        similar: Vec::new(),
+        rest: Vec::new(),
+    };
+    let (mut after_blank, mut in_tips) = (false, false);
+    for line in msg.lines() {
+        let starts_part = after_blank || in_tips;
+        after_blank = line.is_empty();
+        if !parts.rest.is_empty()
+            || starts_part
+                && (line.starts_with("Usage:") || line.starts_with("For more information"))
+        {
+            parts.rest.push(line);
+        } else if starts_part && line.starts_with("  tip: ") {
+            in_tips = true;
+            parts.similar.extend(similar_in(line));
+        } else if !line.is_empty() && !in_tips {
+            parts.message.push(line);
         }
-        if line.is_empty() || line.starts_with("tip:") || line.starts_with("For more information") {
-            continue;
-        }
-        parts.push(line.strip_prefix("error: ").unwrap_or(line));
     }
-    parts.join(" ")
+    parts
+}
+
+/// What clap's "a similar subcommand exists: 'kill'" or "some similar values
+/// exist: 'a', 'b'" tip suggests; nothing for its other tips, or for one whose
+/// list is not plain quoted names (text the user typed to look like a tip)
+fn similar_in(tip: &str) -> Vec<String> {
+    let list = tip
+        .split_once(" similar ")
+        .and_then(|(_, rest)| rest.split_once(" exist"))
+        .and_then(|(_, rest)| rest.split_once(": "));
+    let names = list.and_then(|(_, names)| {
+        names
+            .split(", ")
+            .map(|name| {
+                let name = name.strip_prefix('\'')?.strip_suffix('\'')?;
+                let plain = !name.is_empty() && !name.contains(['\'', ' ']);
+                plain.then(|| name.to_string())
+            })
+            .collect::<Option<Vec<_>>>()
+    });
+    names.unwrap_or_default()
+}
+
+/// clap's suggestions, closest first and at most three. clap lists the closest
+/// last, and puts a subcommand's alias (`k`) beside it, so a subcommand is
+/// named once, by its name.
+fn best_first(similar: &[String], subcommands: bool) -> Vec<String> {
+    let cli = Cli::command();
+    let mut names: Vec<String> = Vec::new();
+    for name in similar.iter().rev() {
+        let name = match cli.find_subcommand(name) {
+            Some(sub) if subcommands => sub.get_name().to_string(),
+            _ => name.clone(),
+        };
+        if !names.contains(&name) {
+            names.push(name);
+        }
+    }
+    names.truncate(3);
+    names
+}
+
+impl ClapMessage<'_> {
+    /// The message as one line for the JSON `error`: its lines joined with a
+    /// space, without the `error: ` prefix
+    fn one_line(&self) -> String {
+        let lines: Vec<&str> = self
+            .message
+            .iter()
+            .map(|line| line.trim())
+            .map(|line| line.strip_prefix("error: ").unwrap_or(line))
+            .collect();
+        lines.join(" ")
+    }
+
+    /// clap's rendering without its tips
+    fn human(&self) -> String {
+        let mut text = self.message.join("\n");
+        if !self.rest.is_empty() {
+            text.push_str("\n\n");
+            text.push_str(&self.rest.join("\n"));
+        }
+        text
+    }
 }
 
 /// The `--by` or `--in` flag given on the command line, if any (`-b`, `-i`,

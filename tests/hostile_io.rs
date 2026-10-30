@@ -93,7 +93,10 @@ const ROWS: &[Row] = &[
     row(&["why", ":{port}"]),
     row(&["stuck", "--in", "{dir}"]),
     row(&["stuck", "--kill", "--dry-run", "--in", "{dir}"]),
+    // the test's own process is neither stuck nor an orphan: nothing to kill
+    row(&["stuck", "--kill", "--yes", "--in", "{dir}"]),
     row(&["orphans", "--in", "{dir}"]),
+    row(&["orphans", "--kill", "--yes", "--in", "{dir}"]),
     // commands that change processes: the exit code is about the action
     row(&["kill", "{pid}", "--dry-run"]),
     row(&["kill", "{pid}", "--yes"]),
@@ -322,11 +325,36 @@ fn run_proc(argv: &[String], stdout: Sink, stderr: Sink) -> Ran {
 }
 
 /// Run one row in one output mode against the sinks, on a fresh process of
-/// the test's own
+/// the test's own. The process's directory and program read `{dir}` and
+/// `{exe}` in the text, as in the row, so two runs can be compared.
 fn run_row(row_args: &[&str], json: bool, stdout: Sink, stderr: Sink) -> (Ran, Vec<String>) {
     let fixture = needs_fixture(row_args).then(Fixture::start);
     let argv = filled(row_args, json, fixture.as_ref());
-    (run_proc(&argv, stdout, stderr), argv)
+    let mut ran = run_proc(&argv, stdout, stderr);
+    if let Some(fixture) = &fixture {
+        for text in [&mut ran.stdout, &mut ran.stderr] {
+            *text = text
+                .replace(&*fixture.dir.to_string_lossy(), "{dir}")
+                .replace(&*listener_path().to_string_lossy(), "{exe}");
+        }
+    }
+    (ran, argv)
+}
+
+/// The text with every number read as `N` and every run of spaces as one:
+/// PIDs, ports, times and the column widths they set differ from one run to
+/// the next
+fn without_numbers(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut prev = None;
+    for c in text.chars() {
+        let class = if c.is_ascii_digit() { '0' } else { c };
+        if class != prev.unwrap_or('\0') || !matches!(class, '0' | ' ') {
+            out.push(if class == '0' { 'N' } else { c });
+        }
+        prev = Some(class);
+    }
+    out
 }
 
 /// Strings that mean a write error got out as a panic or noise
@@ -406,6 +434,35 @@ fn a_closed_stdout_gives_the_exit_code_a_normal_stdout_gives() {
                 normal.code, closed.stderr
             ));
         }
+        // nothing is said about the pipe: stderr holds what it holds anyway
+        if without_numbers(&closed.stderr) != without_numbers(&normal.stderr) {
+            return Err(format!(
+                "{hostile_name}: stderr differs from a normal stdout's ({name})\n\
+                 closed: {:?}\nnormal: {:?}",
+                closed.stderr, normal.stderr
+            ));
+        }
+        Ok(())
+    });
+}
+
+#[test]
+fn both_streams_closed_change_no_exit_code() {
+    for_every_case(|row, json| {
+        let (normal, argv) = run_row(row.args, json, Sink::Capture, Sink::Capture);
+        let (closed, hostile_argv) = run_row(row.args, json, Sink::ClosedPipe, Sink::ClosedPipe);
+        let hostile_name = shown(&hostile_argv);
+        let code = closed
+            .code
+            .ok_or(format!("{hostile_name}: killed by a signal"))?;
+        if !(0..=4).contains(&code) || Some(code) != normal.code {
+            return Err(format!(
+                "{hostile_name}: exit {code} with both streams closed, {:?} with normal ones \
+                 ({})",
+                normal.code,
+                shown(&argv)
+            ));
+        }
         Ok(())
     });
 }
@@ -480,6 +537,42 @@ fn a_stdout_that_cannot_take_a_write_is_exit_1_with_a_message() {
                     full.stderr
                 ));
             }
+        }
+        Ok(())
+    });
+}
+
+/// A stderr that takes no write is a failure too, though there is nowhere left
+/// to say so: a row that wrote to stderr and exited 0 exits 1, quietly. A row
+/// that wrote nothing there, or failed on its own, keeps its code.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_stderr_that_cannot_take_a_write_is_exit_1() {
+    for_every_case(|row, json| {
+        let (normal, argv) = run_row(row.args, json, Sink::Capture, Sink::Capture);
+        let (full, hostile_argv) = run_row(row.args, json, Sink::Capture, Sink::Full);
+        let hostile_name = shown(&hostile_argv);
+        let code = full
+            .code
+            .ok_or(format!("{hostile_name}: killed by a signal"))?;
+        let want = match normal.code {
+            Some(0) if !normal.stderr.is_empty() => 1,
+            Some(code) => code,
+            None => return Err(format!("{}: killed by a signal", shown(&argv))),
+        };
+        if code != want {
+            return Err(format!(
+                "{hostile_name}: exit {code} with stderr on /dev/full, expected {want} \
+                 (a normal stderr gives {:?}: {:?})",
+                normal.code, normal.stderr
+            ));
+        }
+        if without_numbers(&full.stdout) != without_numbers(&normal.stdout) {
+            return Err(format!(
+                "{hostile_name}: stdout changed with stderr on /dev/full\n\
+                 full: {:?}\nnormal: {:?}",
+                full.stdout, normal.stdout
+            ));
         }
         Ok(())
     });

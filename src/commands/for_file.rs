@@ -8,8 +8,7 @@
 //!   proc for app.log --by node   # Only the process named node (--cmd: node anywhere in the command line)
 
 use crate::core::{
-    find_ports_for_pid, resolve_in_dir, sort_processes, NameMatch, PortInfo, Process, SortKey,
-    StatusFilter,
+    resolve_in_dir, sort_processes, with_ports, NameMatch, PortInfo, Process, SortKey, StatusFilter,
 };
 use crate::error::{ProcError, Result};
 use crate::out_println;
@@ -118,11 +117,7 @@ impl ForCommand {
         }
 
         // 9. For each process, get ports
-        let mut results: Vec<(Process, Vec<PortInfo>)> = Vec::new();
-        for proc in processes {
-            let ports = find_ports_for_pid(proc.pid)?;
-            results.push((proc, ports));
-        }
+        let results = with_ports(processes)?;
 
         // 10. Output
         if self.json {

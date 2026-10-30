@@ -42,7 +42,7 @@ jobs:
         run: cargo test --verbose
 
       - name: Run clippy
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings
 
   format:
     name: Format

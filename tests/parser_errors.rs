@@ -2,7 +2,9 @@
 //!
 //! The corpus is generated from the CLI definition (`Cli::command()`): for every
 //! subcommand and each of its arguments a missing required argument, an unknown
-//! flag, a bad value, a missing value after a flag and too many values, each run
+//! flag, a bad value, a value the argument's own parser refuses (a target
+//! `:99999`, `ports --range bogus`), a missing value after a flag and too many
+//! values, each run
 //! with `--json` and without. Whatever clap says, the `error` must be whole
 //! (never cut after a colon) and name the argument or the value at fault, and the
 //! allowed values for a value with a fixed set.
@@ -81,6 +83,46 @@ fn is_numeric(arg: &Arg) -> bool {
     .any(|number| id == *number)
 }
 
+/// A value that an argument's own parser refuses, and a phrase of its message.
+/// The checks above cannot see such a parser by its type
+/// (`validate_target_arg` returns a `String`), so each one is listed here, and
+/// [`custom_parser`] fails the corpus for one that is not.
+fn refused_value(arg: &Arg) -> Option<(&'static str, &'static str)> {
+    match arg.get_id().as_str() {
+        // validate_target_arg, on every command that takes targets (`info`
+        // calls them `targets`)
+        "target" | "targets" => Some((":99999", "is not a port")),
+        // ports --range
+        "range" => Some(("bogus", "is not a range of ports")),
+        _ => None,
+    }
+}
+
+/// Whether the argument's parser is its own: its value is not a number or one
+/// of a fixed set, and is either not plain text or a path, or is text that
+/// the parser refuses for what it says (`:99999`, `bogus`)
+fn custom_parser(sub: &clap::Command, arg: &Arg) -> bool {
+    if !takes_value(arg) || !allowed_values(arg).is_empty() || is_numeric(arg) {
+        return false;
+    }
+    let id = arg.get_value_parser().type_id();
+    let text = [TypeId::of::<String>(), TypeId::of::<std::path::PathBuf>()];
+    if !text.iter().any(|t| id == *t) {
+        return true;
+    }
+    [":99999", "bogus"].iter().any(|value| {
+        let mut argv = vec![sub.get_name().to_string()];
+        if !arg.is_positional() {
+            argv.push(display_name(arg));
+        }
+        argv.push(value.to_string());
+        matches!(
+            sub.clone().try_get_matches_from(argv),
+            Err(e) if e.kind() == clap::error::ErrorKind::ValueValidation
+        )
+    })
+}
+
 fn strings(args: &[&str]) -> Vec<String> {
     args.iter().map(|a| a.to_string()).collect()
 }
@@ -150,9 +192,26 @@ fn corpus() -> Vec<Case> {
                 let rest = if arg.is_positional() {
                     vec![bad]
                 } else {
+                    needles.push(shown.clone());
                     vec![shown.clone(), bad]
                 };
                 cases.push(case(format!("bad value for {shown}"), rest, needles));
+            }
+
+            // a value the argument's own parser refuses, with its reason
+            assert!(
+                refused_value(arg).is_some() || !custom_parser(sub, arg),
+                "{name} {shown}: its parser is custom; give it a value in refused_value"
+            );
+            if let Some((bad, reason)) = refused_value(arg) {
+                let mut needles = strings(&[bad, reason]);
+                let rest = if arg.is_positional() {
+                    vec![bad.to_string()]
+                } else {
+                    needles.push(shown.clone());
+                    vec![shown.clone(), bad.to_string()]
+                };
+                cases.push(case(format!("refused value for {shown}"), rest, needles));
             }
 
             // a flag at the end of the line, its value missing
@@ -202,7 +261,13 @@ fn assert_whole(error: &str, what: &str) {
 fn every_parser_error_names_what_is_wrong() {
     let cases = corpus();
     // the generator found the shapes: more than a handful per subcommand
-    assert!(cases.len() >= 100, "only {} cases", cases.len());
+    assert!(cases.len() >= 160, "only {} cases", cases.len());
+    // validate_target_arg on 12 commands, and ports --range
+    let refused = cases
+        .iter()
+        .filter(|c| c.what.contains("refused value"))
+        .count();
+    assert_eq!(refused, 13, "refused-value cases");
 
     for case in &cases {
         let what = &case.what;
@@ -380,4 +445,51 @@ fn a_non_utf8_argument_is_invalid_input_not_a_panic() {
         assert!(error.contains("is not valid UTF-8"), "{json}");
         assert!(error.contains('\u{fffd}'), "{json}");
     }
+}
+
+/// clap knows the subcommand or value closest to a typo; proc says it, by the
+/// subcommand's name (not an alias such as `k`), closest first
+#[test]
+fn a_typo_gets_the_closest_names() {
+    for (args, want) in [
+        (&["kil", "1"][..], "did you mean 'kill'?"),
+        (&["fre", ":3000"], "did you mean 'free' or 'freeze'"),
+        (&["list", "--sort", "cp"], "did you mean 'cpu'?"),
+    ] {
+        let mut json_args = args.to_vec();
+        json_args.push("--json");
+        let error = json_error(&json_args);
+        assert!(
+            error.contains(&format!("\n  Try: {want}")),
+            "{args:?}: {error:?}"
+        );
+        assert!(!error.contains("'k'"), "{args:?}: an alias: {error:?}");
+
+        let out = proc_cmd().args(args).output().unwrap();
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(out.status.code(), Some(4), "{args:?}: {stderr}");
+        assert!(
+            stderr.contains(&format!("tip: {want}")),
+            "{args:?}: {stderr}"
+        );
+        // the dropped tip leaves no hole
+        assert!(!stderr.contains("\n\n\n"), "{args:?}: {stderr:?}");
+        assert_eq!(stderr.matches("tip:").count(), 1, "{args:?}: {stderr}");
+    }
+}
+
+/// The value the user typed is part of clap's message, whatever it holds: a
+/// line of its own that reads `Usage:` does not end the message, and text laid
+/// out like clap's tip suggests nothing
+#[test]
+fn a_typed_value_cannot_cut_the_message_or_make_a_suggestion() {
+    let error = json_error(&["kill", ":99999\nUsage: x", "--json"]);
+    assert!(error.contains("is not a port"), "{error:?}");
+
+    let error = json_error(&[
+        "kill",
+        ":99999\n\n  tip: a similar value exists: 'x'' and more",
+        "--json",
+    ]);
+    assert!(!error.contains("Try:"), "{error:?}");
 }

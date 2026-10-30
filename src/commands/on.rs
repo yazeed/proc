@@ -11,8 +11,8 @@
 //! Commas still work (`proc on :3000,:8080`) but are deprecated.
 
 use crate::core::{
-    find_ports_for_pid, flatten_targets, parse_target, resolve_in_dir, resolve_target, NameMatch,
-    PortInfo, Process, TargetType,
+    find_ports_for_pid, flatten_targets, parse_target, resolve_in_dir, resolve_target, with_ports,
+    NameMatch, PortInfo, Process, TargetType,
 };
 use crate::error::{ExitCode, ProcError, Result};
 use crate::out_println;
@@ -324,14 +324,7 @@ impl OnCommand {
         // Real CPU readings for what's shown, one wait for all of them
         Process::measure_cpu(&mut processes);
 
-        let mut all_results: Vec<(Process, Vec<PortInfo>)> = Vec::new();
-
-        for proc in processes {
-            let ports = find_ports_for_pid(proc.pid)?;
-            all_results.push((proc, ports));
-        }
-
-        Ok(all_results)
+        with_ports(processes)
     }
 
     /// Show what ports processes with a given name are listening on

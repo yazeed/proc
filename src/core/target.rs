@@ -114,6 +114,24 @@ pub fn find_ports_for_pid(pid: u32) -> Result<Vec<PortInfo>> {
     Ok(all_ports.into_iter().filter(|p| p.pid == pid).collect())
 }
 
+/// Each process with the ports it listens on, from one reading of the port
+/// table. A reading runs programs on Windows (two `netstat`s, and a
+/// `tasklist` for each socket), so reading it once per process made `proc
+/// for` on a few processes run past a minute there.
+pub fn with_ports(processes: Vec<Process>) -> Result<Vec<(Process, Vec<PortInfo>)>> {
+    let mut listening = None;
+    let mut results = Vec::with_capacity(processes.len());
+    for proc in processes {
+        let all = match &mut listening {
+            Some(all) => all,
+            unread => unread.insert(PortInfo::get_all_listening()?),
+        };
+        let ports = all.iter().filter(|p| p.pid == proc.pid).cloned().collect();
+        results.push((proc, ports));
+    }
+    Ok(results)
+}
+
 /// Split comma-separated targets into individual target strings
 ///
 /// Examples:
@@ -270,6 +288,20 @@ fn resolve_targets_impl(targets: &[String], exclude_self: bool, mode: NameMatch)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn with_ports_gives_each_process_its_own_ports() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let me = Process::find_by_pid(std::process::id()).unwrap().unwrap();
+        let mut child = crate::test_support::idle_child();
+        let other = crate::test_support::record_of(&child);
+        // the first process reads the table, the second one uses that reading
+        let results = with_ports(vec![me, other]).unwrap();
+        crate::test_support::end(&mut child);
+        assert!(results[0].1.iter().any(|p| p.port == port), "{results:?}");
+        assert!(results[1].1.is_empty(), "{results:?}");
+    }
 
     #[test]
     fn test_parse_targets_single() {

@@ -7,6 +7,8 @@
 //! Every case here only reads, runs `--dry-run`, or acts on a process the test
 //! started.
 
+mod contract;
+
 use clap::CommandFactory;
 use proc_cli::cli::Cli;
 use serde_json::Value;
@@ -29,7 +31,9 @@ fn run_json(args: &[&str]) -> (Value, i32) {
     let text = String::from_utf8_lossy(&out.stdout);
     let json = serde_json::from_str(&text)
         .unwrap_or_else(|e| panic!("proc {args:?} printed no JSON ({e}): {text}"));
-    (json, out.status.code().unwrap_or(-1))
+    let code = out.status.code().unwrap_or(-1);
+    contract::check(&json, code, args);
+    (json, code)
 }
 
 /// `target/debug/examples/listener[.exe]`, found relative to this test binary

@@ -876,7 +876,13 @@ mod tests {
         Steps::pause(&record, 0);
         Steps::kill(&record).unwrap();
         let _ = child.wait();
-        assert!(!Steps::is_running(&record));
+        // Windows can list a process for a moment after it has exited (the
+        // recovery itself does not ask: a kill that worked is `Terminated`)
+        let gone = (0..200).any(|_| {
+            std::thread::sleep(Duration::from_millis(50));
+            !Steps::is_running(&record)
+        });
+        assert!(gone, "still listed 10 seconds after it exited");
         crate::test_support::end(&mut child);
     }
 

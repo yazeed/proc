@@ -22,5 +22,6 @@ pub use process::parse_signal_name;
 pub use process::{escape_control, is_thread, Process, ProcessStatus, RawText};
 pub use target::{
     comma_notice, find_ports_for_pid, flatten_targets, parse_target, parse_targets, resolve_target,
-    resolve_targets, resolve_targets_excluding_self, validate_target_arg, Resolved, TargetType,
+    resolve_targets, resolve_targets_excluding_self, validate_target_arg, with_ports, Resolved,
+    TargetType,
 };

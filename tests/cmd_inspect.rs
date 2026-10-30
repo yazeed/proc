@@ -6,6 +6,8 @@
 //! owns, so the listener has a parent worth tracing. Each is killed and reaped
 //! on drop. The tests only read: nothing here kills, stops or frees a process.
 
+mod contract;
+
 use assert_cmd::Command;
 use clap::CommandFactory;
 use proc_cli::cli::Cli;
@@ -33,7 +35,9 @@ fn run_json(args: &[&str]) -> (Value, i32) {
     let stdout = String::from_utf8(output.stdout).unwrap();
     let json: Value = serde_json::from_str(&stdout)
         .unwrap_or_else(|e| panic!("stdout is not a single JSON document ({e}):\n{stdout}"));
-    (json, output.status.code().unwrap())
+    let code = output.status.code().unwrap();
+    contract::check(&json, code, args);
+    (json, code)
 }
 
 /// Run proc and return its stdout, stderr and exit code.
@@ -1240,8 +1244,12 @@ fn an_unknown_command_is_a_usage_error() {
         stderr.starts_with("error: unrecognized subcommand 'lisst'"),
         "{stderr}"
     );
-    // clap's own "tip:" lines are dropped
-    assert!(!stderr.contains("tip:"), "{stderr}");
+    // clap's own "tip:" lines are dropped; its suggestion is proc's one tip
+    assert!(!stderr.contains("a similar"), "{stderr}");
+    assert!(
+        stderr.ends_with("\n  tip: did you mean 'list' or 'info'?\n"),
+        "{stderr}"
+    );
     // clap names the program after argv[0]'s file name: `proc.exe` on Windows
     let usage = format!("Usage: proc{} [COMMAND]", std::env::consts::EXE_SUFFIX);
     assert!(stderr.contains(&usage), "{stderr}");
@@ -1254,7 +1262,10 @@ fn an_unknown_command_with_json_is_a_json_error_naming_the_input() {
     assert_eq!(json["action"], "lisst");
     assert_eq!(json["success"], false);
     assert_eq!(json["exit_code"], 4);
-    assert_eq!(json["error"], "unrecognized subcommand 'lisst'");
+    assert_eq!(
+        json["error"],
+        "unrecognized subcommand 'lisst'\n  Try: did you mean 'list' or 'info'?"
+    );
     assert!(json.get("needs_confirmation").is_none(), "{json}");
 }
 

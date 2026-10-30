@@ -99,8 +99,8 @@ cargo fmt
 # Check formatting
 cargo fmt -- --check
 
-# Run linter
-cargo clippy -- -D warnings
+# Run linter (tests included, as CI runs it)
+cargo clippy --all-targets -- -D warnings
 ```
 
 ### Project Structure

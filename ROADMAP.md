@@ -42,6 +42,12 @@ Every confirmation prompt defaults to no today. A prompt that always defaults to
 
 **Feature test:** "is the safe path the short path?" (proposed below). **Open:** which commands count as recoverable (`stop` can escalate to SIGKILL).
 
+### Act only on the process you saw
+
+An agent records a PID, and acts on it later. Within one command proc already checks a process's start time between finding it and signalling it, but nothing checks it against what the caller saw before: if that process exited and the OS gave its PID to a new one, `proc kill <pid> --yes` ends the new one. Today the skill asks agents to record `start_time` and compare it themselves, and to guard with `--by` and `--in` from the preview. The idea: a flag that carries what was seen, such as `proc kill 1234 --started 1700000000 --yes`, so a PID with another start time matches nothing (exit 2), as the `--by` and `--in` guards do.
+
+**Feature test:** explicit (the caller says which process it means), and it puts the safe case in one command. **Open:** the form (`--started <unix time>`, or a target such as `1234@1700000000`), whether `--dry-run --json` should print the exact command to run next, and how often `--by` and `--in` already catch it.
+
 ### `proc :3000`
 
 A bare target as a shortcut for `proc on`: the shortest possible answer to "what's on port 3000?". Today it's "unrecognized subcommand".
@@ -50,9 +56,8 @@ A bare target as a shortcut for `proc on`: the shortest possible answer to "what
 
 ### Errors that name what you meant
 
-When a guess is wrong, the error should say the right command:
+When a guess is wrong, the error should say the right command. A mistyped subcommand or value already gets the closest names (`proc kil` says "did you mean 'kill'?"); these don't yet:
 
-- `proc kil node` is "unrecognized subcommand 'kil'", with no suggestion of `kill`.
 - `proc kill 3000 --dry-run`, with no process 3000 but a listener on port 3000, could ask "did you mean :3000?".
 - Flags people reach for from other tools: an agent tester typed `proc kill --name worker` and got "unexpected argument '--name' found". The error could say "to filter by name, use --by". Likewise `--port` (a target is `:3000`) and `--pid` (a PID is a plain number).
 

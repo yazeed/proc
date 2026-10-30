@@ -2,6 +2,8 @@
 //! (`watch` streams one per refresh),
 //! `action` is the canonical command name, and `success: false` means a non-zero exit.
 
+mod contract;
+
 use assert_cmd::Command;
 use serde_json::Value;
 
@@ -18,7 +20,56 @@ fn run_json(args: &[&str]) -> (Value, i32) {
     let stdout = String::from_utf8(output.stdout).unwrap();
     let json: Value = serde_json::from_str(&stdout)
         .unwrap_or_else(|e| panic!("stdout is not a single JSON document ({e}):\n{stdout}"));
-    (json, output.status.code().unwrap())
+    let code = output.status.code().unwrap();
+    contract::check(&json, code, args);
+    (json, code)
+}
+
+/// The check every `run_json` makes refuses each way a document can break
+/// the contract, and takes the ones that keep it
+#[test]
+fn the_contract_check_refuses_each_break() {
+    use serde_json::json;
+    let kept = [
+        (json!({"action": "list", "success": true, "count": 0}), 0),
+        (
+            json!({"action": "kill", "success": false, "error": "x", "exit_code": 2}),
+            2,
+        ),
+        (json!({"action": "kill", "success": false, "failed": []}), 1),
+        (
+            json!({"action": "kill", "success": false, "error": "x", "exit_code": 4, "reason": "invalid_input"}),
+            4,
+        ),
+    ];
+    for (doc, code) in kept {
+        assert_eq!(contract::violation(&doc, code), None, "{doc}");
+    }
+    let broken = [
+        (json!({"action": "list", "success": true}), 5),
+        (json!({"success": true}), 0),
+        (json!({"action": "list", "success": false}), 0),
+        (json!({"action": "list", "success": true}), 1),
+        (json!({"action": "kill", "success": false, "error": "x"}), 2),
+        (
+            json!({"action": "kill", "success": false, "error": "x", "exit_code": 1}),
+            2,
+        ),
+        (
+            json!({"action": "kill", "success": false, "error": "x", "exit_code": 4}),
+            4,
+        ),
+        (
+            json!({"action": "kill", "success": false, "error": "x", "exit_code": 2, "reason": "invalid_input"}),
+            2,
+        ),
+    ];
+    for (doc, code) in broken {
+        assert!(
+            contract::violation(&doc, code).is_some(),
+            "{doc} with exit {code}"
+        );
+    }
 }
 
 #[test]
