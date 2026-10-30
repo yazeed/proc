@@ -5,6 +5,8 @@ description: "Release history for proc."
 permalink: /changelog
 ---
 
+<!-- From CHANGELOG.md by scripts/changelog_site.py: edit CHANGELOG.md, not this part -->
+
 ## 2.0.2 — 2026-10-30
 
 **Changed**
@@ -60,6 +62,8 @@ permalink: /changelog
 - **`tree` and `tree --json` give the same tree.** The human tree sorted each parent's children by PID, but the JSON children, the roots, the filtered list, the target list and `--ancestors` for a name came out in a new order every run. All of them are now in PID order, in both forms
 - **A process's ports are ascending** in `on <pid>`, `for` and `why`, and `ports --sort pid` and `--sort name` break ties by port, then PID. They followed the order lsof (macOS), the kernel's socket table (Linux) or netstat (Windows) listed them in. The holders of a port are by PID, and `on :port --json` has `process`, `protocol` and `address` of the holder with the lowest PID on every OS (Linux and Windows used to follow the kernel's or netstat's listing order; macOS already did)
 - **The list a command asks you to approve is in a stated order**: the targets in the order typed, then PID ascending within each target. `kill`, `stop`, `freeze`, `thaw`, `free`, `unstick`, `orphans --kill` and `stuck --kill` use it for the preview, the prompt, `--dry-run --json`, the `needs_confirmation` list and the receipt. `stop` reports `failed` in that order too, instead of the processes that refused the signal followed by the ones it could not force-kill
+
+<!-- End of the part from CHANGELOG.md -->
 
 ## 2.0.0 — 2026-10-28
 

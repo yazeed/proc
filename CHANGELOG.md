@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The website's changelog is written from CHANGELOG.md.** A release's notes were copied into `docs/changelog.md` by hand, with the website's headings. `scripts/changelog_site.py` now writes every release newer than the website's own history from CHANGELOG.md, and CI fails when the two differ, so a release's notes are written once
 - **The agent skill no longer tells an agent to run a raw URL.** Its install line ended with `scoop bucket add proc https://github.com/...`, which Snyk's skills.sh audit flagged after 2.0.2 as an unverifiable runtime dependency (W012). The line keeps the registry installs (`brew`, `cargo`, `npm`, the last two also on Windows) and points to the README for Scoop and the rest
 
 ## [2.0.2] - 2026-10-30

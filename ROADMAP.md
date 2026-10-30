@@ -140,6 +140,17 @@ Both print processes in PID order (81 orphans on one Mac), which says nothing ab
 
 How long someone who has never used proc takes to get a correct answer. Unlike the machine clock (time per command), nothing measures it yet. **Open:** how to measure it (first-run sessions, agent evals like `skills/proc-cli/evals.md`).
 
+### More ways to install
+
+Each of these puts proc one command away for people who don't use the channels proc has today. nixpkgs is decided (see "Nix as an official install method" above: `nix run nixpkgs#proc-cli` once merged). In order of how soon they can happen:
+
+1. **winget**, the package manager that ships with Windows. Its contributing guide sets no popularity bar, and the release's `proc-windows-x86_64.exe` (or its zip) fits as a portable installer. One manifest PR (`wingetcreate` or Komac); after it merges, the `winget-releaser` action submits each release, which needs a fork of winget-pkgs and a classic token (`public_repo`, `workflow`).
+2. **`.deb` and `.rpm` files on GitHub Releases.** No gatekeeper: they are release assets, not a repository. `cargo-deb` builds a `.deb` from the static musl builds; an `.rpm` tool still has to be chosen and tested.
+3. **PyPI as `proc-cli`** (the name is free; `proc` is taken), built with maturin's `bin` bindings so `pip`, `pipx` and `uvx` put `proc` on PATH. Not yet tried in a build.
+4. **homebrew-core**, later: `brew install proc` with no tap, and Linuxbrew. A new formula needs 75 stars when someone else submits it, 225 when the repo's owner does (or 30 / 90 forks or watchers), and must build from source with a `livecheck`. The repo had 62 stars when this was written.
+
+**Feature test:** install, not a feature; it makes the common case (getting proc) one command on each platform. **Open:** none of these builds has been run yet; which `.rpm` tool; whether PyPI is worth a release step of its own.
+
 ## Proposed changes to PHILOSOPHY.md
 
 PHILOSOPHY.md is the criteria, so it changes slowly and on purpose. These changes are proposed and not adopted:

@@ -59,6 +59,12 @@ jobs:
       - name: Check formatting
         run: cargo fmt -- --check
 
+      # The website's changelog is written from CHANGELOG.md, never by hand
+      - name: Check the website changelog matches CHANGELOG.md
+        run: |
+          python3 -m unittest scripts/test_changelog_site.py
+          python3 scripts/changelog_site.py --check
+
   build:
     name: Build
     timeout-minutes: 10
