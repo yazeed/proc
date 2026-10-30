@@ -204,6 +204,10 @@ Line coverage says a line ran, not that its behaviour is pinned. A change that a
 
 Tests aim proc only at processes they started themselves (a copy of `examples/listener.rs` under its own name in a fresh temp directory, or a shell the test owns), so the suite can run on a machine that is busy with other work.
 
+### Nix
+
+`nix flake check -L` builds proc from `Cargo.lock` and runs this whole suite in Nix's build sandbox, on Linux and macOS in CI. The sandbox has no real `$HOME`, a bare `PATH`, its own process namespace, and the system's `coreutils` may be one multi-call binary, so a test must not assume a home directory, a tool the machine happens to have, that `sleep` runs under another name, or that the machine has more than one process tree. `flake.nix` sets `$HOME` for the terminal tests and adds `procps` for the `ps` the tests call; it never turns the tests off. A test the sandbox must stop is skipped by exact name in `checkFlags`, with the reason beside it. Without Nix installed, run the check in the `nixos/nix` Docker image (`--privileged` for the sandbox, and `NIX_CONFIG="experimental-features = nix-command flakes"`).
+
 ### Coverage
 
 CI fails a change that lowers line coverage or leaves a flag without a test. The `Coverage gate` job checks:

@@ -1258,9 +1258,13 @@ mod tests {
         use std::os::unix::process::CommandExt;
 
         let word = format!("zz\u{7}ctl{}x", std::process::id());
-        let mut child = std::process::Command::new("sleep")
+        // A shell waiting on its stdin, not `sleep`: where `sleep` is one name
+        // of a multi-call binary (Nix's coreutils), it refuses to run under
+        // another first argument. The shell ends when the pipe closes.
+        let mut child = std::process::Command::new("sh")
             .arg0(&word)
-            .arg("300")
+            .args(["-c", "read line"])
+            .stdin(std::process::Stdio::piped())
             .spawn()
             .unwrap();
         let pid = child.id();
