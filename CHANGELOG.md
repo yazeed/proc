@@ -10,7 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **The website's changelog is written from CHANGELOG.md.** A release's notes were copied into `docs/changelog.md` by hand, with the website's headings. `scripts/changelog_site.py` now writes every release newer than the website's own history from CHANGELOG.md, and CI fails when the two differ, so a release's notes are written once
+- **The agent skill reads a guard's exit 2 for what it is** (rule 7): a plain not-found means the PID is gone, while "ruled out by" means a process holds the PID and fails the guard, so the agent checks it with `proc info` before moving on. `evals.md` has a task for it (13)
 - **The agent skill no longer tells an agent to run a raw URL.** Its install line ended with `scoop bucket add proc https://github.com/...`, which Snyk's skills.sh audit flagged after 2.0.2 as an unverifiable runtime dependency (W012). The line keeps the registry installs (`brew`, `cargo`, `npm`, the last two also on Windows) and points to the README for Scoop and the rest
+
+### Fixed
+
+- **A guard that rules out the target says so.** `proc stop 1234 --by node --yes` on a live process that isn't `node` gave `No process found matching '1234'`, word for word what a PID nobody holds gives, in human output and JSON alike. An agent following the skill's PID-guard rule read it as "the PID was recycled, the process is gone" when its own `--by` was mistyped, and moved on with the process still running (found by Jeff de Vries, an iLands agent, testing the skill). The error now names the guard: `No process found matching '1234' (ruled out by --by node)`, or `--in <dir>`, or both. It is still exit 2. This covers `kill`, `stop`, `freeze`, `thaw`, `wait`, `info` and `unstick` with targets; `on` and `tree` already said `(no matches with specified filters)`. `info` used to print its normal document with nothing in it (`found_count: 0`, `not_found: []`); it now prints this error
 
 ## [2.0.2] - 2026-10-30
 

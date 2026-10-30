@@ -12,7 +12,7 @@
 
 #[cfg(unix)]
 use crate::core::{
-    apply_filters, apply_to_each, flatten_targets, resolve_targets_excluding_self, NameMatch,
+    apply_to_each, flatten_targets, guard_targets, resolve_targets_excluding_self, NameMatch,
     Process,
 };
 use crate::error::{ProcError, Result};
@@ -76,8 +76,14 @@ impl ThawCommand {
         let printer = printer.with_not_found(&resolved.not_found);
         let mut processes = resolved.processes;
 
-        // Apply --in and --by filters
-        apply_filters(&mut processes, &self.in_dir, &self.by_name, mode)?;
+        // Apply --in and --by: guards that rule out everything found say so
+        guard_targets(
+            &mut processes,
+            &self.target,
+            &self.in_dir,
+            &self.by_name,
+            mode,
+        )?;
 
         // Real CPU readings whenever the list is shown or returned (dry run, the
         // confirmation prompt, or the error for a missing `--yes`); only `--yes`

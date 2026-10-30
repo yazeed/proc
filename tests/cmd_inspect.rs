@@ -1004,11 +1004,15 @@ fn info_by_keeps_a_process_with_that_name_and_drops_one_without() {
     assert_eq!(code, 0, "{out}");
     assert_eq!(out.matches("✓ Process").count(), 1, "{out}");
 
-    let (json, code) = run_json(&["info", &owned.pid_arg(), "-b", &nobody(), "--json"]);
+    let nobody = nobody();
+    let (json, code) = run_json(&["info", &owned.pid_arg(), "-b", &nobody, "--json"]);
     assert_eq!(code, 2);
-    assert_eq!(json["found_count"], 0);
-    // The target resolved; the filter is what dropped it
-    assert_eq!(json["not_found_count"], 0);
+    // The target resolved; the filter is what dropped it, and the error says so
+    let error = json["error"].as_str().unwrap();
+    assert!(
+        error.contains(&format!("ruled out by --by {nobody}")),
+        "{json}"
+    );
 }
 
 // --- main: the bare command, help, completions, man page ----------------------

@@ -493,3 +493,59 @@ fn in_a_file_is_not_a_directory() {
         "{json}"
     );
 }
+
+/// `--by` and `--in` next to a PID are guards. When they rule the process out,
+/// the error says which guard did: the same exit 2 as a PID that is gone used
+/// to read the same way, so an agent took its own mistyped guard for a
+/// recycled PID and left the process running
+#[test]
+fn a_guard_that_rules_out_the_target_names_itself() {
+    let (_tmp, dir) = fresh_dir();
+    let owned = Owned::start_in(&dir);
+    let pid = owned.pid();
+    let other = dir.join("elsewhere");
+    std::fs::create_dir(&other).unwrap();
+    let other = other.to_str().unwrap();
+
+    let mut commands = vec![
+        vec!["kill", &pid, "--dry-run"],
+        vec!["stop", &pid, "--dry-run"],
+        vec!["wait", &pid, "--timeout", "1"],
+        vec!["info", &pid],
+        vec!["unstick", &pid, "--dry-run"],
+    ];
+    // not supported on Windows, which they say first
+    if cfg!(unix) {
+        commands.push(vec!["freeze", &pid, "--dry-run"]);
+        commands.push(vec!["thaw", &pid, "--dry-run"]);
+    }
+    for command in commands {
+        for (guard, named) in [
+            (
+                vec!["--by", "no-such-name"],
+                "ruled out by --by no-such-name",
+            ),
+            (vec!["--in", other], "ruled out by --in"),
+        ] {
+            let mut args = command.clone();
+            args.extend(guard);
+            args.push("--json");
+            let (json, code) = run_json(&args);
+            assert_eq!(code, 2, "{args:?}: {json}");
+            let error = json["error"].as_str().unwrap();
+            assert!(error.contains(named), "{args:?}: {json}");
+        }
+    }
+
+    // a PID that is gone still reads as plain not found
+    let (json, code) = run_json(&["stop", "99999999", "--by", "no-such-name", "--json"]);
+    assert_eq!(code, 2, "{json}");
+    assert!(
+        !json["error"].as_str().unwrap().contains("ruled out"),
+        "{json}"
+    );
+
+    // and nothing above touched the process
+    let (json, code) = run_json(&["info", &pid, "--json"]);
+    assert_eq!(code, 0, "{json}");
+}

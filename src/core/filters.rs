@@ -180,6 +180,33 @@ pub fn apply_filters(
     Ok(())
 }
 
+/// [`apply_filters`] for a command that acts on targets. `--by` and `--in` are
+/// guards there (act on this PID only if it is still this process), so when
+/// they rule out everything the targets found, that is an error that names
+/// them: it used to read like a plain not-found, so an agent took a mistyped
+/// guard for a recycled PID and left the process running.
+pub fn guard_targets(
+    processes: &mut Vec<Process>,
+    targets: &[String],
+    in_dir: &Option<String>,
+    by_name: &Option<String>,
+    mode: NameMatch,
+) -> Result<()> {
+    let found_any = !processes.is_empty();
+    apply_filters(processes, in_dir, by_name, mode)?;
+    if found_any && processes.is_empty() {
+        let guards: Vec<String> = [("--by", by_name), ("--in", in_dir)]
+            .into_iter()
+            .filter_map(|(flag, value)| value.as_ref().map(|v| format!("{flag} {v}")))
+            .collect();
+        return Err(ProcError::FilteredOut {
+            target: targets.join(" "),
+            reason: format!("ruled out by {}", guards.join(" and ")),
+        });
+    }
+    Ok(())
+}
+
 /// Resolve an `--in` directory filter to the form processes report their cwd in.
 ///
 /// Handles "." (current directory), relative paths, and absolute paths, then

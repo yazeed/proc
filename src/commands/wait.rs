@@ -11,7 +11,7 @@
 //!
 //! Commas still work (`proc wait node,python`) but are deprecated.
 
-use crate::core::{apply_filters, flatten_targets, resolve_targets, NameMatch, Process};
+use crate::core::{flatten_targets, guard_targets, resolve_targets, NameMatch, Process};
 use crate::error::{ExitCode, ProcError, Result};
 use crate::out_println;
 use crate::ui::{format_duration, plural, Printer};
@@ -79,8 +79,14 @@ impl WaitCommand {
         let not_found = resolved.not_found;
         let mut processes = resolved.processes;
 
-        // Apply --in and --by filters
-        apply_filters(&mut processes, &self.in_dir, &self.by_name, mode)?;
+        // Apply --in and --by: guards that rule out everything found say so
+        guard_targets(
+            &mut processes,
+            &self.target,
+            &self.in_dir,
+            &self.by_name,
+            mode,
+        )?;
 
         if processes.is_empty() {
             return Err(ProcError::ProcessNotFound(self.target.join(" ")));

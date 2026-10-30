@@ -23,7 +23,8 @@
 //! Commas still work (`proc unstick :3000,1234`) but are deprecated.
 
 use crate::core::{
-    apply_filters, flatten_targets, resolve_targets_excluding_self, NameMatch, Process, Resolved,
+    apply_filters, flatten_targets, guard_targets, resolve_targets_excluding_self, NameMatch,
+    Process, Resolved,
 };
 use crate::error::{ExitCode, ProcError, Result};
 use crate::ui::{format_duration, must_confirm, plural, prompt, Printer};
@@ -109,19 +110,19 @@ impl UnstickCommand {
             (Process::find_stuck(timeout)?, Vec::new())
         };
 
-        // Apply --in and --by filters
-        apply_filters(
-            &mut stuck,
-            &self.in_dir,
-            &self.by_name,
-            NameMatch::from_flag(self.cmd),
-        )?;
+        // Apply --in and --by: with targets they are guards, which say so when
+        // they rule out everything found; on the processes found stuck they
+        // only narrow the list
+        let mode = NameMatch::from_flag(self.cmd);
+        if self.target.is_empty() {
+            apply_filters(&mut stuck, &self.in_dir, &self.by_name, mode)?;
+        } else {
+            guard_targets(&mut stuck, &self.target, &self.in_dir, &self.by_name, mode)?;
+        }
 
+        // Only the search can come up empty: targets that match nothing, or
+        // that the guards rule out, are errors above
         if stuck.is_empty() {
-            // An explicit target filtered down to nothing is "not found", like other commands
-            if !self.target.is_empty() {
-                return Err(ProcError::ProcessNotFound(self.target.join(" ")));
-            }
             if self.json {
                 printer.print_json(&UnstickOutput {
                     action: "unstick",

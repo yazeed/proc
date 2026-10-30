@@ -10,7 +10,7 @@
 //!
 //! Commas still work (`proc info :3000,:8080`) but are deprecated.
 
-use crate::core::{apply_filters, flatten_targets, resolve_target, NameMatch, Process, Resolved};
+use crate::core::{flatten_targets, guard_targets, resolve_target, NameMatch, Process, Resolved};
 use crate::error::{ExitCode, ProcError, Result};
 use crate::out_print;
 use crate::ui::{colorize_status, format_duration, format_memory, Printer};
@@ -65,8 +65,8 @@ impl InfoCommand {
             ..
         } = resolved;
 
-        // Apply --in and --by filters
-        apply_filters(&mut found, &self.in_dir, &self.by_name, mode)?;
+        // Apply --in and --by: guards that rule out everything found say so
+        guard_targets(&mut found, &self.targets, &self.in_dir, &self.by_name, mode)?;
 
         // Real CPU readings for what's shown
         Process::measure_cpu(&mut found);
