@@ -2,18 +2,24 @@
 name: proc-cli
 description: >-
   Finds, inspects and stops processes and ports with the proc CLI (macOS, Linux, Windows) under
-  a safety protocol: preview, show the user, then act by PID. Use when a port is busy
-  (EADDRINUSE, "address already in use"), to see what listens on a port, runs from a directory
-  or holds a file, to kill, stop, free, pause, resume or wait for a process, to clean up the dev
-  servers and headless browsers an agent started, or to look into a slow machine or a stuck
-  process. Use it instead of lsof, ps, pgrep, pkill, killall, kill or netstat. A name can match
-  processes of other projects and other agents, so anything the agent did not start needs a dry
-  run and the user's approval first. Not for containers, system services or remote hosts.
+  a safety protocol: preview, show the user, then act by PID. Use when a port is busy or in use
+  (EADDRINUSE, "address already in use") and needs freeing, to see what listens on a port, runs
+  from a directory or holds a file, to kill a process or stop, free a port, pause, resume or wait
+  for one, to clean up the dev servers and headless browsers an agent started, or to look into a
+  slow machine or a stuck process. Use it instead of lsof, ps, pgrep, pkill, killall, kill or
+  netstat. A name can match processes of other projects and other agents, so anything the agent
+  did not start needs a dry run and the user's approval first. Not for containers, system
+  services or remote hosts.
+license: MIT
+compatibility: Requires the proc CLI 2.0 or later, on macOS, Linux or Windows
+metadata:
+  author: yazeed
+  repository: https://github.com/yazeed/proc-cli
 ---
 
 # proc: find and stop processes and ports without hitting the wrong one
 
-proc targets processes by port, PID, name, file or directory. It can kill, stop and freeze processes, so the risk is acting on one that is not yours. Read the safety model before any command that changes a process.
+proc finds what is on a port, frees a port in use, and kills or stops a process, targeting it by port, PID, name, file or directory. It can kill, stop and freeze processes, so the risk is acting on one that is not yours. Read the safety model before any command that changes a process.
 
 Run `proc --version`. This skill is for proc 2.0 or later. If it prints a version below 2.0, or a command here exits 4 with "unexpected argument", stop: run read-only commands only, and tell the user that on their version `--json` alone acts without `--yes`, names match any part of a command line, and several targets need commas, so you will run nothing that changes a process until they upgrade. Never run a changing command with `--json` there unless it also has `--dry-run`. If proc is missing, ask the user before installing: `brew install yazeed/proc/proc`, `cargo install proc-cli`, `npm install -g proc-cli`, or `scoop bucket add proc https://github.com/yazeed/scoop-bucket-proc && scoop install proc`.
 
@@ -28,7 +34,7 @@ Run `proc --version`. This skill is for proc 2.0 or later. If it prints a versio
 
 Rules, in priority order:
 
-1. **A process is yours only if you started it in this session and recorded its PID** (or its port). Everything else needs the user's approval. Record at launch: `cmd & pid=$!`, then `proc info $pid --json` for its `start_time`. Before acting on a PID recorded earlier, check that `proc info <pid> --json` still shows that `start_time` (to within a second): once your process exits, the OS can give its PID to a new one.
+1. **A process is yours only if you started it in this session and recorded its PID** (or its port). Everything else needs the user's approval. Record at launch, with its `start_time`: `cmd & pid=$!; proc info "$pid" --json`. Before acting on a PID recorded earlier, check that `proc info <pid> --json` still shows that `start_time` (to within a second): once your process exits, the OS can give its PID to a new one.
 2. **A name is a search, not approval.** "Kill node" means "find node processes". On one developer laptop `proc kill node --dry-run` matched 185 processes across many projects, and `--in .` from a project directory still matched 10, all of them MCP tool servers of agent sessions. A matching name does not make a process yours.
 3. **Preview anything that is not yours.** Run the same command with `--dry-run --json`. Read `count` and `processes` (`pid`, `name`, `cwd`, `command`, `parent_pid`, `uptime_secs`). Stop and ask if the count is higher than you expect or any `cwd` or parent is outside your work.
 4. **Ask with specifics.** Show the user each process's PID, name, cwd, command, parent and uptime, say what the command will do to it, and wait for a yes. A PID or port the user named is approval only for that target, and only if the preview shows what they described. With nobody to ask, report instead of acting.
