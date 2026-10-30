@@ -101,6 +101,7 @@ Update and verify all docs are complete:
 - [ ] `ROADMAP.md` — Remove everything this release shipped. The roadmap only holds what's still ahead (the CHANGELOG is the history)
 - [ ] `src/lib.rs` — Review Rust docs: Features list, Quick Start examples, Commands list all reflect new features. Run `cargo doc --no-deps --open` to preview. This is what shows on docs.rs.
 - [ ] `skills/proc-cli/SKILL.md` — Agent Skills: new commands, flags, schemas, playbooks (the "proc 2.0 or later" floor stays unless the skill needs a newer proc)
+- [ ] `skills/proc-cli/evals.md` — if the skill's rules or playbooks changed in this release, run its tasks with the new SKILL.md loaded (a few paraphrases each, on a small model and a large one) and read the commands the agent ran; every Must met, no Must never. Add a task for any new rule
 - [ ] `skills/proc-cli/reference.md` — JSON output schemas match actual output
 - [ ] `SECURITY.md` — supported versions table (new major or minor line)
 - [ ] `docs/commands/` — GitHub Pages: new command pages, index.md updated (its exit-code table matches the README's)

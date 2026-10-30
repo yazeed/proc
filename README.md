@@ -255,8 +255,6 @@ Full schemas: [`skills/proc-cli/reference.md`](skills/proc-cli/reference.md).
 
 ### Agent skill
 
-[![Skills installs](https://skills.sh/b/yazeed/proc-cli)](https://www.skills.sh/yazeed/proc-cli)
-
 Teach your coding agent (Claude Code, Codex, Cursor, Gemini CLI and others) when to reach for proc and how to use it safely, with structured JSON output:
 
 ```bash
@@ -272,6 +270,7 @@ In Claude Code you can also install it as a plugin:
 
 The skill lives in [`skills/proc-cli/`](skills/proc-cli/SKILL.md) and follows the [Agent Skills](https://agentskills.io) standard. [What it teaches, how to update it, and prompts to try &rarr;](https://proc-cli.com/skill)
 
+[![Skills installs](https://skills.sh/b/yazeed/proc-cli)](https://www.skills.sh/yazeed/proc-cli)
 [![SafeSkill](https://safeskill.dev/api/badge/proc-cli)](https://safeskill.dev/scan/proc-cli)
 [![Socket](https://badge.socket.dev/npm/package/proc-cli)](https://socket.dev/npm/package/proc-cli)
 
