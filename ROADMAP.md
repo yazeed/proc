@@ -12,6 +12,19 @@ Each candidate lists what it would look like, how it fares against the feature t
 
 **Open:** what a comma does once removed: an error that shows the separate-argument form, or treating the whole word as one name.
 
+## Decided: after 2.0.2
+
+### Nix as an official install method
+
+`flake.nix` builds proc but nothing checks it: it has no `flake.lock` (each install takes that day's nixpkgs), hard-codes the version, and no workflow builds it. proc is not in nixpkgs. The plan:
+
+- The flake reads its version from Cargo.toml, has a lock, installs the completions and man page that `proc completions` and `proc manpage` print, and builds the package in `nix flake check`.
+- `cargo test` runs in the Nix sandbox on Linux and macOS. Tests that fail there are fixed, or skipped one by one with the reason; never `doCheck = false`.
+- CI builds and checks the flake on Ubuntu and macOS and runs the binary; RELEASE.md refreshes the lock and installs the tag with `nix profile install` after a release.
+- A nixpkgs package, `proc-cli`, with an update script so the update bot follows releases.
+
+**Open:** which tests the sandbox stops, found by real runs; when nixpkgs merges the package, which changes the install command in the README and the website.
+
 ## Candidates
 
 ### One word for the preview and the receipt
