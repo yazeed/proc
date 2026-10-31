@@ -27,12 +27,15 @@
 
           nativeBuildInputs = [ pkgs.installShellFiles ];
 
-          # The tests run `ps` (Linux: procps; macOS has /bin/ps). On macOS proc
-          # reads the port table with `lsof`, which lives in /usr/sbin: not on
-          # the sandbox's PATH, so the tests get nixpkgs' lsof
+          # The sandbox's PATH has only the build inputs, not /bin or /usr/sbin.
+          # The tests run `ps` (Linux: procps; macOS: Apple's ps, darwin.ps),
+          # and on macOS proc reads the port table with `lsof`
           nativeCheckInputs =
             pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [ pkgs.procps ]
-            ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isDarwin [ pkgs.lsof ];
+            ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isDarwin [
+              pkgs.darwin.ps
+              pkgs.lsof
+            ];
 
           # The pseudo-terminal tests start proc in $HOME (portable-pty's
           # default working directory); the sandbox's HOME does not exist
