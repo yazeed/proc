@@ -25,9 +25,6 @@ Thumbs.db
 /pkg/npm/proc.exe
 /pkg/npm/tmp.*
 /pkg/npm/node_modules
-# Nix flake lock file
-flake.lock
-
 # Local scratch space (never committed)
 /.scratch
 premortem-*.md

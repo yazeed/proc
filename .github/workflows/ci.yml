@@ -140,6 +140,40 @@ jobs:
           path: ${{ matrix.artifact }}
           if-no-files-found: error
 
+  # The flake builds proc from Cargo.lock and runs the whole test suite in
+  # Nix's sandbox (nix flake check); nix build then installs it with its man
+  # page and completions, and the binary is run
+  nix:
+    name: Nix (${{ matrix.os }})
+    timeout-minutes: 45
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+
+      - name: Check the flake (builds proc and runs its tests in the sandbox)
+        run: nix flake check -L
+
+      - name: Build the package
+        run: nix build -L
+
+      - name: Run the built binary and look for what it installs
+        shell: bash
+        run: |
+          ./result/bin/proc --version
+          test "$(./result/bin/proc --version | head -n1)" = "proc $(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n1)"
+          test -f result/share/man/man1/proc.1.gz
+          test -f result/share/bash-completion/completions/proc.bash
+          test -f result/share/zsh/site-functions/_proc
+          test -f result/share/fish/vendor_completions.d/proc.fish
+
   security-audit:
     name: Security Audit
     timeout-minutes: 10

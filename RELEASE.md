@@ -15,7 +15,7 @@ cargo audit                                    # No security vulnerabilities
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps # The docs.rs pages build with no broken links
 ```
 
-- [ ] CI is green on main, including "Coverage gate" (100% lines across Linux, macOS and Windows; see CONTRIBUTING.md "Coverage"). A tag release does not wait for it. Locally: `scripts/coverage-local.sh`
+- [ ] CI is green on main, including "Coverage gate" (100% lines across Linux, macOS and Windows; see CONTRIBUTING.md "Coverage") and both "Nix" jobs (the flake builds proc and runs its tests in Nix's sandbox). A tag release does not wait for it. Locally: `scripts/coverage-local.sh`
 
 ### Cross-Platform Check
 
@@ -82,10 +82,9 @@ If anything here fails, fix it in this release, before the tag.
 Update version in ALL of these files:
 - [ ] `Cargo.toml` — version field
 - [ ] `pkg/npm/package.json` — version field
-- [ ] `flake.nix` — version field
 - [ ] `.claude-plugin/marketplace.json` — `metadata.version` field
 - [ ] `docs/_data/release.yml` — `version` field (the website's header, footer, install page and structured data read it)
-- [ ] `Cargo.lock` — rebuild after the bump so its `proc-cli` entry changes, and commit it
+- [ ] `Cargo.lock` — rebuild after the bump so its `proc-cli` entry changes, and commit it (`flake.nix` reads its version from `Cargo.toml` and its dependencies from `Cargo.lock`, so it needs no bump of its own)
 
 `pkg/aur/PKGBUILD` is not bumped. Both AUR packages are community packages maintained by Rafael Dominiquini: `proc` (built from source) and `proc-bin` (the release binaries). The project has no AUR account yet, so the README points Arch users to his packages, and the PKGBUILD stays in the repo for the day the project can co-maintain them (see "After the tag: AUR" below).
 
@@ -149,6 +148,7 @@ npm install --prefix /tmp/proc-npm-check proc-cli && /tmp/proc-npm-check/node_mo
 brew update && brew info yazeed/proc/proc # Homebrew
 brew upgrade yazeed/proc/proc && proc --version  # upgrades only proc, nothing else
 docker pull yazeed/proc-cli               # Docker (the same image is also pushed as yazeed/proc)
+nix run github:yazeed/proc-cli/vX.Y.Z -- --version  # Nix: builds the tag from the flake; prints proc X.Y.Z
 
 # AUR (Rafael Dominiquini's packages): both should reach the new version within a few days
 curl -s 'https://aur.archlinux.org/rpc/v5/info?arg[]=proc&arg[]=proc-bin' | jq -r '.results[] | "\(.Name) \(.Version)"'
@@ -179,7 +179,8 @@ curl -s https://skills.sh/api/download/yazeed/proc-cli/proc-cli \
 Also verify:
 - [ ] https://docs.rs/proc-cli — Rust docs updated
 - [ ] https://proc-cli.com/install — the header pill and the install page show the new version (GitHub Pages rebuilds a minute or two after the push)
-- [ ] `proc --version` — prints exactly `proc X.Y.Z` from every channel (no `-dev`, no commit)
+- [ ] `proc --version` — prints exactly `proc X.Y.Z` from every channel (no `-dev`, no commit), Nix included (the `nix run` line above)
+- [ ] `flake.lock` — refresh it when it has gone stale or a build needs a newer nixpkgs (`nix flake update`, then `nix flake check -L`; without Nix installed, run both in the `nixos/nix` Docker image with `NIX_CONFIG="experimental-features = nix-command flakes"`). Commit it with the next change; the Nix jobs in CI check it on every push
 - [ ] `proc manpage` — Includes new commands
 - [ ] `proc completions bash` — Includes new commands
 - [ ] skills.sh is current: the check above prints `current` (the page at https://www.skills.sh/yazeed/proc-cli/proc-cli is cached for up to 5 minutes). If it's stale, run the install again the next day. If that doesn't help either, ask for a refresh with an issue on [vercel-labs/skills](https://github.com/vercel-labs/skills/issues), which runs skills.sh; many such requests there are unanswered. Agents installing the skill are unaffected either way: `skills add` reads the current SKILL.md from GitHub

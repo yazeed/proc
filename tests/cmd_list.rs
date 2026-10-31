@@ -838,14 +838,19 @@ fn tree_a_target_the_filters_keep_is_shown() {
     assert!(out.contains(&format!("[{pid}]")), "{out}");
 }
 
+/// Whether any level of the tree has two nodes side by side, which is when a
+/// branch (`├── `) is drawn. A machine with one process chain (a build
+/// sandbox, a container) has none.
+fn has_siblings(nodes: &[serde_json::Value]) -> bool {
+    nodes.len() > 1
+        || nodes
+            .iter()
+            .any(|n| has_siblings(n["children"].as_array().unwrap()))
+}
+
 #[test]
 fn tree_with_no_target_draws_the_whole_machine() {
     let _owned = Owned::listener();
-    let (out, _, code) = run_text(&["tree", "--depth", "2"]);
-    assert_eq!(code, 0);
-    assert!(out.starts_with("✓ Process tree:"), "{out}");
-    assert!(out.contains("└── ") && out.contains("├── "), "{out}");
-
     let (json, code) = run_json(&["tree", "--depth", "2", "--json"]);
     assert_eq!(code, 0);
     let roots = json["tree"].as_array().unwrap();
@@ -853,6 +858,14 @@ fn tree_with_no_target_draws_the_whole_machine() {
     assert!(roots
         .iter()
         .all(|n| n["pid"].is_u64() && n["children"].is_array()));
+
+    let (out, _, code) = run_text(&["tree", "--depth", "2"]);
+    assert_eq!(code, 0);
+    assert!(out.starts_with("✓ Process tree:"), "{out}");
+    assert!(out.contains("└── "), "{out}");
+    if has_siblings(roots) {
+        assert!(out.contains("├── "), "{out}");
+    }
 }
 
 #[test]

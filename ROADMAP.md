@@ -12,18 +12,16 @@ Each candidate lists what it would look like, how it fares against the feature t
 
 **Open:** what a comma does once removed: an error that shows the separate-argument form, or treating the whole word as one name.
 
-## Decided: before 2.1.0
+## Decided: after the 2.1.0 tag
 
-### Nix as an official install method
+### Nix as an official install method: the nixpkgs package
 
-`flake.nix` builds proc but nothing checks it: it has no `flake.lock` (each install takes that day's nixpkgs), hard-codes the version, and no workflow builds it. proc is not in nixpkgs. The plan:
+The flake is done (see the CHANGELOG): it reads its version from Cargo.toml, has a lock, installs the man page and completions, and builds proc with its whole test suite in the sandbox on Linux and macOS in CI. What is left:
 
-- The flake reads its version from Cargo.toml, has a lock, installs the completions and man page that `proc completions` and `proc manpage` print, and builds the package in `nix flake check`.
-- `cargo test` runs in the Nix sandbox on Linux and macOS. Tests that fail there are fixed, or skipped one by one with the reason; never `doCheck = false`.
-- CI builds and checks the flake on Ubuntu and macOS and runs the binary; RELEASE.md refreshes the lock and installs the tag with `nix profile install` after a release.
-- A nixpkgs package, `proc-cli`, with an update script so the update bot follows releases.
+- A nixpkgs package, `proc-cli` (`pkgs/by-name/pr/proc-cli/package.nix`), with `passthru.updateScript = nix-update-script { }` so the update bot follows releases, and a maintainer entry. The pull request targets the first release with the flake's fixes.
+- The README and website install rows say `nix profile install github:yazeed/proc-cli` already; they change to `nix run nixpkgs#proc-cli` once nixpkgs merges the package.
 
-**Open:** which tests the sandbox stops, found by real runs; when nixpkgs merges the package, which changes the install command in the README and the website.
+**Open:** whether the macOS Nix job passes unchanged (the sandbox there differs from Linux's; the first CI run decides, and a test it stops is skipped by name with its reason); when nixpkgs merges the package.
 
 ## Candidates
 
@@ -136,7 +134,7 @@ How long someone who has never used proc takes to get a correct answer. Unlike t
 
 ### More ways to install
 
-Each of these puts proc one command away for people who don't use the channels proc has today. nixpkgs is decided (see "Nix as an official install method" above: `nix run nixpkgs#proc-cli` once merged). winget, `.deb`/`.rpm` and PyPI are decided for after 2.1.0, in this order:
+Each of these puts proc one command away for people who don't use the channels proc has today. nixpkgs is decided (see "Nix as an official install method: the nixpkgs package" above: `nix run nixpkgs#proc-cli` once merged). winget, `.deb`/`.rpm` and PyPI are decided for after 2.1.0, in this order:
 
 1. **winget**, the package manager that ships with Windows. Its contributing guide sets no popularity bar, and the identifier `yazeed.proc-cli` is free. The manifest uses the release's `proc-windows-x86_64.exe.zip` as a zip with a nested portable installer and the command alias `proc` (the shape `sharkdp.fd` uses); a Windows CI job checks it with `winget validate` and `winget install --manifest`. The first version is one hand-written PR to microsoft/winget-pkgs (Microsoft's CLA is signed on it); after it merges, a `winget-releaser` job in release.yml submits each release, which needs a fork of winget-pkgs and a classic token (`public_repo`, `workflow`). winget scans installers with several antivirus engines, which can flag a tool that kills processes.
 2. **`.deb` and `.rpm` files on GitHub Releases.** No gatekeeper: they are release assets, not a repository. nfpm builds both from the static musl binaries in one job, with the man page and completions `proc` prints; each is tested with `dpkg -i` or `rpm -i` in Debian, Ubuntu and Fedora containers on amd64 and arm64. Before shipping, check that no distro package already installs a `/usr/bin/proc`. Without an apt or dnf repository (which needs a signing key) users get no updates.
