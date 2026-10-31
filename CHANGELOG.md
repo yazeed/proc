@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-10-30
+
 ### Fixed
 
 - **A service account's processes show its name, not a number.** On Linux, `user` was the numeric user ID for every account whose shell is `/bin/false` (many distros give service accounts that shell) and for every user ID from 65536 up (directory and container accounts): `proc 2.1.0` showed `"user": "1000"` for a `sleep` run by such an account, where `ps` showed its name. proc read names from sysinfo's user list, which leaves those accounts out as "not real users"; it now asks the system's user database (`getpwuid_r`), as `ps` and `id` do, once per user ID per run. macOS has the same rule for its daemon accounts (shell `/usr/bin/false`), which proc mostly can't read the owner of without root anyway. Found when the Nix build ran the tests as the build user `nixbld1`
@@ -877,7 +879,8 @@ All commands accept **targets**: `:port`, `PID`, or `name` where applicable.
 
 ---
 
-[Unreleased]: https://github.com/yazeed/proc-cli/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/yazeed/proc-cli/compare/v2.1.1...HEAD
+[2.1.1]: https://github.com/yazeed/proc-cli/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/yazeed/proc-cli/compare/v2.0.2...v2.1.0
 [2.0.2]: https://github.com/yazeed/proc-cli/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/yazeed/proc-cli/compare/v2.0.0...v2.0.1
