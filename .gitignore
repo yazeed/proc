@@ -25,6 +25,8 @@ Thumbs.db
 /pkg/npm/proc.exe
 /pkg/npm/tmp.*
 /pkg/npm/node_modules
+# What nix build leaves in the working directory
+/result
 # Local scratch space (never committed)
 /.scratch
 premortem-*.md
