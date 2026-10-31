@@ -126,6 +126,20 @@ The tag must be `v` + Cargo.toml's version: both the release and Docker workflow
 
 Nothing to publish: the AUR's `proc` and `proc-bin` are Rafael Dominiquini's. Step 7 checks that they caught up with the release. Once the project has an AUR account and co-maintains them, this step goes back to updating the AUR repositories with a PKGBUILD whose `sha256sums` is the tag tarball's checksum (`curl -fsSL https://github.com/yazeed/proc-cli/archive/vX.Y.Z.tar.gz | shasum -a 256`) and a regenerated `.SRCINFO` (`makepkg --printsrcinfo > .SRCINFO` on Arch).
 
+### After the tag: nixpkgs
+
+nixpkgs builds proc from the tag, with its tests, as `proc-cli`. `pkg/nixpkgs/package.nix` is the file nixpkgs carries at `pkgs/by-name/pr/proc-cli/package.nix`, and every release moves it to the new version:
+
+1. Set `version` in `pkg/nixpkgs/package.nix` and both `hash` and `cargoHash` to `lib.fakeHash`. Build it in the `nixos/nix` image (`pkg/nixpkgs/build.nix` builds it against the nixpkgs in `flake.lock`, with the maintainer entry nixpkgs may not have yet); the first build fails with the source hash it got, the second with the cargo hash. Put each in, then build once more: it runs the whole test suite and must pass.
+
+   ```bash
+   docker run --rm --cpus 4 -v "$PWD":/work -w /work -e NIX_CONFIG="experimental-features = nix-command flakes" \
+     nixos/nix sh -c 'nix-build pkg/nixpkgs/build.nix && ./result/bin/proc --version'   # prints proc X.Y.Z
+   ```
+
+2. Commit `pkg/nixpkgs/package.nix` to `main`.
+3. Bring it to nixpkgs, after the maintainer has seen the commit and the pull request text. Until the package is merged, the pull request on NixOS/nixpkgs (from the maintainer's fork) carries two commits, `maintainers: add yazeed` and `proc-cli: init at X.Y.Z`; each release updates it to the new version. Once it is merged, nixpkgs' update bot opens `proc-cli: A -> B` after a release: check its hashes match step 1 and its build passes, and approve it as the package's maintainer. nixpkgs asks commits written with an AI assistant to say so with an `Assisted-by:` trailer.
+
 ## 6. Verify CI
 
 After tag push, monitor GitHub Actions:
@@ -151,6 +165,9 @@ docker pull yazeed/proc-cli               # Docker (the same image is also pushe
 nix run github:yazeed/proc-cli/vX.Y.Z -- --version  # Nix: builds the tag from the flake; prints proc X.Y.Z
 # The same without Nix installed, in the nixos/nix image (afterwards: docker rmi nixos/nix, then the prunes in step 8)
 docker run --rm -e NIX_CONFIG="experimental-features = nix-command flakes" nixos/nix nix run github:yazeed/proc-cli/vX.Y.Z -- --version
+
+# nixpkgs: the open pull request (or, once merged, the update bot's) builds the new version and passes;
+# after it reaches nixos-unstable, `nix run nixpkgs#proc-cli -- --version` prints proc X.Y.Z
 
 # AUR (Rafael Dominiquini's packages): both should reach the new version within a few days
 curl -s 'https://aur.archlinux.org/rpc/v5/info?arg[]=proc&arg[]=proc-bin' | jq -r '.results[] | "\(.Name) \(.Version)"'
@@ -218,7 +235,7 @@ On tag push, GitHub Actions handles:
 6. **Scoop**: Update yazeed/scoop-bucket-proc bucket
 7. **Docker**: Push to yazeed/proc-cli on Docker Hub, and the same build to yazeed/proc (the image's original name). A separate workflow (`docker.yml`) with its own tag check: it stops if the tag isn't `v` + Cargo.toml's version
 
-Nix has nothing to publish: the flake lives in the repository, so `nix run github:yazeed/proc-cli/vX.Y.Z` works as soon as the tag is pushed, and CI's Nix jobs have already built and tested the flake on main. A nixpkgs package (`nix run nixpkgs#proc-cli`) is the planned next step (ROADMAP.md); once it is merged, the nixpkgs update bot follows new releases.
+Nix has nothing to publish: the flake lives in the repository, so `nix run github:yazeed/proc-cli/vX.Y.Z` works as soon as the tag is pushed, and CI's Nix jobs have already built and tested the flake on main. The nixpkgs package (`nix run nixpkgs#proc-cli`) is moved to each release by hand until it is merged, and by the nixpkgs update bot after (see "After the tag: nixpkgs").
 
 Third-party actions in `release.yml` and `docker.yml` are pinned to commit SHAs, with the version in a comment, because those jobs hold the publishing tokens. To update one, resolve the new tag's commit (`gh api repos/<owner>/<action>/commits/<tag> --jq .sha`) and change the SHA and the comment together.
 

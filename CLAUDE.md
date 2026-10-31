@@ -201,7 +201,7 @@ To find them, search for what the change makes untrue (the old flag, message, ex
 2. Manual testing with the release binary (`./target/release/proc --version`, `--help`, new features)
 3. Version bump in ALL files: `Cargo.toml` (and `Cargo.lock`; `flake.nix` reads both and needs no bump), `pkg/npm/package.json`, `.claude-plugin/marketplace.json`, `docs/_data/release.yml`
 4. Documentation: `CHANGELOG.md` (then `python3 scripts/changelog_site.py` writes `docs/changelog.md` from it), `README.md`, `ROADMAP.md`, `src/lib.rs`, `skills/proc-cli/*.md`, `docs/commands/` — verify all reflect new changes
-5. Commit, tag, push (tag push triggers CI for all package managers)
+5. Commit, tag, push (tag push triggers CI for all package managers); then move the nixpkgs package (`pkg/nixpkgs/`) to the new version and its pull request (RELEASE.md, "After the tag: nixpkgs")
 6. Verify CI completes successfully
 
 ## Documentation Files

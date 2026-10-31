@@ -18,7 +18,7 @@ Each candidate lists what it would look like, how it fares against the feature t
 
 The flake is done (see the CHANGELOG): it reads its version from Cargo.toml, has a lock, installs the man page and completions, and builds proc with its whole test suite in the sandbox on Linux and macOS in CI. What is left:
 
-- A nixpkgs package, `proc-cli` (`pkgs/by-name/pr/proc-cli/package.nix`), with `passthru.updateScript = nix-update-script { }` so the update bot follows releases, and a maintainer entry. The pull request targets the first release with the flake's fixes.
+- A nixpkgs package, `proc-cli` (`pkgs/by-name/pr/proc-cli/package.nix`), with `passthru.updateScript = nix-update-script { }` so the update bot follows releases, and a maintainer entry. The file lives in this repo as `pkg/nixpkgs/package.nix`, and each release moves it and the pull request to the new version (RELEASE.md, "After the tag: nixpkgs"). The first pull request is for 2.1.1, the first release whose tests pass wherever Nix builds them.
 - The README and website install rows say `nix profile install github:yazeed/proc-cli` already; they change to `nix run nixpkgs#proc-cli` once nixpkgs merges the package.
 
 **Open:** when nixpkgs merges the package. (The macOS Nix job passes with nothing skipped: its sandbox needed Apple's `ps` and nixpkgs' `lsof` as check inputs.)
