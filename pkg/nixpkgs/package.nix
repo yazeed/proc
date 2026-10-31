@@ -15,6 +15,8 @@ rustPlatform.buildRustPackage (finalAttrs: {
   pname = "proc-cli";
   version = "2.1.1";
 
+  __structuredAttrs = true;
+
   src = fetchFromGitHub {
     owner = "yazeed";
     repo = "proc-cli";
