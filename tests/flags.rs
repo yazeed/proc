@@ -124,7 +124,10 @@ const CASES: &[Case] = &[
     code("for", &["{exe}", "--by", "{part}", "--cmd"], 0),
     code("for", &["{exe}", "--min-cpu", "0", "--min-mem", "0"], 0),
     code("for", &["{exe}", "--min-uptime", "0"], 0),
-    code("for", &["{exe}", "--status", "zombie"], 2),
+    // scoped to this case's directory: the cases run on several threads, and
+    // another case's listener, killed and not yet reaped, is a zombie of the
+    // same executable
+    code("for", &["{exe}", "--status", "zombie", "--in", "{dir}"], 2),
     code("for", &["{exe}", "--sort", "mem", "--limit", "5"], 0),
     code("for", &["{exe}", "-s", "pid", "-n", "5"], 0),
     code("for", &["{exe}", "--sort", "name"], 0),

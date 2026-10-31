@@ -1277,10 +1277,14 @@ mod tests {
 
     #[test]
     fn the_holders_of_a_port_are_the_processes_listening_on_it() {
+        let me = std::process::id();
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
-        assert_eq!(port_holders(port), vec![std::process::id()]);
+        // Not exactly [me]: macOS has no SOCK_CLOEXEC, so a child another test
+        // spawns between the socket's creation and its close-on-exec flag
+        // inherits it and holds the port too (seen in CI: two extra holders)
+        assert!(port_holders(port).contains(&me));
         drop(listener);
-        assert!(port_holders(port).is_empty());
+        assert!(!port_holders(port).contains(&me));
     }
 }

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Two tests no longer fail at random, so a Nix build no longer can.** A Nix install builds proc and runs its test suite, and two tests depended on timing. The flag matrix's `for <listener> --status zombie` case expected no zombie, but it runs next to cases that kill their own copy of the same listener, which is a zombie until it is reaped: the case now looks only in its own directory. And on macOS, a test that listens on a port in the test process expected to be the port's only holder, but a child another test started at the same moment could inherit the socket (macOS has no `SOCK_CLOEXEC`): it now checks that the test process holds the port and stops holding it. Both failed once on the 2.1.0 release commit's CI run
+
 ## [2.1.0] - 2026-10-30
 
 ### Added
