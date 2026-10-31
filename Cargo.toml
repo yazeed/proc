@@ -46,7 +46,7 @@ thiserror = "2.0"
 
 # Unix-specific (for signals)
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.31", features = ["process", "signal"] }
+nix = { version = "0.31", features = ["process", "signal", "user"] }
 libc = "0.2"
 # Already in the tree through crossterm; used to restore the terminal when a
 # signal ends watch or a prompt

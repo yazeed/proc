@@ -8,10 +8,39 @@ use crate::error::{ProcError, Result};
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
 use std::time::Duration;
-use sysinfo::{Pid, ProcessStatus as SysProcessStatus, System, Uid, Users};
+#[cfg(windows)]
+use sysinfo::Users;
+use sysinfo::{Pid, ProcessStatus as SysProcessStatus, System, Uid};
+
+/// Resolve a user ID to its user name, falling back to the ID itself.
+///
+/// On Unix this asks the system's user database (getpwuid_r), as `ps` and
+/// `id` do: sysinfo's user list leaves out every account whose shell ends in
+/// `/false` (macOS's daemon accounts, many service accounts) and every ID from
+/// 65536 up (directory and container users). Each ID is looked up once per run.
+#[cfg(unix)]
+fn user_name(uid: &Uid) -> String {
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+
+    static NAMES: OnceLock<Mutex<HashMap<u32, String>>> = OnceLock::new();
+    let id: u32 = **uid;
+    let mut names = NAMES.get_or_init(Default::default).lock().unwrap();
+    names
+        .entry(id)
+        .or_insert_with(|| {
+            nix::unistd::User::from_uid(nix::unistd::Uid::from_raw(id))
+                .ok()
+                .flatten()
+                .map(|user| user.name)
+                .unwrap_or_else(|| id.to_string())
+        })
+        .clone()
+}
 
 /// Resolve a user ID to its user name, falling back to the ID itself.
 /// The user list is read once per run.
+#[cfg(windows)]
 fn user_name(uid: &Uid) -> String {
     static USERS: OnceLock<Users> = OnceLock::new();
     USERS
@@ -1052,6 +1081,31 @@ pub fn parse_signal_name(name: &str) -> Result<nix::sys::signal::Signal> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A service account (shell `/bin/false` or `/usr/bin/false`) is named like
+    /// any other: sysinfo's user list leaves such accounts out, so proc showed
+    /// their user ID instead. macOS gives every daemon account that shell; a
+    /// Linux machine need not have one, so the test runs on macOS
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn an_account_whose_shell_is_false_is_named() {
+        let passwd = std::fs::read_to_string("/etc/passwd").unwrap();
+        let f = passwd
+            .lines()
+            .filter(|line| !line.starts_with('#'))
+            .map(|line| line.split(':').collect::<Vec<_>>())
+            .find(|f| f.len() == 7 && f[6].ends_with("/false") && f[2].parse::<u32>().is_ok())
+            .expect("macOS has daemon accounts with a false shell");
+        let uid = Uid::try_from(f[2].parse::<usize>().unwrap()).unwrap();
+        assert_eq!(user_name(&uid), f[0]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_user_id_nobody_has_is_shown_as_the_number() {
+        let uid = Uid::try_from(4_000_000_000usize).unwrap();
+        assert_eq!(user_name(&uid), "4000000000");
+    }
 
     #[test]
     fn cpu_is_the_cpu_time_used_over_the_wall_time() {
