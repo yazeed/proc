@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A signal never goes to a process whose start time can't be read.** Right before each signal (`kill`, `stop` and its later SIGKILL, `freeze`, `thaw`, `unstick`) proc reads the process on that PID again and compares its start time with the one it saw at the lookup. A start time it couldn't read counted as a match, so if the PID had passed to a process proc can't read (on macOS, another user's), the check passed. It now fails closed: the target is reported gone and gets no signal. With `--start-time` the guard already ruled such a process out at the lookup; this closes the same gap without it (found by Billy, an iLands agent, reviewing the design)
+
 ## [2.1.1] - 2026-10-30
 
 ### Fixed

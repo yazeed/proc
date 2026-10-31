@@ -150,6 +150,20 @@ fn kill_outcome(delivered: bool, pid: u32) -> Result<()> {
     }
 }
 
+/// Whether the process holding a PID now (start time `current`, 0 when it can't
+/// be read) is the one a record with start time `recorded` describes. Checked
+/// right before each signal. A record that knows its start time is the same
+/// process only if the current one reads within a second of it: an unreadable
+/// start time on the PID's holder now is not proof, so it gets no signal (on
+/// macOS that is another user's process that took the PID). A record without a
+/// start time has nothing to compare and counts as the same.
+fn same_start(recorded: Option<u64>, current: u64) -> bool {
+    match recorded {
+        Some(ours) => current > 0 && current.abs_diff(ours) <= 1,
+        None => true,
+    }
+}
+
 /// What a `taskkill` run (no `/F`) came to: success, or the reason it gave
 /// (compiled on Unix for the tests only)
 #[cfg(any(windows, test))]
@@ -805,10 +819,7 @@ impl Process {
     /// Whether `current`, the process now holding this PID, is the one this record
     /// describes. A different start time means the PID was reused by a new process.
     fn is_same(&self, current: &sysinfo::Process) -> bool {
-        match self.start_time {
-            Some(ours) if current.start_time() > 0 => current.start_time().abs_diff(ours) <= 1,
-            _ => true,
-        }
+        same_start(self.start_time, current.start_time())
     }
 
     /// Checked right before each signal, so a delayed one (stop's SIGKILL comes up
@@ -1081,6 +1092,20 @@ pub fn parse_signal_name(name: &str) -> Result<nix::sys::signal::Signal> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_signal_needs_the_start_time_the_record_saw() {
+        // the same start time, or within the second the clock rounds to
+        assert!(same_start(Some(1_000), 1_000));
+        assert!(same_start(Some(1_000), 1_001));
+        // a newer process on the PID
+        assert!(!same_start(Some(1_000), 4_600));
+        // the holder's start time can't be read: not proof it is the same one
+        assert!(!same_start(Some(1_000), 0));
+        // a record without a start time has nothing to compare
+        assert!(same_start(None, 0));
+        assert!(same_start(None, 1_000));
+    }
 
     /// A service account (shell `/bin/false` or `/usr/bin/false`) is named like
     /// any other: sysinfo's user list leaves such accounts out, so proc showed
