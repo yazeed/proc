@@ -291,6 +291,8 @@ proc is for processes and ports on the machine it runs on. It is not for contain
 
 ## Shell completions and man page
 
+The Nix package installs both. With any other install method, add them yourself:
+
 ```bash
 # Bash
 proc completions bash > /etc/bash_completion.d/proc

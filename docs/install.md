@@ -63,7 +63,8 @@ cargo binstall proc-cli
 ### Nix
 
 ```bash
-nix profile install github:yazeed/proc-cli
+nix profile install github:yazeed/proc-cli    # with the man page and shell completions
+nix run github:yazeed/proc-cli -- on :3000    # or run it once without installing
 ```
 
 ### Docker
@@ -90,6 +91,8 @@ npx skills add yazeed/proc-cli
 ```
 
 ## Shell completions
+
+The Nix package installs the completions and the man page. With any other install method, add them yourself:
 
 ```bash
 proc completions bash > /etc/bash_completion.d/proc          # bash

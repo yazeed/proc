@@ -149,6 +149,8 @@ brew update && brew info yazeed/proc/proc # Homebrew
 brew upgrade yazeed/proc/proc && proc --version  # upgrades only proc, nothing else
 docker pull yazeed/proc-cli               # Docker (the same image is also pushed as yazeed/proc)
 nix run github:yazeed/proc-cli/vX.Y.Z -- --version  # Nix: builds the tag from the flake; prints proc X.Y.Z
+# The same without Nix installed, in the nixos/nix image (afterwards: docker rmi nixos/nix, then the prunes in step 8)
+docker run --rm -e NIX_CONFIG="experimental-features = nix-command flakes" nixos/nix nix run github:yazeed/proc-cli/vX.Y.Z -- --version
 
 # AUR (Rafael Dominiquini's packages): both should reach the new version within a few days
 curl -s 'https://aur.archlinux.org/rpc/v5/info?arg[]=proc&arg[]=proc-bin' | jq -r '.results[] | "\(.Name) \(.Version)"'
@@ -216,6 +218,8 @@ On tag push, GitHub Actions handles:
 6. **Scoop**: Update yazeed/scoop-bucket-proc bucket
 7. **Docker**: Push to yazeed/proc-cli on Docker Hub, and the same build to yazeed/proc (the image's original name). A separate workflow (`docker.yml`) with its own tag check: it stops if the tag isn't `v` + Cargo.toml's version
 
+Nix has nothing to publish: the flake lives in the repository, so `nix run github:yazeed/proc-cli/vX.Y.Z` works as soon as the tag is pushed, and CI's Nix jobs have already built and tested the flake on main. A nixpkgs package (`nix run nixpkgs#proc-cli`) is the planned next step (ROADMAP.md); once it is merged, the nixpkgs update bot follows new releases.
+
 Third-party actions in `release.yml` and `docker.yml` are pinned to commit SHAs, with the version in a comment, because those jobs hold the publishing tokens. To update one, resolve the new tag's commit (`gh api repos/<owner>/<action>/commits/<tag> --jq .sha`) and change the SHA and the comment together.
 
 ## Required Secrets
@@ -244,4 +248,5 @@ If the repository or the workflow file is renamed, both trusted publishers must 
 | Homebrew | proc | `brew install yazeed/proc/proc` |
 | Scoop | proc | `scoop bucket add proc https://github.com/yazeed/scoop-bucket-proc && scoop install proc` |
 | Docker | yazeed/proc-cli (also yazeed/proc) | `docker run yazeed/proc-cli` |
-| Nix | — | `nix profile install github:yazeed/proc-cli` |
+| Nix (flake in this repo) | proc-cli | `nix profile install github:yazeed/proc-cli` |
+| AUR (community, Rafael Dominiquini) | proc, proc-bin | `yay -S proc` (from source), `yay -S proc-bin` (release binary) |
